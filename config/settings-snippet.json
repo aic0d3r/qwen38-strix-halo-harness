@@ -1,0 +1,4 @@
+{
+  "compaction": { "enabled": true, "reserveTokens": 10240 },
+  "thinkingBudgets": { "minimal": 256, "low": 1024, "medium": 4096, "high": 8192, "xhigh": 16384 }
+}

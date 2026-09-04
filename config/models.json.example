@@ -1,0 +1,92 @@
+{
+  "providers": {
+    "llamacpp": {
+      "baseUrl": "http://127.0.0.1:8080/v1",
+      "api": "openai-completions",
+      "apiKey": "dummy",
+      "models": [
+        {
+          "id": "qwen3.8-27b",
+          "name": "Qwen3.8-27B (llama.cpp local)",
+          "reasoning": true,
+          "contextWindow": 262144,
+          "maxTokens": 32768,
+          "compat": {
+            "thinkingFormat": "chat-template",
+            "chatTemplateKwargs": {
+              "reasoning_effort": {
+                "$var": "thinking.effort"
+              },
+              "enable_thinking": {
+                "$var": "thinking.enabled"
+              }
+            }
+          },
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": "medium",
+            "high": "high",
+            "xhigh": null,
+            "max": null
+          },
+          "samplingParams": {
+            "temperature": 0,
+            "top_p": 0.95,
+            "min_p": 0.05
+          }
+        },
+        {
+          "id": "qwen3.8-flash-next",
+          "name": "Qwen3.8-Flash-Next 125B-A6B (llama.cpp local, MTP)",
+          "reasoning": true,
+          "contextWindow": 65536,
+          "maxTokens": 32768,
+          "compat": {
+            "thinkingFormat": "chat-template",
+            "thinkingTokenBudgetField": "thinking_budget_tokens"
+          },
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": "medium",
+            "high": "high",
+            "xhigh": null,
+            "max": null
+          },
+          "samplingParams": {
+            "temperature": 1.0,
+            "top_p": 0.95,
+            "top_k": 20,
+            "min_p": 0.0
+          }
+        }
+      ]
+    },
+    "llamacpp-tiny": {
+      "baseUrl": "http://127.0.0.1:8090/v1",
+      "api": "openai-completions",
+      "apiKey": "dummy",
+      "models": [
+        {
+          "id": "ling3.0-tiny",
+          "name": "Ling-3.0-tiny (compaction/aux)",
+          "reasoning": true,
+          "contextWindow": 131072,
+          "maxTokens": 8192,
+          "compat": {
+            "thinkingFormat": "chat-template",
+            "chatTemplateKwargs": {
+              "reasoning_effort": {
+                "$var": "thinking.effort"
+              },
+              "enable_thinking": {
+                "$var": "thinking.enabled"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
