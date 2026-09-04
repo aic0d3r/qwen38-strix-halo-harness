@@ -1,0 +1,24 @@
+Build "Neon Overdrive", an arcade Breakout game, as a multi-file project you create with tools, file by file. NO external dependencies or CDNs; HTML5 canvas + CSS3 + raw JS only.
+
+Required file structure (use the write tool once per file, complete code every time, zero placeholders):
+1. index.html - loads css/styles.css and all js/ files via script tags in dependency order
+2. css/styles.css - neon/cyberpunk UI, overlays for menu/pause/shop/game-over
+3. js/config.js - constants: canvas size, brick grid, speeds, powerup drop rate (15%), colors
+4. js/particles.js - particle engine: spawn(x,y,color), gravity + fade update, dead-particle cleanup
+5. js/bricks.js - 5-row grid from an array matrix; standard (1 hit, neon blue), armored (3 hits, red->orange->yellow as damaged), volatile (1 hit, neon green, explodes destroying direct array neighbors)
+6. js/balls.js - ball entities in an active balls array; paddle reflection angle from strike position vs paddle center; no game over until the LAST ball is lost; dead-ball cleanup
+7. js/powerups.js - falling capsule entities; catching Tri-Ball injects two new balls into the array
+8. js/states.js - rigid state machine: menu -> gameplay -> paused -> level clear / game over
+9. js/shop.js - between-levels upgrade shop: spend credits on paddle speed or paddle width (persistent)
+10. js/main.js - game loop, collision wiring, score/credits, keyboard input, level generation (procedurally harder)
+
+The file list is FIXED: exactly index.html, css/styles.css, and js/config.js, js/particles.js, js/bricks.js, js/balls.js, js/powerups.js, js/states.js, js/shop.js, js/main.js. Do not rename, merge, add, or split files.
+
+Controls are keyboard-only: arrow keys and A/D move the paddle. Do NOT add any mouse listeners or mouse movement of the paddle. Collision must be tunneling-resistant: move balls in sub-steps no larger than the ball radius per sub-step (or use swept AABB tests), so a ball never passes through a brick or the paddle within a single frame at any level speed.
+
+Workflow, in order:
+A. Write all 10 files (write tool, one call each).
+B. Run: node --check js/config.js js/particles.js js/bricks.js js/balls.js js/powerups.js js/states.js js/shop.js js/main.js
+C. If any check fails, fix with the edit tool and re-run until all pass.
+D. Read index.html to verify every script tag path matches a real file.
+E. Report per-file line counts, then reply COMPLETE.
