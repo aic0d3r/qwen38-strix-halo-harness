@@ -17,6 +17,12 @@
 # kwargs). Engine: Nathan's strix-halo-vulkan releases, validated v0.6.11 through
 # v0.7.4.1 (0.7.4+ = throughput parity + greedy repeatability fixes; the release
 # payload's bundled RADV beats system Mesa on prefill).
+#
+# Memory: the ~91GB model lives in GTT, not just VRAM. Never force --fit off:
+# on an undersized heap it forces full offload into memory that isn't there and
+# deadlocks the iGPU (2026-09-09: hard host lock at 62.5 GiB GTT). Let --fit
+# size the offload and raise GTT instead:
+#   amdgpu.gttsize=126976 ttm.pages_limit=32505856 ttm.page_pool_size=32505856
 set -euo pipefail
 
 ENGINE_DIR=${ENGINE_DIR:?set ENGINE_DIR to your llama-server build dir}
@@ -45,5 +51,5 @@ exec $ENGINE_DIR/llama-server \
   -c $CTX -np 1 -b 2048 -ub 2048 \
   -t 16 -tb 32 \
   --reasoning-effort medium --reasoning-budget $RB \
-  --jinja --fit off \
+  --jinja \
   --host 127.0.0.1 --port 8080 --metrics

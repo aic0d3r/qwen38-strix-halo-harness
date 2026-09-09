@@ -29,6 +29,7 @@ Measured on a Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70-80W. This 
    # second terminal (either way):
    ENGINE_DIR=... MODEL_DIR=... server/start-ling-tiny.sh
    ```
+   **GPU memory**: the ~91GB model lives in the GTT heap, so size it: boot args `amdgpu.gttsize=126976 ttm.pages_limit=32505856 ttm.page_pool_size=32505856` (on systemd-boot put them on the single `LINUX_OPTIONS` line — a stray newline there makes the loader silently drop the whole line). Check with `cat /sys/class/drm/card*/device/mem_info_gtt_total`. Never force `--fit off`: full offload onto an undersized heap deadlocks the iGPU and hard-locks the host.
 4. **pi** ([github.com/earendil-works/pi](https://github.com/earendil-works/pi)):
    ```bash
    cp config/models.json.example ~/.pi/agent/models.json   # adjust paths/ports
