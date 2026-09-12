@@ -10,7 +10,9 @@ for TRY in 1 2 3 4 5; do
   cd $L/$DIR || exit 1
   P="$(printf '%s ' "$@") [attempt $TRY $(date +%s)]"
   T0=$(date +%s)
-  PROVIDER_ARGS=""; [ -n "${PROVIDER:-}" ] && PROVIDER_ARGS="--provider $PROVIDER"
+  PROVIDER_ARGS=""
+  [ -n "${PROVIDER:-}" ] && PROVIDER_ARGS="--provider $PROVIDER"
+  [ -n "${MODEL:-}" ] && PROVIDER_ARGS="$PROVIDER_ARGS --model $MODEL"
   timeout 5400 pi -p --no-skills --no-context-files $PROVIDER_ARGS --thinking $LVL --name $NAME "$P" > $L/run-$NAME.txt 2>&1 &
   PID=$!
   # watchdog: off-contract file => kill immediately. First 2min poll at 10s to reap
@@ -48,7 +50,7 @@ for TRY in 1 2 3 4 5; do
     # (model's own fix-loop on its own output; artifact stays single-lineage).
     echo "=== $NAME try=$TRY syn-fix: $SYN, running fix pass ===" >> $L/ladder.log
     FIXFILES="$SYN"
-    timeout -k 10 1200 pi -p --no-skills --no-context-files --thinking $LVL --name $NAME-fix "These files fail node --check:$FIXFILES. Run node --check on each to get the exact error, view the offending region, then fix SURGICALLY with the edit tool (or bash sed/append): patch only the broken lines. If a file was truncated mid-write, reconstruct just the missing tail and append it - never rewrite the whole file with the write tool (that is what truncated it). Then run: node --check$FIXFILES. Repeat until every file passes, then reply FIXED." > $L/run-$NAME-fix.txt 2>&1
+    timeout -k 10 1200 pi -p --no-skills --no-context-files $PROVIDER_ARGS --thinking $LVL --name $NAME-fix "These files fail node --check:$FIXFILES. Run node --check on each to get the exact error, view the offending region, then fix SURGICALLY with the edit tool (or bash sed/append): patch only the broken lines. If a file was truncated mid-write, reconstruct just the missing tail and append it - never rewrite the whole file with the write tool (that is what truncated it). Then run: node --check$FIXFILES. Repeat until every file passes, then reply FIXED." > $L/run-$NAME-fix.txt 2>&1
     pkill -9 -f -- "--name $NAME-fix" 2>/dev/null; sleep 2
     SYN=""
     for F in config particles bricks balls powerups states shop main; do
