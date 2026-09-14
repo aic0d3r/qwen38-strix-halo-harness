@@ -1,8 +1,29 @@
 #!/usr/bin/env bash
 # v2 (Aug 24): taxonomy watchdog kills off-contract rolls early; SUCCESS requires
 # exact file set + node --check clean on all 8 js. Config otherwise = run-with-retry.sh.
+# v2.2 (Sep 14): (a) budget keyed to effort - no more jq hand-toggling between cells.
+#   off|low -> 8192, medium|high -> 32768 (native); BUDGET=<n> overrides. Applied to
+#   the PROVIDER/MODEL entry in pi models.json, restored on exit.
+# (b) runtime gate: SUCCESS additionally requires SMOKE-OK (90s soak). A fatal boot
+#   error with a diagnosis gets one repair pass (edit-only, files kept); anything
+#   else that fails smoke is wiped and rerolled. A build that dies at load can no
+#   longer report clean - observed 2026-09-13: a cell scored 17/19 statically while
+#   dead at runtime (IIFE that never assigned its global).
+# (c) behavior probe (serve/reflection) runs on every success and lands in
+#   $L/probe-$NAME.log for report.sh.
 L=~/LLMBench/results/qwen38-27b/game-ladder
 DIR=$1 NAME=$2 LVL=$3; shift 3
+GATE_DIR=${GATE_DIR:-$HOME/neon-ladder-sim2}
+M=${MODELS_JSON:-$HOME/.pi/agent/models.json}
+case "$LVL" in off|low) BUDGET_DEF=8192;; *) BUDGET_DEF=32768;; esac
+BUDGET=${BUDGET:-$BUDGET_DEF}
+if [ -n "${PROVIDER:-}" ] && [ -n "${MODEL:-}" ] && [ -r "$M" ]; then
+  cp "$M" "$M.bak-v22"
+  jq --arg p "$PROVIDER" --arg m "$MODEL" --argjson t "$BUDGET" \
+    '(.providers[$p].models[] | select(.id == $m) | .maxTokens) = $t' \
+    "$M" > "$M.tmp" && mv "$M.tmp" "$M"
+  trap 'mv "$M.bak-v22" "$M" 2>/dev/null || true' EXIT
+fi
 mkdir -p $L/$DIR
 for i in $(seq 1 30); do curl -sf -m2 localhost:${PORT:-8080}/health > /dev/null 2>&1 && break; sleep 5; done
 curl -sf -m2 localhost:${PORT:-8080}/health > /dev/null || { echo "=== $NAME ABORT: server unhealthy ===" >> $L/ladder.log; exit 1; }
@@ -63,7 +84,29 @@ for TRY in 1 2 3 4 5; do
     fi
   fi
   if [ -z "$MISS" ] && [ -z "$SYN" ]; then
-    echo "=== $NAME try=$TRY SUCCESS wall=${W}min (v2 gate) ===" >> $L/ladder.log; exit 0
+    echo "=== $NAME try=$TRY static-clean wall=${W}min budget=$BUDGET -> runtime gate ===" >> $L/ladder.log
+    if bash "$GATE_DIR/smoke-gate.sh" "$L/$DIR" ${SOAK:-90} > "$L/smoke-$NAME-$TRY.log" 2>&1; then
+      timeout 180 bash "$GATE_DIR/behavior-probe.sh" "$L/$DIR" > "$L/probe-$NAME.log" 2>&1 || true
+      SERVE=$(grep -m1 '^SERVE ' "$L/probe-$NAME.log" 2>/dev/null | cut -d' ' -f2-)
+      REFL=$(grep -m1 '^REFLECTION ' "$L/probe-$NAME.log" 2>/dev/null | cut -d' ' -f2-)
+      echo "=== $NAME try=$TRY SUCCESS wall=${W}min SMOKE-OK serve=${SERVE:-?} refl=${REFL:-?} ===" >> $L/ladder.log; exit 0
+    fi
+    LOC=$(grep -oE '^ERRLOC .*' "$L/smoke-$NAME-$TRY.log" | head -1 | cut -d' ' -f2-)
+    if [ -n "$LOC" ] && [ "$LOC" != "-" ] && [ ! -f "$L/$DIR/.repair-used" ]; then
+      echo "=== $NAME try=$TRY SMOKE-FAIL w/ diagnosis $LOC -> REPAIR (files kept) ===" >> $L/ladder.log
+      touch "$L/$DIR/.repair-used"; cd "$L/$DIR" || exit 1
+      timeout -k 10 1800 pi -p --no-skills --no-context-files $PROVIDER_ARGS --thinking $LVL --name "$NAME-smokerepair" "A previous attempt exists in this directory. The browser reports a fatal error at $LOC. Diagnose and REPAIR only the broken code with the edit tool - do NOT rewrite or touch working files. Re-run node --check on all js files, then verify index.html script tags, then reply REPAIRED." > "$L/run-$NAME-smokerepair.txt" 2>&1
+      rm -f "$L/$DIR/.repair-used"
+      pkill -9 -f -- "--name $NAME-smokerepair" 2>/dev/null; sleep 2
+      if bash "$GATE_DIR/smoke-gate.sh" "$L/$DIR" ${SOAK:-90} > "$L/smoke-$NAME-repair.log" 2>&1; then
+        timeout 180 bash "$GATE_DIR/behavior-probe.sh" "$L/$DIR" > "$L/probe-$NAME.log" 2>&1 || true
+        echo "=== $NAME REPAIR SUCCESS (runtime gate, single-lineage) ===" >> $L/ladder.log; exit 0
+      fi
+      echo "=== $NAME REPAIR failed -> wipe + full reroll ===" >> $L/ladder.log
+    else
+      echo "=== $NAME try=$TRY SMOKE-FAIL (no diagnosis available) -> wipe + reroll ===" >> $L/ladder.log
+    fi
+    rm -rf "$L/$DIR"/*; sleep 3; continue
   fi
   echo "=== $NAME try=$TRY fail rc=$RC miss=[$MISS] syn=[$SYN] wall=${W}min, retry ===" >> $L/ladder.log
   rm -rf $L/$DIR/*; sleep 3
