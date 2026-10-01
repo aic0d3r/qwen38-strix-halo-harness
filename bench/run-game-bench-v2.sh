@@ -19,9 +19,15 @@ case "$LVL" in off|low) BUDGET_DEF=8192;; *) BUDGET_DEF=32768;; esac
 BUDGET=${BUDGET:-$BUDGET_DEF}
 if [ -n "${PROVIDER:-}" ] && [ -n "${MODEL:-}" ] && [ -r "$M" ]; then
   cp "$M" "$M.bak-v22"
-  jq --arg p "$PROVIDER" --arg m "$MODEL" --argjson t "$BUDGET" \
-    '(.providers[$p].models[] | select(.id == $m) | .maxTokens) = $t' \
-    "$M" > "$M.tmp" && mv "$M.tmp" "$M"
+  if [ "${GREEDY:-0}" = 1 ]; then
+    jq --arg p "$PROVIDER" --arg m "$MODEL" \
+      '(.providers[$p].models[] | select(.id == $m) | .samplingParams.temperature) = 0' \
+      "$M" > "$M.tmp" && mv "$M.tmp" "$M"
+  else
+    jq --arg p "$PROVIDER" --arg m "$MODEL" --argjson t "$BUDGET" \
+      '(.providers[$p].models[] | select(.id == $m) | .maxTokens) = $t' \
+      "$M" > "$M.tmp" && mv "$M.tmp" "$M"
+  fi
   trap 'mv "$M.bak-v22" "$M" 2>/dev/null || true' EXIT
 fi
 mkdir -p $L/$DIR
