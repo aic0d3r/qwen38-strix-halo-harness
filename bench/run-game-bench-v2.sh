@@ -94,6 +94,10 @@ for TRY in 1 2 3 4 5; do
     if bash "$GATE_DIR/smoke-gate.sh" "$L/$DIR" ${SOAK:-90} > "$L/smoke-$NAME-$TRY.log" 2>&1; then
       timeout 180 bash "$GATE_DIR/behavior-probe.sh" "$L/$DIR" > "$L/probe-$NAME.log" 2>&1 || true
       timeout 150 node "$GATE_DIR/shot.js" "file://$L/$DIR/index.html" "$L/$DIR/screenshots/shot" > /dev/null 2>&1 || true
+      if grep -q '"visualRender":false' "$L/probe-$NAME.log" 2>/dev/null; then
+        echo "=== $NAME try=$TRY VISUAL-FAIL (blank/unrendered gameplay) -> wipe + reroll ===" >> $L/ladder.log
+        rm -rf "$L/$DIR"/*; sleep 3; continue
+      fi
       SERVE=$(grep -m1 '^SERVE ' "$L/probe-$NAME.log" 2>/dev/null | cut -d' ' -f2-)
       REFL=$(grep -m1 '^REFLECTION ' "$L/probe-$NAME.log" 2>/dev/null | cut -d' ' -f2-)
       echo "=== $NAME try=$TRY SUCCESS wall=${W}min SMOKE-OK serve=${SERVE:-?} refl=${REFL:-?} ===" >> $L/ladder.log; exit 0
@@ -107,6 +111,10 @@ for TRY in 1 2 3 4 5; do
       pkill -9 -f -- "--name $NAME-smokerepair" 2>/dev/null; sleep 2
       if bash "$GATE_DIR/smoke-gate.sh" "$L/$DIR" ${SOAK:-90} > "$L/smoke-$NAME-repair.log" 2>&1; then
         timeout 180 bash "$GATE_DIR/behavior-probe.sh" "$L/$DIR" > "$L/probe-$NAME.log" 2>&1 || true
+        if grep -q '"visualRender":false' "$L/probe-$NAME.log" 2>/dev/null; then
+          echo "=== $NAME REPAIR rendered blank -> wipe + reroll ===" >> $L/ladder.log
+          rm -rf "$L/$DIR"/*; sleep 3; continue
+        fi
         echo "=== $NAME REPAIR SUCCESS (runtime gate, single-lineage) ===" >> $L/ladder.log; exit 0
       fi
       echo "=== $NAME REPAIR failed -> wipe + full reroll ===" >> $L/ladder.log
