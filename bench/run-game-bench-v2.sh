@@ -93,6 +93,7 @@ for TRY in 1 2 3 4 5; do
     echo "=== $NAME try=$TRY static-clean wall=${W}min budget=$BUDGET -> runtime gate ===" >> $L/ladder.log
     if bash "$GATE_DIR/smoke-gate.sh" "$L/$DIR" ${SOAK:-90} > "$L/smoke-$NAME-$TRY.log" 2>&1; then
       timeout 180 bash "$GATE_DIR/behavior-probe.sh" "$L/$DIR" > "$L/probe-$NAME.log" 2>&1 || true
+      timeout 150 node "$GATE_DIR/shot.js" "file://$L/$DIR/index.html" "$L/$DIR/screenshots/shot" > /dev/null 2>&1 || true
       SERVE=$(grep -m1 '^SERVE ' "$L/probe-$NAME.log" 2>/dev/null | cut -d' ' -f2-)
       REFL=$(grep -m1 '^REFLECTION ' "$L/probe-$NAME.log" 2>/dev/null | cut -d' ' -f2-)
       echo "=== $NAME try=$TRY SUCCESS wall=${W}min SMOKE-OK serve=${SERVE:-?} refl=${REFL:-?} ===" >> $L/ladder.log; exit 0
