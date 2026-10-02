@@ -40,7 +40,7 @@ for TRY in 1 2 3 4 5; do
   PROVIDER_ARGS=""
   [ -n "${PROVIDER:-}" ] && PROVIDER_ARGS="--provider $PROVIDER"
   [ -n "${MODEL:-}" ] && PROVIDER_ARGS="$PROVIDER_ARGS --model $MODEL"
-  timeout 5400 pi -p --no-skills --no-context-files $PROVIDER_ARGS --thinking $LVL --name $NAME "$P" > $L/run-$NAME.txt 2>&1 &
+  timeout 5400 pi -p --no-skills --no-context-files $PROVIDER_ARGS ${EXTRA_PI_FLAGS:-} --thinking $LVL --name $NAME "$P" > $L/run-$NAME.txt 2>&1 &
   PID=$!
   # watchdog: off-contract file => kill immediately. First 2min poll at 10s to reap
   # instant-EOS basin tries (~1-in-4 rolls: pi exits rc=0 having produced nothing).
