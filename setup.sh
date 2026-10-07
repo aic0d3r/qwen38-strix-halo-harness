@@ -341,10 +341,15 @@ elif [ -n "$HALOGEN_CKPT" ]; then
         warn "only ${AVAIL} GB free - the download will likely run out of space. Free up at least 135 GB first."
         fail "not enough free space"
       fi
-      command -v huggingface-cli >/dev/null 2>&1 || pip install -U "huggingface_hub[cli]" || fail "could not install huggingface_hub[cli] - install it and re-run"
+      HF_BIN="$(command -v hf || command -v huggingface-cli || true)"
+      if [ -z "$HF_BIN" ]; then
+        echo "  no hf cli found - bootstrapping a venv (~40 MB) ..."
+        python3 -m venv "$HOME/.hf-venv" 2>/dev/null && "$HOME/.hf-venv/bin/pip" install -q -U huggingface_hub 2>/dev/null \
+          && HF_BIN="$HOME/.hf-venv/bin/hf" || fail "could not bootstrap the hf downloader - install huggingface_hub (pipx or a venv) and re-run"
+      fi
       mkdir -p "$DL_DIR"
       echo "  downloading (resumable - re-run this command if interrupted) ..."
-      huggingface-cli download peonist-ai/halogen-qwen3.8-flash-next \
+      "$HF_BIN" download peonist-ai/halogen-qwen3.8-flash-next \
         qwen38-flash-next-v2.hgn qwen38-flash-next-ngram.hgn qwen38-flash-next-vision.hgn \
         tokenizer/ NPU/decider-0.8b NPU/qwen3-embedding-0.6b NPU/qwen3-reranker-0.6b NPU/qwen3guard-gen-0.6b \
         --local-dir "$DL_DIR" || fail "download failed/incomplete - re-run ./setup.sh --halogen auto to resume"
