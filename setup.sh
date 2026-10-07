@@ -252,9 +252,9 @@ else
   fail "sidecar not running"
   GGUF="$(ls "$HOME"/.models/ling3.0-tiny/*.gguf "$REPO"/models/ling3.0-tiny/*.gguf 2>/dev/null | head -1)"
   if [ -z "${GGUF:-}" ]; then
-    warn "model not found locally - downloading Ling-3.0-tiny-Q4_K_M.gguf (~2.2 GB) to ~/.models/ling3.0-tiny/"
+    warn "model not found locally - downloading Ling-3.0-tiny-Q4_K_M.gguf (~4.5 GB, resumable) to ~/.models/ling3.0-tiny/"
     mkdir -p "$HOME/.models/ling3.0-tiny"
-    curl -sfL -o "$HOME/.models/ling3.0-tiny/Ling-3.0-tiny-Q4_K_M.gguf" \
+    curl -fL -C - -o "$HOME/.models/ling3.0-tiny/Ling-3.0-tiny-Q4_K_M.gguf" \
       "https://huggingface.co/inclusionAI/Ling-3.0-tiny-GGUF/resolve/main/Ling-3.0-tiny-Q4_K_M.gguf" \
       && GGUF="$HOME/.models/ling3.0-tiny/Ling-3.0-tiny-Q4_K_M.gguf" \
       || fail "download failed - fetch it manually from huggingface.co/inclusionAI/Ling-3.0-tiny-GGUF"
@@ -269,13 +269,13 @@ else
     fi
   fi
   if [ -n "${LLS:-}" ] && [ -n "${GGUF:-}" ]; then
-    setsid nohup "$LLS" -a ling3.0-tiny -m "$GGUF" -ngl 99 -c 32768 --jinja \
+    setsid nohup "$LLS" -a ling3.0-tiny -m "$GGUF" -ngl 99 -c 131072 --jinja \
       --host 127.0.0.1 --port $TINY_PORT > "$REPO/ling-tiny.log" 2>&1 < /dev/null &
     for i in $(seq 1 12); do sleep 5; tiny_up && break; done
     tiny_up && ok "sidecar started (log: $REPO/ling-tiny.log)" || fail "started but not healthy yet — check $REPO/ling-tiny.log"
   else
     warn "fix: get Ling-3.0-tiny-Q4_K_M.gguf (Hugging Face) and a Vulkan llama-server, then:"
-    warn "  llama-server -a ling3.0-tiny -m <gguf> -ngl 99 -c 32768 --jinja --port 8090"
+    warn "  llama-server -a ling3.0-tiny -m <gguf> -ngl 99 -c 131072 --jinja --port 8090"
     [ -z "${GGUF:-}" ] && warn "  (looked in ~/.models/ling3.0-tiny/ and ./models/ling3.0-tiny/)"
     [ -z "${LLS:-}" ] && warn "  (no llama-server binary found - set one up on PATH)"
   fi
@@ -292,7 +292,7 @@ Description=Ling-3.0-tiny sidecar (llama.cpp)
 After=network.target
 
 [Service]
-ExecStart=$LLS -a ling3.0-tiny -m $UNIT_GGUF -ngl 99 -c 32768 --jinja --host 127.0.0.1 --port $TINY_PORT --metrics
+ExecStart=$LLS -a ling3.0-tiny -m $UNIT_GGUF -ngl 99 -c 131072 --jinja --host 127.0.0.1 --port $TINY_PORT --metrics
 Restart=always
 RestartSec=5
 
