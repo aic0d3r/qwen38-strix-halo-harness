@@ -52,7 +52,10 @@ Minimum download (~124 GB total - don't grab the whole repo, it carries ~190 GB 
 | `NPU/qwen3-reranker-0.6b/` | 821 MB | search re-ranking |
 | `NPU/qwen3guard-gen-0.6b/` | 787 MB | injection screening (`auto-guard`) |
 
-One command fetches exactly those files (needs `pip install -U "huggingface_hub[cli]"`):
+Don't have them? `./setup.sh --halogen auto` offers to fetch exactly this set
+(~124 GB, resumable if interrupted - re-run the same command to continue). Prefer
+pre-downloading? One command fetches exactly those files (needs `pip install -U
+"huggingface_hub[cli]"`):
 
 ```bash
 huggingface-cli download peonist-ai/halogen-qwen3.8-flash-next \

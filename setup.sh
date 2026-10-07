@@ -330,6 +330,29 @@ elif [ -n "$HALOGEN_CKPT" ]; then
   else
     [ "$HALOGEN_CKPT" = "auto" ] && HALOGEN_CKPT=$(find_ckpt)
     if [ -z "$HALOGEN_CKPT" ] || [ ! -f "$HALOGEN_CKPT" ]; then
+      # no checkpoint found: offer to fetch exactly the required file set (~124 GB, resumable)
+      DL_DIR="$HOME/models/halogen-qwen3.8-flash-next"
+      echo "  no .hgn checkpoint found (looked in ., /models, ~/models, ~/Downloads, LLMBench/models)."
+      AVAIL=$(df -BG --output=avail "$HOME" 2>/dev/null | tail -1 | tr -dc '0-9')
+      echo "  required download: ~124 GB into $DL_DIR${AVAIL:+ (free: ${AVAIL} GB)}"
+      read -r -p "  download now? [y/N] " A
+      [ "$A" = "y" ] || fail "aborted - download the files (see README 'Minimum download') or pass a checkpoint: ./setup.sh --halogen /path/to/checkpoint.hgn"
+      if [ "${AVAIL:-999}" -lt 135 ]; then
+        warn "only ${AVAIL} GB free - the download will likely run out of space. Free up at least 135 GB first."
+        fail "not enough free space"
+      fi
+      command -v huggingface-cli >/dev/null 2>&1 || pip install -U "huggingface_hub[cli]" || fail "could not install huggingface_hub[cli] - install it and re-run"
+      mkdir -p "$DL_DIR"
+      echo "  downloading (resumable - re-run this command if interrupted) ..."
+      huggingface-cli download peonist-ai/halogen-qwen3.8-flash-next \
+        qwen38-flash-next-v2.hgn qwen38-flash-next-ngram.hgn qwen38-flash-next-vision.hgn \
+        tokenizer/ NPU/decider-0.8b NPU/qwen3-embedding-0.6b NPU/qwen3-reranker-0.6b NPU/qwen3guard-gen-0.6b \
+        --local-dir "$DL_DIR" || fail "download failed/incomplete - re-run ./setup.sh --halogen auto to resume"
+      [ -f "$DL_DIR/qwen38-flash-next-v2.hgn" ] || fail "download finished but v2.hgn is missing from $DL_DIR"
+      HALOGEN_CKPT="$DL_DIR/qwen38-flash-next-v2.hgn"
+      echo "  download complete"
+    fi
+    if [ -z "$HALOGEN_CKPT" ] || [ ! -f "$HALOGEN_CKPT" ]; then
       fail "no .hgn checkpoint found (looked in ., /models, ~/models, ~/Downloads, LLMBench/models) - pass it: ./setup.sh --halogen /path/to/checkpoint.hgn"
     else
       PIN=$(grep -oE 'HALOGEN_IMAGE_TAG:-[0-9.a-z]+' server/start-halogen.sh | head -1 | cut -d- -f2)
