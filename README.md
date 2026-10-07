@@ -58,11 +58,15 @@ pre-downloading? One command fetches exactly those files (needs `pip install -U
 "huggingface_hub[cli]"`):
 
 ```bash
-huggingface-cli download peonist-ai/halogen-qwen3.8-flash-next \
-  qwen38-flash-next-v2.hgn qwen38-flash-next-ngram.hgn qwen38-flash-next-vision.hgn \
-  tokenizer/ NPU/decider-0.8b NPU/qwen3-embedding-0.6b NPU/qwen3-reranker-0.6b NPU/qwen3guard-gen-0.6b \
+hf download peonist-ai/halogen-qwen3.8-flash-next \
+  qwen38-flash-next-v2.hgn qwen38-flash-next-ngram.hgn qwen38-flash-next-vision.hgn tokenizer/ \
   --local-dir ~/models/halogen-qwen3.8-flash-next
+for n in decider-0.8b qwen3-embedding-0.6b qwen3-reranker-0.6b qwen3guard-gen-0.6b; do
+  hf download peonist-ai/halogen-npu-$n --local-dir ~/models/halogen-qwen3.8-flash-next/npu/$n
+done
 ```
+
+(the NPU models live in four separate repos, not in the main weights repo)
 
 Skip: `w4b.hgn` (124 GB), `ht43.hgn` (57.6 GB), `MTP.hgn` (only for GGUF trunks - the engine's own checkpoint carries its draft head), `w4b.overlay*.hgn`, `qwen3.5-2b`. Upstream's own first-start fetch (~111 GiB) is this same required set minus the NPU sidecars: v2 + lookup table + vision tower + tokenizer. Place all of it under one directory (e.g. `~/models/halogen-qwen3.8-flash-next/`); the launcher mounts that directory read-only at `/models` inside the container.
 

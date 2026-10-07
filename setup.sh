@@ -350,9 +350,15 @@ elif [ -n "$HALOGEN_CKPT" ]; then
       mkdir -p "$DL_DIR"
       echo "  downloading (resumable - re-run this command if interrupted) ..."
       "$HF_BIN" download peonist-ai/halogen-qwen3.8-flash-next \
-        qwen38-flash-next-v2.hgn qwen38-flash-next-ngram.hgn qwen38-flash-next-vision.hgn \
-        tokenizer/ NPU/decider-0.8b NPU/qwen3-embedding-0.6b NPU/qwen3-reranker-0.6b NPU/qwen3guard-gen-0.6b \
+        qwen38-flash-next-v2.hgn qwen38-flash-next-ngram.hgn qwen38-flash-next-vision.hgn tokenizer/ \
         --local-dir "$DL_DIR" || fail "download failed/incomplete - re-run ./setup.sh --halogen auto to resume"
+      # the NPU models live in four separate repos (they are NOT in the main weights repo)
+      for n in decider-0.8b qwen3-embedding-0.6b qwen3-reranker-0.6b qwen3guard-gen-0.6b; do
+        [ -d "$DL_DIR/npu/$n" ] && continue
+        echo "  downloading NPU model: $n ..."
+        "$HF_BIN" download "peonist-ai/halogen-npu-$n" --local-dir "$DL_DIR/npu/$n" \
+          || fail "NPU model download failed: $n - re-run ./setup.sh --halogen auto to resume"
+      done
       [ -f "$DL_DIR/qwen38-flash-next-v2.hgn" ] || fail "download finished but v2.hgn is missing from $DL_DIR"
       HALOGEN_CKPT="$DL_DIR/qwen38-flash-next-v2.hgn"
       echo "  download complete"
