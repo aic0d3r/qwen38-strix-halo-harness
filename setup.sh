@@ -332,8 +332,9 @@ elif [ -n "$HALOGEN_CKPT" ]; then
     if [ -z "$HALOGEN_CKPT" ] || [ ! -f "$HALOGEN_CKPT" ]; then
       fail "no .hgn checkpoint found (looked in ., /models, ~/models, ~/Downloads, LLMBench/models) - pass it: ./setup.sh --halogen /path/to/checkpoint.hgn"
     else
-      docker image inspect ghcr.io/peonist-ai/halogen-flash-server:latest >/dev/null 2>&1 \
-        || { echo "  pulling halogen image (first run, ~GB) ..."; docker pull ghcr.io/peonist-ai/halogen-flash-server:latest; }
+      PIN=$(grep -oE 'HALOGEN_IMAGE_TAG:-[0-9.a-z]+' server/start-halogen.sh | head -1 | cut -d- -f2)
+      docker image inspect "ghcr.io/peonist-ai/halogen-flash-server:$PIN" >/dev/null 2>&1 \
+        || { echo "  pulling halogen image (first run, ~GB) ..."; docker pull "ghcr.io/peonist-ai/halogen-flash-server:$PIN"; }
       W=$(dirname "$HALOGEN_CKPT")
       RENDER_GID=$(getent group render | cut -d: -f3); VIDEO_GID=$(getent group video | cut -d: -f3)
       echo "  launching halogen ($HALOGEN_CKPT, cache ON) ..."

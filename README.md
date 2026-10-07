@@ -52,6 +52,15 @@ Minimum download (~124 GB total - don't grab the whole repo, it carries ~190 GB 
 | `NPU/qwen3-reranker-0.6b/` | 821 MB | search re-ranking |
 | `NPU/qwen3guard-gen-0.6b/` | 787 MB | injection screening (`auto-guard`) |
 
+One command fetches exactly those files (needs `pip install -U "huggingface_hub[cli]"`):
+
+```bash
+huggingface-cli download peonist-ai/halogen-qwen3.8-flash-next \
+  qwen38-flash-next-v2.hgn qwen38-flash-next-ngram.hgn qwen38-flash-next-vision.hgn \
+  tokenizer/ NPU/decider-0.8b NPU/qwen3-embedding-0.6b NPU/qwen3-reranker-0.6b NPU/qwen3guard-gen-0.6b \
+  --local-dir ~/models/halogen-qwen3.8-flash-next
+```
+
 Skip: `w4b.hgn` (124 GB), `ht43.hgn` (57.6 GB), `MTP.hgn` (only for GGUF trunks - the engine's own checkpoint carries its draft head), `w4b.overlay*.hgn`, `qwen3.5-2b`. Upstream's own first-start fetch (~111 GiB) is this same required set minus the NPU sidecars: v2 + lookup table + vision tower + tokenizer. Place all of it under one directory (e.g. `~/models/halogen-qwen3.8-flash-next/`); the launcher mounts that directory read-only at `/models` inside the container.
 
 Nothing here is taken on faith. Setup probes each piece and reports exactly what's live: the NPU guard model answers a real `/v1/moderations` probe, the vision tower shows `enabled: true` on `/health`, and the smoke test verifies its own file artifact rather than trusting the model's report.
