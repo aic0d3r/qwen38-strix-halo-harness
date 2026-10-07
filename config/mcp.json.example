@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "serena": {
+      "command": "~/.local/bin/serena",
+      "args": ["start-mcp-server"],
+      "exposure": "hidden",
+      "toolExposure": {
+        "activate_project": "direct",
+        "find_symbol": "direct",
+        "get_symbols_overview": "direct",
+        "find_referencing_symbols": "direct",
+        "search_for_pattern": "direct",
+        "get_diagnostics_for_file": "direct",
+        "replace_symbol_body": "direct",
+        "insert_after_symbol": "direct",
+        "rename_symbol": "direct",
+        "*": "hidden"
+      },
+      "description": "Serena LSP toolbox: symbol-precise code navigation, diagnostics, and edits (activate_project first)"
+    },
+    "jina": {
+      "url": "https://mcp.jina.ai/v1",
+      "headers": { "Authorization": "${JINA_API_KEY}" },
+      "enabled": false,
+      "description": "Jina web search, page reading, and extraction (enable via /mcp when needed; requires JINA_API_KEY in env)"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+[Unit]
+Description=Compact memory (order-9 hygiene for big-model pinned pages)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory'

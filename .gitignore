@@ -1,0 +1,13 @@
+.pi/
+.progress-log/
+PROGRESS.md
+halogen.log
+ling-tiny.log
+/start-halogen.sh
+.rag/
+__pycache__/
+*.pyc
+bench/pi-bench-home/
+bench/run-*.sh
+qa-*.png
+*.log

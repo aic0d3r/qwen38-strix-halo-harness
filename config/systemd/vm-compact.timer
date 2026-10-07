@@ -1,0 +1,9 @@
+[Unit]
+Description=Compact memory every 15 min (halogen/llama.cpp pin/unpin hygiene)
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+
+[Install]
+WantedBy=timers.target

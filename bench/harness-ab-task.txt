@@ -1,0 +1,24 @@
+Architecture survey of this repository. READ-ONLY except the final commit. Answer each locate question with exact file:line references.
+
+PART 1 - LOCATE each implementation (exact file:line). Prefer the available semantic search tool over long grep chains:
+1. rope: where the rotary embedding type is decided per model architecture
+2. MoE: where expert routing weights are applied in the compute graph
+3. backend buffers: where ggml backend buffer sizes get computed/allocated
+4. server slots: where the llama-server queues and dispatches requests to slots
+5. special tokens: where special-token parsing (BOS/EOS/controls) happens at load
+6. embeddings: where non-causal pooling (mean/cls) for embeddings is implemented
+7. KV quant validation: where per-layer KV cache quantized types get validated
+8. beam search: where beam-search candidate expansion is implemented
+9. grammar: where grammar constraints get applied to sampled candidates
+10. weight loading: where model weights get memory-mapped into buffers
+
+PART 2 - READ completely: the 2 most central files you found in part 1 (most referenced), plus the public header section on rope/buffers (include/llama.h).
+
+PART 3 - REPO SURVEY (full output):
+a) grep -rn 'n_rot\|rope_type' src/ common/ (no head limit)
+b) count TODO + FIXME across src/ and common/
+c) run command (a) again EXACTLY
+
+PART 4 - REPORT: write BIG_TEST_REPORT.md at repo root: table of the 10 questions -> file:line -> one-line mechanism note; survey results; the 4 most central files with evidence.
+
+PART 5 - COMMIT: commit ONLY BIG_TEST_REPORT.md using the /commit command (not git commit directly; local commit only).

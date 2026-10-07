@@ -1,0 +1,8 @@
+[Unit]
+Description=Daily hardware fragmentation telemetry
+[Timer]
+OnBootSec=2min
+OnCalendar=daily
+Persistent=true
+[Install]
+WantedBy=timers.target

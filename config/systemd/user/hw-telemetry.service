@@ -1,0 +1,5 @@
+[Unit]
+Description=Strix Halo order-9 / DirectMap2M telemetry (one line per run)
+[Service]
+Type=oneshot
+ExecStart=%h/coding/qwen38-strix-halo-harness/scripts/hw-telemetry.sh
