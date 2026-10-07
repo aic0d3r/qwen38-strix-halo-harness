@@ -11,7 +11,7 @@ Two supported stacks:
 
 Companion repo: **[neon-ladder](https://github.com/aic0d3r/neon-ladder)** - the playtest-graded benchmark this stack was validated on (game builds, prompts, scorers, result ledger). Benchmark protocol questions live there; harness questions live here.
 
-Measured on a Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70-80W.
+Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 W sustained.
 
 ## Contents
 
