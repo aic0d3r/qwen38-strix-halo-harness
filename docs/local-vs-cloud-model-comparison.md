@@ -130,3 +130,7 @@ Related: [halogen-flash-server](https://github.com/peonist-ai/halogen-flash-serv
   "pull request". It DID read timeshift's source on GitHub (build_script() in
   linuxmint/timeshift) and searched the issue tracker, coming up empty - likely because #496
   is a PR, not an issue. "PR missed" for flashx confirmed.
+
+- Session audit 3: all four pi sessions now searched. flash-pi (01a11923): zero PR
+  references, single "496" digit match inside a token count. Full audit table:
+  halogen found and cited #496 in its answer; flash, flashx and glm-5.3 all missed it.
