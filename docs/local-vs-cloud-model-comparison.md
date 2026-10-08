@@ -120,3 +120,8 @@ Related: [halogen-flash-server](https://github.com/peonist-ai/halogen-flash-serv
 - glm-5.3-flash / flashx: 320B total, 18B active per token - z.ai blog "GLM-5.3-Flash"
   (Aug 26, 2026) and multiple independent writeups ("320B-A18B").
 - glm-5.3 full: 753B MoE - NVIDIA build.nvidia.com model card and HF zai-org/GLM-5.3.
+
+- Session audit (requested): run 7's pi session was searched for PR discovery - zero
+  references to the PR, "pull request", or "#496". The three "496" digit matches were a
+  source line number (4496), a cost substring, and the reasoning token count. Run 7's
+  "missed the existing upstream PR" stands.
