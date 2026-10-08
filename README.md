@@ -13,8 +13,6 @@ Every number in this README is measured and logged: **[the full benchmark number
 
 ![Flash-Next vs GLM 5.3 tiers: time to first token and decode rate](docs/charts/local-vs-cloud.png)
 
-![halogen 0.16.2 to 0.17.1: NPU call latency 4000ms to 130ms, decode 44 to 64 tok/s](docs/charts/halogen-0171-upgrade.png)
-
 Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 W sustained.
 
 ## Contents
@@ -23,7 +21,7 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 
 
 ## Repo map
 
-- **`setup.sh`** - one command, idempotent: installs the pi extensions, wires providers into `models.json` (never touches your own entries), sets pi startup defaults (only if you haven't chosen any), fetches the ling-tiny sidecar GGUF if missing, installs a keep-alive systemd unit for it (restart on death, **nothing at boot**), launches halogen with `--halogen`, checks memory fragmentation.
+- **`setup.sh`** - one command, idempotent: extensions, providers, sidecar fetch, keep-alive unit, halogen launch, memory check. Touches nothing you configured yourself; probes and reports what's live.
 - **`start.sh <dir>`** - the daily command: heals any dead server, then drops you into the pi TUI.
 - **`extensions/`** - ten extensions, each earning its place by measurement:
   - `progress-tracker` - crash recovery checkpointing
@@ -32,7 +30,7 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 
   - `auto-guard` - injection screening, fail-open tripwire (42% recall / 0% false positives on our 30-prompt canary)
   - `harness-tune` (`/tune`), `turn-timer`, `subagent/` (worker/scout/reviewer/planner, session-model inheritance)
 
-  Measured no-ops live in `extensions/optional/` with their receipts. Details: `extensions/README.md`.
+  - measured no-ops live in `extensions/optional/` with their receipts; details in `extensions/README.md`.
 - **`rag-index.py` / `rag-query.py`** - NPU retrieval toolkit: chunk + embed a repo with qwen3-embedding-0.6b on the NPU (~5-6k tok/s), cosine top-k + NPU rerank. Incremental (mtime-based). Runs standalone or through the extension.
 - **`server/`** - llama.cpp-path launch scripts: `start-flashnext.sh` (MTP sidecar, the reasoning flags that stop it burning its whole output on thinking), `start-qwen38.sh` (27B, DFlash2, 256k ctx), `start-ling-tiny.sh` (aux). Ubatch ceiling documented in headers.
 - **`config/`** - `models.json.example` (llama.cpp path, both models pre-wired) and the compaction snippet (`reserveTokens` is per-model, don't copy it blindly; `maxTokens` must be ≤8192 or the server 400s past ~32.7k ctx).
@@ -72,7 +70,7 @@ done
 
 (the NPU models live in four separate repos, not in the main weights repo)
 
-Skip: `w4b.hgn` (124 GB), `ht43.hgn` (57.6 GB), `MTP.hgn` (only for GGUF trunks - the engine's own checkpoint carries its draft head), `w4b.overlay*.hgn`, `qwen3.5-2b`. Upstream's own first-start fetch (~111 GiB) is this same required set minus the NPU sidecars: v2 + lookup table + vision tower + tokenizer. Place all of it under one directory (e.g. `~/models/halogen-qwen3.8-flash-next/`); the launcher mounts that directory read-only at `/models` inside the container.
+Skip the rest: `w4b.hgn` (124 GB), `ht43.hgn` (57.6 GB), `MTP.hgn`, `w4b.overlay*.hgn`, `qwen3.5-2b` - the engine's own checkpoint carries its draft head. Put everything under one directory (e.g. `~/models/halogen-qwen3.8-flash-next/`); the launcher mounts it read-only at `/models` inside the container.
 
 Nothing here is taken on faith. Setup probes each piece and reports exactly what's live: the NPU guard model answers a real `/v1/moderations` probe, the vision tower shows `enabled: true` on `/health`, and the smoke test verifies its own file artifact rather than trusting the model's report.
 
@@ -144,6 +142,8 @@ version this harness was last validated on). One command does it safely:
 It pulls the image, restarts on it, and runs the acceptance battery: health + version
 match, prompt cache on, NPU probes < 1s, MTP decode > 30 t/s, and a `pi -p` smoke. Only
 then does the pin move; any failed check rolls back to the previous pin automatically.
+
+![halogen 0.16.2 to 0.17.1: NPU call latency 4000ms to 130ms, decode 44 to 64 tok/s](docs/charts/halogen-0171-upgrade.png)
 
 Manual path: pull, change the pin, restart, then `scripts/session-audit.sh` + NPU probes +
 `pi -p` smoke + `go test` in any active project. Read the changelog first - tool-calling,
