@@ -125,3 +125,8 @@ Related: [halogen-flash-server](https://github.com/peonist-ai/halogen-flash-serv
   references to the PR, "pull request", or "#496". The three "496" digit matches were a
   source line number (4496), a cost substring, and the reasoning token count. Run 7's
   "missed the existing upstream PR" stands.
+
+- Session audit 2 (requested): flashx's pi session searched - zero references to #496 or
+  "pull request". It DID read timeshift's source on GitHub (build_script() in
+  linuxmint/timeshift) and searched the issue tracker, coming up empty - likely because #496
+  is a PR, not an issue. "PR missed" for flashx confirmed.
