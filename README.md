@@ -13,7 +13,7 @@ Two stacks, same model family, different engines:
 | stack | what | when |
 |---|---|---|
 | **halogen** (recommended) | NPU+GPU engine, Qwen3.8 Flash-Next (125B) from a local checkpoint, zero network | just works, **262k ctx** x 4 slots |
-| **llama.cpp (Vulkan)** | Nathan's builds, full control, DFlash2/MTP spec decode, vision, **256k ctx** max | tuning and the **27B** runs |
+| **llama.cpp (Vulkan)** | Nathan's builds, full control, DFlash2/MTP spec decode, vision, local GGUFs, zero network, **256k ctx** max | tuning and the **27B** runs |
 
 Every number in this README is measured and logged - **[the full benchmark numbers](docs/BENCHMARKS.md)** holds the receipts. **[Flash-Next vs GLM 5.3: local vs cloud on a real debugging task](docs/local-vs-cloud-model-comparison.md)** is the six-run head-to-head, rated against verified ground truth.
 
