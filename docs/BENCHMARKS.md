@@ -14,7 +14,7 @@ Rig: ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB unified, Linux),
 - Text gen (qwen3.5-2b): 16.6 tok/s decode (removed - slower than the sidecar)
 - LLM decode while NPU works: unchanged (separate silicon)
 
-**Capability eval (20 intent queries, 2 repos, 3.8M tokens indexed):**
+**Capability eval (20 intent queries, 2 repos, 383k tokens indexed, src-only):**
 
 - NPU semantic (src-only index): 15/20 top-3 correct file
 - Ripgrep keyword baseline: 9/20 top-3

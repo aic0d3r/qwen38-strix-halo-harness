@@ -70,14 +70,14 @@ flashx rate both pi-harness answers; it picked qwen's.
    Six of seven got the mechanism right, three backed it with on-box evidence, one found the
    upstream PR.
 2. **The harness changed the answer more than the model did.** The same glm-5.3-flash took
-   1m8s in a lighter client (wrong mechanism) and 9m09s in the pi harness (correct mechanism,
+   1m8s in opencode (wrong mechanism) and 9m09s in the pi harness (correct mechanism,
    live reproduction, 93% cache hit, $0.022). Depth came from the tool loop, not the weights.
 3. **The premium tier matched the local box in the same harness.** flashx at 2m41s vs
    Flash-Next at 2m55s, both correct, both deep - each with a unique find (mount-unmount
    precision vs the journalctl race trace and the existing PR). A dead heat on quality at
    local speed, with the 125B staying on the desk.
 4. **Depth scaled with the harness on both tiers.** The flagship 753B went from 6m15s
-   (correct, no PR) in a light client to 8m30s of source-level forensics in pi; flash went
+   (correct, no PR) in opencode to 8m30s of source-level forensics in pi; flash went
    from 1m8s (wrong mechanism) to 9m09s (correct, reproduced). The harness is half the answer,
    on both models.
 5. **Decode rate predicted almost nothing.** flashx decodes at ~151 tok/s and flash at ~45;
@@ -93,8 +93,8 @@ flashx rate both pi-harness answers; it picked qwen's.
   320B-total / 18B-active MoEs (z.ai); full glm-5.3 is 753B. The local model is the
   smaller one. Discount accordingly, both directions.
 - Runs 4-6 ran in opencode, runs 1-3 and 7 in the pi harness; client system prompts and
-  tool loops differ. Run 3 vs run 4 and run 6 vs run 7 are the controlled pairs (same model,
-  two clients).
+  tool loops differ. The three controlled pairs (same model, two clients) are run 3 vs
+  run 4 (flash), run 2 vs run 5 (flashx), and run 6 vs run 7 (the 753B).
 - Two early raw-API probes of the GLM tiers returned empty content (reasoning stream
   exhausting a fixed max_tokens). Those are harness artifacts of bare-endpoint testing and
   are excluded from the table; they are why the client runs above were done in real coding
