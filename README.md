@@ -1,6 +1,6 @@
 # The pi coding harness for local coding on Strix Halo
 
-The model was never the hard part. This is everything around it that makes a local coding agent actually usable day to day: one-command setup, crash recovery that survives a killed server, NPU-accelerated codebase search, a sidecar model for compaction and commits, and the launch scripts. Every script here is what I actually run.
+The model was never the hard part. This is everything around it that makes a local coding agent usable day to day: one-command setup, crash recovery that survives a killed server, NPU-accelerated codebase search, a sidecar model for compaction and commits, and the launch scripts. Every script here is what I actually run.
 
 Two supported stacks:
 
@@ -9,7 +9,7 @@ Two supported stacks:
 | **halogen** (recommended) | closed-source NPU+GPU engine, Qwen3.8-Flash-Next, local checkpoint, zero network at launch | you want it to just work; 262k ctx x 4 slots default |
 | **llama.cpp (Vulkan)** | Nathan's strix-halo builds, full control, DFlash2/MTP spec decode, vision, up to 256k ctx | you want to tune everything / reproduce the ladder numbers |
 
-Every number in this README is measured and logged: **[the full benchmark numbers](docs/BENCHMARKS.md)** holds the receipts, and **[Flash-Next vs GLM 5.3: local vs cloud on a real debugging task](docs/local-vs-cloud-model-comparison.md)** is the six-run head-to-head, answers rated against verified ground truth.
+Every number in this README is measured and logged - **[the full benchmark numbers](docs/BENCHMARKS.md)** holds the receipts. **[Flash-Next vs GLM 5.3: local vs cloud on a real debugging task](docs/local-vs-cloud-model-comparison.md)** is the six-run head-to-head, rated against verified ground truth.
 
 ![Flash-Next vs GLM 5.3 tiers: time to first token and decode rate](docs/charts/local-vs-cloud.png)
 
