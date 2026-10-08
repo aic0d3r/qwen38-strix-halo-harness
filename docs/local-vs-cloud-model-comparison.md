@@ -82,9 +82,10 @@ missed it or suggested reporting upstream - noted per run below.
 
 - One task, six runs. This is a depth comparison, not a capability benchmark.
 - Effort levels: halogen Flash-Next ran at pi's medium thinking; the GLM tiers ran at max.
-- Sizes: Flash-Next is a 125B MoE (plus a 51B n-gram embedding table, per halogen's
-  docs/QUANT.md). glm-5.3-flash and flashx are 320B-total / 18B-active MoEs (z.ai); full
-  glm-5.3 is 753B. The local model is the smaller one. Discount accordingly, both directions.
+- Sizes: Flash-Next is 180B total footprint per unsloth's model card - "125B with 6B
+  activated, plus 51B n-gram embedding and 4B MTP". glm-5.3-flash and flashx are
+  320B-total / 18B-active MoEs (z.ai); full glm-5.3 is 753B. The local model is the
+  smaller one. Discount accordingly, both directions.
 - Runs 4-6 were in a different client than runs 1-3; client system prompts and tool loops
   differ. Run 3 vs run 4 is the controlled pair (same model, two clients).
 - Two early raw-API probes of the GLM tiers returned empty content (reasoning stream
