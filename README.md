@@ -9,7 +9,7 @@ Two supported stacks:
 | **halogen** (recommended) | closed-source NPU+GPU engine, Qwen3.8-Flash-Next, local checkpoint, zero network at launch | you want it to just work; 262k ctx x 4 slots default |
 | **llama.cpp (Vulkan)** | Nathan's strix-halo builds, full control, DFlash2/MTP spec decode, vision, up to 256k ctx | you want to tune everything / reproduce the ladder numbers |
 
-Every number in this README is measured and logged: **[BENCHMARKS.md](docs/BENCHMARKS.md)** holds the receipts, and **[Flash-Next vs GLM 5.3: local vs cloud on a real debugging task](docs/local-vs-cloud-model-comparison.md)** is the six-run head-to-head, answers rated against verified ground truth.
+Every number in this README is measured and logged: **[the full benchmark numbers](docs/BENCHMARKS.md)** holds the receipts, and **[Flash-Next vs GLM 5.3: local vs cloud on a real debugging task](docs/local-vs-cloud-model-comparison.md)** is the six-run head-to-head, answers rated against verified ground truth.
 
 Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 W sustained.
 
