@@ -9,7 +9,7 @@ Two supported stacks:
 | **halogen** (recommended) | closed-source NPU+GPU engine, Qwen3.8-Flash-Next, local checkpoint, zero network at launch | you want it to just work; 262k ctx x 4 slots default |
 | **llama.cpp (Vulkan)** | Nathan's strix-halo builds, full control, DFlash2/MTP spec decode, vision, up to 256k ctx | you want to tune everything / reproduce the ladder numbers |
 
-Docs: **[BENCHMARKS.md](docs/BENCHMARKS.md)** - every measured number in this README with its logged run - and **[local vs cloud model comparison](docs/local-vs-cloud-model-comparison.md)** - Flash-Next vs GLM 5.3 (flash / flashx) on a real debugging task, six runs, answers rated against verified ground truth. Companion repo: **[neon-ladder](https://github.com/aic0d3r/neon-ladder)** - the playtest-graded benchmark this stack was validated on (game builds, prompts, scorers, result ledger). Benchmark protocol questions live there; harness questions live here.
+Docs: **[BENCHMARKS.md](docs/BENCHMARKS.md)** - every measured number in this README with its logged run - and **[local vs cloud model comparison](docs/local-vs-cloud-model-comparison.md)** - Flash-Next vs GLM 5.3 (flash / flashx) on a real debugging task, six runs, answers rated against verified ground truth.
 
 Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 W sustained.
 
@@ -226,6 +226,8 @@ your prefix warm (within its LRU) for when you switch back.
 - [Running a local coding agent on Strix Halo with pi + llama.cpp](https://www.reddit.com/r/StrixHalo/comments/1w6c5nz/) (r/StrixHalo)
 - [Qwen3.8-Flash-Next on Strix Halo: 40 t/s sustained decode](https://www.reddit.com/r/StrixHalo/comments/1w6cf5t/) (r/StrixHalo)
 - [Neon Ladder: a playtest-graded benchmark for local LLM stacks](https://www.reddit.com/r/LocalLLaMA/comments/1w6cjm5/) (r/LocalLLaMA)
+
+Companion repo: **[neon-ladder](https://github.com/aic0d3r/neon-ladder)** - the playtest-graded benchmark this stack was validated on. Benchmark protocol questions live there; harness questions live here.
 
 ## License
 
