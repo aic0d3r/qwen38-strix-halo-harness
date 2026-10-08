@@ -214,7 +214,7 @@ your prefix warm (within its LRU) for when you switch back.
 | any `--doctor` line red | the line prints the exact fix |
 | halogen won't launch, order-9 < 200 | reboot (memory fragmentation); the launcher's 65k/2-slot fallback works without one |
 | halogen tries to download something | your launch has `HALOGEN_DOWNLOAD` set - remove it; everything loads from local files |
-| sessions 2.5× slower | prompt cache is OFF - never set `HALOGEN_PROMPT_CACHE=0` |
+| sessions 2.5x slower | prompt cache is OFF - never set `HALOGEN_PROMPT_CACHE=0` |
 | `codebase_search` unavailable in a session | `./setup.sh --index <dir>`; the extension also self-indexes on first use |
 | stale task on resume | checkpoint from a previous task - `rm PROGRESS.md`, restart |
 | want zero-touch sidecar after reboot | `systemctl --user enable ling-tiny` (off by default on purpose) |
