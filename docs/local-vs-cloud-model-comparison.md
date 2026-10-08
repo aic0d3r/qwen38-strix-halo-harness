@@ -65,7 +65,7 @@ missed it or suggested reporting upstream - noted per run below.
 
 ## What the seven runs show
 
-1. **Verdicts were cheap; proof was rare.** All six runs said "harmless, nothing broken."
+1. **Verdicts were cheap; proof was rare.** All seven runs said "harmless, nothing broken."
    Three of six got the mechanism right, two proved it with on-box evidence, one found the
    upstream PR.
 2. **The harness changed the answer more than the model did.** The same glm-5.3-flash took
