@@ -1,6 +1,6 @@
 # Local vs cloud model comparison: Qwen3.8 Flash-Next vs GLM 5.3 (flash / flashx) on a real debugging task
 
-Six runs, one real prompt, ground truth verified on the box. Same task given to the local
+Seven runs, one real prompt, ground truth verified on the box. Same task given to the local
 125B MoE (Qwen3.8 Flash-Next, served by halogen on a Strix Halo Flow Z13 at 70W) and to
 z.ai's GLM 5.3 tiers through two different coding clients. Every answer below was checked
 against a root-cause forensics pass done on the machine before any rating.
@@ -58,11 +58,12 @@ directory` line, does it need fixing?
 | 4 | opencode | glm-5.3-flash | 1m8s | correct | wrong (blamed a broken-shebang `status` file in PATH) | handed diagnostic commands back to the user |
 | 5 | opencode | glm-5.3-flashx | 1m30s | correct | correct | corroborated via web search |
 | 6 | opencode | GLM 5.3, the full 753B (max) | 6m15s | correct | correct (called the regression in the internal script runner) | pacman.log check; missed the existing upstream PR |
+| 7 | pi harness (cloud) | GLM 5.3, the full 753B (max) | 8m30s | correct | correct + deepest forensics of all runs (function names init_tmp/exit_app/dir_delete, exact 1s race window from journal timestamps, confirmed against source, upstream master status) | journal timestamps verified; duplicate pacman-hook finding verified on box; $0.425; missed the existing PR |
 
 Only run 1 found the already-open upstream PR (linuxmint/timeshift#496). The other five
 missed it or suggested reporting upstream - noted per run below.
 
-## What the six runs show
+## What the seven runs show
 
 1. **Verdicts were cheap; proof was rare.** All six runs said "harmless, nothing broken."
    Three of six got the mechanism right, two proved it with on-box evidence, one found the
@@ -74,13 +75,17 @@ missed it or suggested reporting upstream - noted per run below.
    Flash-Next at 2m55s, both correct, both deep - each with a unique find (mount-unmount
    precision vs the journalctl race trace and the existing PR). A dead heat on quality at
    local speed, with the 125B staying on the desk.
-4. **Decode rate predicted almost nothing.** flashx decodes at ~151 tok/s and flash at ~45;
+4. **Depth scaled with the harness on both tiers.** The flagship 753B went from 6m15s
+   (correct, no PR) in a light client to 8m30s of source-level forensics in pi; flash went
+   from 1m8s (wrong mechanism) to 9m09s (correct, reproduced). The harness is half the answer,
+   on both models.
+5. **Decode rate predicted almost nothing.** flashx decodes at ~151 tok/s and flash at ~45;
    the 151 tok/s run was 1m30s shallow, the 45 tok/s run (in pi) was 9m09s deep. Thinking
    budget and tool loop dominated wall time.
 
 ## Caveats
 
-- One task, six runs. This is a depth comparison, not a capability benchmark.
+- One task, seven runs. This is a depth comparison, not a capability benchmark.
 - Effort levels: halogen Flash-Next ran at pi's medium thinking; the GLM tiers ran at max.
 - Sizes: Flash-Next is 180B total footprint per unsloth's model card - "125B with 6B
   activated, plus 51B n-gram embedding and 4B MTP". glm-5.3-flash and flashx are
