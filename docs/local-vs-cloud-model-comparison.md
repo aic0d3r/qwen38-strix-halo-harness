@@ -59,6 +59,9 @@ directory` line, does it need fixing?
 | 5 | opencode | glm-5.3-flashx | 1m30s | correct | correct | corroborated via web search |
 | 6 | opencode | GLM 5.3 (max) | 6m15s | correct | correct (called the regression in the internal script runner) | pacman.log check; missed the existing upstream PR |
 
+Only run 1 found the already-open upstream PR (linuxmint/timeshift#496). The other five
+missed it or suggested reporting upstream - noted per run below.
+
 ## What the six runs show
 
 1. **Verdicts were cheap; proof was rare.** All six runs said "harmless, nothing broken."
@@ -97,3 +100,9 @@ directory` line, does it need fixing?
 
 Related: [halogen-flash-server](https://github.com/peonist-ai/halogen-flash-server) and the
 [neon-ladder benchmark](https://github.com/aic0d3r/neon-ladder).
+
+## Post-publication addendum (user run, 2026-10-08)
+
+- Effort asymmetry disclosed: halogen ran at pi medium, GLM tiers at max. qwen (smaller model)
+  produced the user's favorite answer of the three.
+- User asked GLM 5.3 flashx to rate both pi-harness answers; it picked qwen's.
