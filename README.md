@@ -8,12 +8,12 @@
 - a sidecar model for compaction and commits
 - launch scripts for both stacks
 
-Two supported stacks:
+Two stacks, same model family, different engines:
 
 | stack | what | when |
 |---|---|---|
-| **halogen** (recommended) | closed-source NPU+GPU engine, Qwen3.8-Flash-Next, local checkpoint, zero network at launch | you want it to just work; 262k ctx x 4 slots default |
-| **llama.cpp (Vulkan)** | Nathan's strix-halo builds, full control, DFlash2/MTP spec decode, vision, up to 256k ctx | you want to tune everything / reproduce the ladder numbers |
+| **halogen** (recommended) | closed-source NPU+GPU engine serving Qwen3.8 Flash-Next from a local checkpoint, zero network at launch | you want it to just work, **262k ctx** x 4 slots default |
+| **llama.cpp (Vulkan)** | community Vulkan builds, full control, DFlash2/MTP spec decode, vision, **256k ctx** max | you want to tune everything or reproduce the ladder numbers |
 
 Every number in this README is measured and logged - **[the full benchmark numbers](docs/BENCHMARKS.md)** holds the receipts. **[Flash-Next vs GLM 5.3: local vs cloud on a real debugging task](docs/local-vs-cloud-model-comparison.md)** is the six-run head-to-head, rated against verified ground truth.
 
