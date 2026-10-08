@@ -53,10 +53,10 @@ directory` line, does it need fixing?
 | run | client | model | wall | verdict | mechanism | proof |
 |---|---|---|---|---|---|---|
 | 1 | pi harness (local) | Flash-Next 125B | 2m55s | correct | correct (redirect race) | journalctl trace, pacman.log, upstream PR #496 found |
-| 2 | pi harness (cloud) | glm-5.3-flashx | 2m41s | correct | correct + most precise (unmounted snapshot mount as CWD, binary symbol named) | status-file-0 empirically checked in leftover dirs, pacman.log packages verified |
-| 3 | pi harness (cloud) | glm-5.3-flash | 9m09s | correct | correct + live reproduction (ran timeshift --list, watched the status file appear) | journal confirm, autosnap.conf read, cost $0.022 |
-| 4 | opencode | glm-5.3-flash | 1m8s | correct | wrong (blamed a broken-shebang `status` file in PATH) | handed diagnostic commands back to the user |
-| 5 | opencode | glm-5.3-flashx | 1m30s | correct | correct | corroborated via web search |
+| 2 | pi harness (cloud) | glm-5.3-flashx | 2m41s | correct | correct + most precise (unmounted snapshot mount as CWD, binary symbol named) | status-file-0 empirically checked in leftover dirs, pacman.log packages verified; PR missed (session audited) |
+| 3 | pi harness (cloud) | glm-5.3-flash | 9m09s | correct | correct + live reproduction (ran timeshift --list, watched the status file appear) | journal confirm, autosnap.conf read, cost $0.022; PR missed (session audited) |
+| 4 | opencode | glm-5.3-flash | 1m8s | correct | wrong (blamed a broken-shebang `status` file in PATH) | handed diagnostic commands back to the user; PR missed |
+| 5 | opencode | glm-5.3-flashx | 1m30s | correct | correct | corroborated via web search; PR missed (suggested reporting upstream) |
 | 6 | opencode | GLM 5.3, the full 753B (max) | 6m15s | correct | correct (called the regression in the internal script runner) | pacman.log check; missed the existing upstream PR |
 | 7 | pi harness (cloud) | GLM 5.3, the full 753B (max) | 8m30s | correct | correct + deepest forensics of all runs (function names init_tmp/exit_app/dir_delete, exact 1s race window from journal timestamps, confirmed against source, upstream master status) | journal timestamps verified; duplicate pacman-hook finding verified on box; $0.425; missed the existing PR |
 
