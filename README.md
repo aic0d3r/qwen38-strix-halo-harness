@@ -39,9 +39,9 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 
 
 ## Quickstart: halogen
 
-Prerequisites: an AMD Strix Halo box (gfx1151), docker, the [pi coding agent](https://github.com/earendil-works/pi), and the halogen model files from [huggingface.co/peonist-ai/halogen-qwen3.8-flash-next](https://huggingface.co/peonist-ai/halogen-qwen3.8-flash-next).
+Prerequisites: an **AMD Strix Halo box** (gfx1151), **docker**, the **[pi coding agent](https://github.com/earendil-works/pi)**, and the **halogen model files** from [huggingface.co/peonist-ai/halogen-qwen3.8-flash-next](https://huggingface.co/peonist-ai/halogen-qwen3.8-flash-next).
 
-Minimum download (~124 GB total - don't grab the whole repo, it carries ~190 GB of optional variants):
+**Minimum download ~124 GB** - don't grab the whole repo, it carries ~190 GB of optional variants:
 
 | file | size | why |
 |---|---|---|
@@ -72,7 +72,7 @@ done
 
 Skip the rest: `w4b.hgn` (124 GB), `ht43.hgn` (57.6 GB), `MTP.hgn`, `w4b.overlay*.hgn`, `qwen3.5-2b` - the engine's own checkpoint carries its draft head. Put everything under one directory (e.g. `~/models/halogen-qwen3.8-flash-next/`); the launcher mounts it read-only at `/models` inside the container.
 
-Nothing here is taken on faith. Setup probes each piece and reports exactly what's live: the NPU guard model answers a real `/v1/moderations` probe, the vision tower shows `enabled: true` on `/health`, and the smoke test verifies its own file artifact rather than trusting the model's report.
+**Nothing here is taken on faith.** Setup probes each piece and reports exactly what's live: the NPU guard model answers a real `/v1/moderations` probe, the vision tower shows `enabled: true` on `/health`, and the smoke test verifies its own file artifact rather than trusting the model's report.
 
 ## Install
 
@@ -93,7 +93,7 @@ Upstream also ships an optional `ht43.hgn` checkpoint (57.6 GB, smaller/faster t
 
 Plain `pi` also works after setup - startup defaults point at halogen (existing overrides are never touched).
 
-**Context size**: the default launch is halogen's native max, **262,144 ctx × 4 slots**. Memory isn't the constraint (~67 GB model + ~115 MiB/slot in-place cache) - allocator fragmentation is.
+**Context size**: the default launch is halogen's native max, **262,144 ctx x 4 slots**. Memory isn't the constraint (~67 GB model + ~115 MiB/slot in-place cache) - allocator fragmentation is.
 
 The launcher's pre-flight gate handles it. If order-9 pages are low (box up a long time, big-model churn), it first attempts recovery (page-cache drop, compaction) and only proceeds on a healthy allocator.
 
@@ -107,7 +107,7 @@ After any ctx change the launcher syncs `models.json`'s `contextWindow` (so pi t
 
 ### Crash recovery
 
-pi dies, you kill it, the server dies mid-task - doesn't matter. Relaunch `./start.sh` in the same directory and say "continue": `progress-tracker` wrote a checkpoint (task + partial state) and the fresh session picks it up. Verified across six scenarios including kill -9 at response 1, server death mid-task, and 15-deep compaction chains (reliable to ~8-10 compactions; deeper chains deserve a re-orientation pass).
+**pi dies, you kill it, the server dies mid-task** - doesn't matter. Relaunch `./start.sh` in the same directory and say "continue": `progress-tracker` wrote a checkpoint (task + partial state) and the fresh session picks it up. **Verified across six scenarios**, including kill -9 at response 1, server death mid-task, and 15-deep compaction chains (reliable to ~8-10 compactions; deeper chains deserve a re-orientation pass).
 
 Known limits, measured and documented: one pi task per repo (concurrent sessions race on the checkpoint; set `PI_PROGRESS_FILE` per task for parallel work), and a stale checkpoint from a previous task is data, not instructions - `rm PROGRESS.md` when switching tasks.
 
@@ -128,7 +128,7 @@ rule-retention canary stays 10/10 without it.
 `./setup.sh --uninstall` removes everything the installer provisioned: extensions,
 templates, skills, theme, pi defaults and the two providers (only where they still match
 what setup set), and the systemd units - after backing all of it to
-`~/pi-harness-uninstall-backup-*.tar.gz`. Deliberately left alone: your own model
+`~/pi-harness-uninstall-backup-*.tar.gz`. **Deliberately left alone:** your own model
 entries, `mcp.json`, the sidecar GGUF (the command to reclaim it is printed), the halogen
 container and your checkpoint files.
 
