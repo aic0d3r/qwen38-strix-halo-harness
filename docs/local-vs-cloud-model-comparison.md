@@ -82,7 +82,9 @@ missed it or suggested reporting upstream - noted per run below.
 
 - One task, six runs. This is a depth comparison, not a capability benchmark.
 - Effort levels: halogen Flash-Next ran at pi's medium thinking; the GLM tiers ran at max.
-  The local model is also the smaller one. Discount accordingly, both directions.
+- Sizes: Flash-Next is a 125B MoE (plus a 51B n-gram embedding table, per halogen's
+  docs/QUANT.md). glm-5.3-flash and flashx are 320B-total / 18B-active MoEs (z.ai); full
+  glm-5.3 is 753B. The local model is the smaller one. Discount accordingly, both directions.
 - Runs 4-6 were in a different client than runs 1-3; client system prompts and tool loops
   differ. Run 3 vs run 4 is the controlled pair (same model, two clients).
 - Two early raw-API probes of the GLM tiers returned empty content (reasoning stream
@@ -106,3 +108,9 @@ Related: [halogen-flash-server](https://github.com/peonist-ai/halogen-flash-serv
 - Effort asymmetry disclosed: halogen ran at pi medium, GLM tiers at max. qwen (smaller model)
   produced the user's favorite answer of the three.
 - User asked GLM 5.3 flashx to rate both pi-harness answers; it picked qwen's.
+
+## Parameter size sources (grounding for the size claims)
+- Flash-Next: 125B params + 51B n-gram table - halogen docs/QUANT.md, first section.
+- glm-5.3-flash / flashx: 320B total, 18B active per token - z.ai blog "GLM-5.3-Flash"
+  (Aug 26, 2026) and multiple independent writeups ("320B-A18B").
+- glm-5.3 full: 753B MoE - NVIDIA build.nvidia.com model card and HF zai-org/GLM-5.3.
