@@ -1,6 +1,12 @@
 # The pi coding harness for local coding on Strix Halo
 
-**The model was never the hard part.** This is everything around it that makes a local coding agent usable day to day: one-command setup, crash recovery that survives a killed server, NPU-accelerated codebase search, a sidecar model for compaction and commits, and the launch scripts.
+**The model was never the hard part.** This is everything around it that makes a local coding agent usable day to day:
+
+- one-command setup
+- crash recovery that survives a killed server
+- NPU-accelerated codebase search
+- a sidecar model for compaction and commits
+- launch scripts for both stacks
 
 Two supported stacks:
 
