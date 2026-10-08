@@ -8,6 +8,8 @@ against a root-cause forensics pass done on the machine before any rating.
 This is the detailed companion to the Reddit post. All numbers here are from logged runs on
 2026-10-08.
 
+![Flash-Next vs GLM 5.3 tiers: time to first token and decode rate](charts/local-vs-cloud.png)
+
 ## The task
 
 Pasted verbatim into each model's session (a real pacman pre-transaction hook log):

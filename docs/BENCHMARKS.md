@@ -1,5 +1,7 @@
 # Benchmark numbers, methodology & what was removed after testing
 
+![halogen 0.16.2 to 0.17.1: NPU call latency and decode rate](charts/halogen-0171-upgrade.png)
+
 Rig: ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB unified, Linux), benches at 70 W sustained. NPU driver needs IOMMU on. Halogen 0.17.1, ling3.0-tiny sidecar on llama.cpp 0.7.6.1-era build.
 
 **NPU microbench (0.17.1, four models resident):**
