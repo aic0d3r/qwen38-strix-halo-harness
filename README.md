@@ -15,7 +15,7 @@ Two stacks, same model family, different engines:
 | **halogen** (recommended) | NPU+GPU engine, Qwen3.8 Flash-Next (125B) from a local checkpoint, zero network | just works, **262k ctx** x 4 slots |
 | **llama.cpp (Vulkan)** | Nathan's builds, full control, DFlash2/MTP spec decode, vision, local GGUFs, zero network, **256k ctx** max | tuning and the **27B** runs |
 
-Every number in this README is measured and logged - **[the full benchmark numbers](docs/BENCHMARKS.md)** holds the receipts. **[Flash-Next vs GLM 5.3: local vs cloud on a real debugging task](docs/local-vs-cloud-model-comparison.md)** is the six-run head-to-head, rated against verified ground truth.
+Every number in this README is measured and logged - **[the full benchmark numbers](docs/BENCHMARKS.md)** holds the receipts. **[Flash-Next vs GLM 5.3: local vs cloud on a real debugging task](docs/local-vs-cloud-model-comparison.md)** is the seven-run head-to-head, rated against verified ground truth.
 
 ![Flash-Next vs GLM 5.3 tiers: time to first token and decode rate](docs/charts/local-vs-cloud.png)
 
@@ -228,7 +228,7 @@ your prefix warm (within its LRU) for when you switch back.
 ## Docs
 
 - **[BENCHMARKS.md](docs/BENCHMARKS.md)** - the measured numbers: decode/prefill, NPU latencies, canary results, every claim in this README with its logged run.
-- **[Local vs cloud model comparison](docs/local-vs-cloud-model-comparison.md)** - six runs, one real debugging task: Flash-Next vs glm-5.3 / flashx across two clients, answers rated against verified ground truth.
+- **[Local vs cloud model comparison](docs/local-vs-cloud-model-comparison.md)** - seven runs, one real debugging task: Flash-Next vs glm-5.3 / flashx across two clients, answers rated against verified ground truth.
 
 ## Posts
 
