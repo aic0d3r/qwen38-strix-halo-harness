@@ -11,6 +11,10 @@ Two supported stacks:
 
 Every number in this README is measured and logged: **[the full benchmark numbers](docs/BENCHMARKS.md)** holds the receipts, and **[Flash-Next vs GLM 5.3: local vs cloud on a real debugging task](docs/local-vs-cloud-model-comparison.md)** is the six-run head-to-head, answers rated against verified ground truth.
 
+![Flash-Next vs GLM 5.3 tiers: time to first token and decode rate](docs/charts/local-vs-cloud.png)
+
+![halogen 0.16.2 to 0.17.1: NPU call latency 4000ms to 130ms, decode 44 to 64 tok/s](docs/charts/halogen-0171-upgrade.png)
+
 Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 W sustained.
 
 ## Contents
