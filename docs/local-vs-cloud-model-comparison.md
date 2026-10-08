@@ -57,7 +57,7 @@ directory` line, does it need fixing?
 | 3 | pi harness (cloud) | glm-5.3-flash | 9m09s | correct | correct + live reproduction (ran timeshift --list, watched the status file appear) | journal confirm, autosnap.conf read, cost $0.022 |
 | 4 | opencode | glm-5.3-flash | 1m8s | correct | wrong (blamed a broken-shebang `status` file in PATH) | handed diagnostic commands back to the user |
 | 5 | opencode | glm-5.3-flashx | 1m30s | correct | correct | corroborated via web search |
-| 6 | opencode | GLM 5.3 (max) | 6m15s | correct | correct (called the regression in the internal script runner) | pacman.log check; missed the existing upstream PR |
+| 6 | opencode | GLM 5.3, the full 753B (max) | 6m15s | correct | correct (called the regression in the internal script runner) | pacman.log check; missed the existing upstream PR |
 
 Only run 1 found the already-open upstream PR (linuxmint/timeshift#496). The other five
 missed it or suggested reporting upstream - noted per run below.
