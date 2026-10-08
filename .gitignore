@@ -11,3 +11,4 @@ bench/pi-bench-home/
 bench/run-*.sh
 qa-*.png
 *.log
+.serena/
