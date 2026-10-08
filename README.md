@@ -15,7 +15,7 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 
 
 ## Contents
 
-[Install](#install) | [Quickstart: halogen](#quickstart-halogen) | [Crash recovery](#crash-recovery) | [Uninstall](#uninstall) | [Upgrading halogen](#upgrading-halogen) | [Using another engine](#using-another-engine-gufo-llamacpp-as-the-main-model) | [llama.cpp path](#setup-llamacpp-path-full-control) | [Troubleshooting](#troubleshooting) | [Posts](#posts)
+[Install](#install) | [Quickstart: halogen](#quickstart-halogen) | [Crash recovery](#crash-recovery) | [Uninstall](#uninstall) | [Upgrading halogen](#upgrading-halogen) | [Using another engine](#using-another-engine-gufo-llamacpp-as-the-main-model) | [llama.cpp path](#setup-llamacpp-path-full-control) | [Troubleshooting](#troubleshooting) | [Docs](#docs) | [Posts](#posts)
 
 ## Repo map
 
@@ -214,6 +214,11 @@ your prefix warm (within its LRU) for when you switch back.
 | `codebase_search` unavailable in a session | `./setup.sh --index <dir>`; the extension also self-indexes on first use |
 | stale task on resume | checkpoint from a previous task - `rm PROGRESS.md`, restart |
 | want zero-touch sidecar after reboot | `systemctl --user enable ling-tiny` (off by default on purpose) |
+
+## Docs
+
+- **[BENCHMARKS.md](docs/BENCHMARKS.md)** - the measured numbers: decode/prefill, NPU latencies, canary results, every claim in this README with its logged run.
+- **[Local vs cloud model comparison](docs/local-vs-cloud-model-comparison.md)** - six runs, one real debugging task: Flash-Next vs glm-5.3 / flashx across two clients, answers rated against verified ground truth.
 
 ## Posts
 
