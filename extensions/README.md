@@ -123,12 +123,6 @@ Three tools + one command, each measured and earned:
 | `triage(text, question, options[])` | fast routing decision (0.8B classifier, ~120ms) | 78% on binary decisions; use for guardrail hints and issue classification, NOT as a security boundary |
 | `/rag-index <dir>` | build `<dir>/.rag/{index.json,vectors.f32}` | ~5,700 tok/s on NPU |
 
-Requires: halogen 0.16+ NPU server on :8731 with `HALOGEN_NPU_MODELS=decider-0.8b,qwen3-embedding-0.6b,qwen3-reranker-0.6b`.
-
-### Removed after testing (measured too weak to ship)
-
-- `moderate` (qwen3guard-gen-0.6b): 67% accuracy, misses blunt attacks (DAN, rm -rf, SSRF), false-positives on benign testing language. Not a security boundary.
-- `npu_write` (qwen3.5-2b): correct output but 16.6 tok/s decode - slower than ling-tiny for the same jobs.
 
 ## harness-tune.ts
 

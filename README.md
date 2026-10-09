@@ -36,6 +36,8 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 
   - `auto-guard` - injection screening, fail-open tripwire (42% recall / 0% false positives on our 30-prompt canary)
   - `harness-tune` (`/tune`), `turn-timer`, `subagent/` (worker/scout/reviewer/planner, session-model inheritance)
 
+- **voice (opt-in)**: `./setup.sh --voice` wires the [privateer-speak](https://npm.im/privateer-speak) pi package to a local Lemonade server - whisper STT into the composer (`/talk`, alt+t) and kokoro TTS answers (`/speak`), all on the CPU while the NPU handles the agent's small jobs. STT measured 0.43s, TTS 0.3s.
+
   - measured no-ops live in `extensions/optional/` with their receipts; details in `extensions/README.md`.
 - **`rag-index.py` / `rag-query.py`** - NPU retrieval toolkit: chunk + embed a repo with qwen3-embedding-0.6b on the NPU (~5-6k tok/s), cosine top-k + NPU rerank. Incremental (mtime-based). Runs standalone or through the extension.
 - **`server/`** - llama.cpp-path launch scripts: `start-flashnext.sh` (MTP sidecar, the reasoning flags that stop it burning its whole output on thinking), `start-qwen38.sh` (27B, DFlash2, 256k ctx), `start-ling-tiny.sh` (aux). Ubatch ceiling documented in headers.

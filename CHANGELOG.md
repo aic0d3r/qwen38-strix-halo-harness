@@ -13,6 +13,10 @@
   fine-tunes without editing the script)
 - `bench/guard-canary.py --model`: run the injection canary against any
   moderation-capable model served by halogen
+- `./setup.sh --voice`: voice for pi sessions via the privateer-speak package wired to
+  a local Lemonade server - whisper STT into the composer (`/talk`, alt+t) and kokoro
+  TTS answers (`/speak`). Measured STT 0.43s / TTS 0.3s, both on CPU; the FLM NPU STT
+  path benched slower (1.91s) and stays documented in the receipts. Nothing starts at boot.
 
 ## 1.0.0 - 2026-10-07
 

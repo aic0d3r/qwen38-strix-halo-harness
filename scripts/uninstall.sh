@@ -35,6 +35,15 @@ if [ -n "${PI_HOME:-}" ]; then
 else
   systemctl --user disable --now ling-tiny.service >/dev/null 2>&1 && echo "      ling-tiny stopped/disabled"
   rm -f "$HOME/.config/systemd/user/ling-tiny.service"
+  if [ -f "$HOME/.config/systemd/user/lemonade-server.service" ]; then
+    systemctl --user disable --now lemonade-server.service >/dev/null 2>&1 && echo "      lemonade-server stopped/disabled"
+    rm -f "$HOME/.config/systemd/user/lemonade-server.service"
+    echo "      note: the lemonade-server package itself is left installed (remove: pacman -R lemonade-server)"
+  fi
+  if [ -f "$AG/../speak.json" ]; then
+    rm -f "$AG/../speak.json" && echo "      speak.json removed (voice config)"
+    echo "      privateer-speak package left installed (remove: pi remove npm:privateer-speak)"
+  fi
   systemctl --user disable --now hw-telemetry.timer >/dev/null 2>&1 && echo "      hw-telemetry timer stopped/disabled"
   rm -f "$HOME/.config/systemd/user/hw-telemetry.service" "$HOME/.config/systemd/user/hw-telemetry.timer"
   systemctl --user daemon-reload 2>/dev/null

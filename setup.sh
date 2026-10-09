@@ -18,6 +18,7 @@ while [ $# -gt 0 ]; do
     --halogen) HALOGEN_CKPT="${2:-auto}"; shift 2 ;;
     --index)   INDEX_DIR="${2:-}"; shift 2 ;;
     --doctor)  DOCTOR=1; shift ;;
+    --voice)   VOICE=1; shift ;;
     --halogen-upgrade) HALOGEN_UPGRADE="${2:-latest}"; shift 2>/dev/null || shift ;;
     --uninstall) UNINSTALL=1; shift ;;
     *) shift ;;
@@ -33,6 +34,7 @@ warn(){ printf '  \033[33m!\033[0m %s\n' "$1"; }
 fail(){ printf '  \033[31m✗\033[0m %s\n' "$1"; }
 tiny_up(){ curl -sf -m 3 "localhost:$TINY_PORT/health" >/dev/null 2>&1; }
 hal_up(){  curl -sf -m 3 "localhost:$HAL_PORT/health"  >/dev/null 2>&1; }
+lem_up(){  curl -sf -m 3 "localhost:13305/api/v1/models" >/dev/null 2>&1 || curl -sf -m 3 "localhost:13305/health" >/dev/null 2>&1; }
 # fabric clock held? GPU+NPU together on Strix Halo are only safe with it held
 # (halogen NPU docs). The container holds it while it runs via /sys, but any NPU
 # program outside the container (voice STT, fine-tune jobs) needs the host unit.
@@ -79,6 +81,12 @@ echo "== harness doctor =="
     # pi-only install (--no-halogen or extensions never installed): halogen is not ours to manage
     hal_up                          && ok "halogen up (:8731, not managed by this install)" || warn "halogen down (pi-only install - fine unless you want the NPU tools)"
   fi
+  # voice stack (opt-in --voice): Lemonade on :13305 serves Whisper STT + Kokoro TTS
+  if [ "$VOICE" = 1 ] || lem_up; then
+    lem_up                          && ok "lemonade up (:13305, voice)" || fail "lemonade down - sudo pacman -S lemonade-server, then: systemctl --user start lemond"
+    command -v arecord >/dev/null   && ok "mic capture (arecord)"       || fail "arecord missing (alsa-utils)"
+  fi
+  # non-halogen engine detection: the harness contract (NPU guard/search/decide,
   # vision tower, /health cache+vision fields) exists only on halogen. Other
   # engines degrade gracefully (extensions fail open) but the user should know.
   if curl -sf --max-time 3 http://127.0.0.1:8731/health 2>/dev/null | grep -qv 'prompt_cache'; then
@@ -105,8 +113,6 @@ mkdir -p "$EXT_DIR"
 N=0
 for f in "$REPO"/extensions/*.ts; do
   b=$(basename "$f")
-  # voice.ts is opt-in (--voice): speak tool is only useful with a Lemonade server
-  [ "$b" = "voice.ts" ] && [ "$VOICE" != 1 ] && continue
   # NPU extensions are opt-out (--no-halogen): they need a local halogen on :8731
   { [ "$b" = "npu-retrieval.ts" ] || [ "$b" = "auto-guard.ts" ]; } && [ "$NO_HALOGEN" = 1 ] && continue
   if ! cmp -s "$f" "$EXT_DIR/$b"; then cp "$f" "$EXT_DIR/$b"; echo "  installed $b"; N=$((N+1)); fi
@@ -338,6 +344,58 @@ UNIT
       ok "sidecar running; keep-alive unit installed (dies -> systemd restarts it; nothing starts at boot)"
     fi
   fi
+fi
+
+# voice stack (opt-in: ./setup.sh --voice) - privateer-speak pi package + Lemonade
+if [ "$VOICE" = 1 ]; then
+  echo "== 3b. voice (privateer-speak + lemonade :13305) =="
+  if command -v lemond >/dev/null; then
+    # Nothing-at-boot rule: start it now if down, never enable (same policy as ling-tiny).
+    lem_up || systemctl --user start lemond.service 2>/dev/null
+    sleep 2
+    lem_up && ok "lemond up (:13305, whisper STT + kokoro TTS, single voice server)" || warn "lemond not answering yet (check: journalctl --user -u lemond)"
+    lemonade list --downloaded 2>/dev/null | grep -q "Whisper-Large-v3-Turbo" \
+      && ok "audio models present (Whisper-Large-v3-Turbo + kokoro-v1)" \
+      || warn "load the audio models once: lemonade load Whisper-Large-v3-Turbo && lemonade load kokoro-v1"
+  else
+    warn "lemonade not found - install it (Arch/CachyOS: sudo pacman -S lemonade-server;"
+    warn "  Ubuntu: snap install lemonade-server; or docker: see lemonade-server.ai docs), then re-run ./setup.sh --voice"
+  fi
+  if command -v pi >/dev/null; then
+    if ! python3 -c "import json,sys; sys.exit(0 if any('privateer-speak' in p for p in json.load(open('$PI_HOME/agent/settings.json')).get('packages',[])) else 1)" 2>/dev/null; then
+      pi install npm:privateer-speak >/dev/null 2>&1 && ok "installed privateer-speak (pi package)" || warn "privateer-speak install failed - run: pi install npm:privateer-speak"
+    else ok "privateer-speak present"; fi
+    if [ ! -f "$PI_HOME/speak.json" ]; then
+      cat > "$PI_HOME/speak.json" <<'SPEAKCFG'
+{
+  "enabled": true,
+  "provider": "openai-compatible",
+  "stream": false,
+  "providers": {
+    "openai-compatible": {
+      "baseUrl": "http://127.0.0.1:13305/v1",
+      "apiKey": "none",
+      "model": "kokoro-v1",
+      "sttModel": "Whisper-Large-v3-Turbo",
+      "voice": "af_heart"
+    }
+  },
+  "input": {
+    "enabled": true,
+    "provider": "openai-compatible",
+    "language": "en",
+    "autoSend": false,
+    "silenceMs": 1200,
+    "shortcut": "alt+t"
+  }
+}
+SPEAKCFG
+      ok "wrote $PI_HOME/speak.json (openai-compatible -> lemonade)"
+    else
+      ok "$PI_HOME/speak.json exists (left untouched)"
+    fi
+  fi
+  ok "in pi: /talk records + transcribes into the composer (alt+t), /speak reads answers aloud"
 fi
 
 echo "== 4. halogen server (:8731) =="
