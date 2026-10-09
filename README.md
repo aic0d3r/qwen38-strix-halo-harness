@@ -15,7 +15,7 @@ Two stacks, same model family, different engines:
 | **halogen** (recommended) | NPU+GPU engine, Qwen3.8 Flash-Next (125B) from a local checkpoint, zero network | just works, **262k ctx** x 4 slots |
 | **llama.cpp (Vulkan)** | Nathan's builds, full control, DFlash2/MTP spec decode, vision, local GGUFs, zero network, **256k ctx** max | tuning and the **27B** runs |
 
-Every number in this README is measured and logged - **[the full benchmark numbers](docs/BENCHMARKS.md)** holds the receipts. **[Flash-Next vs GLM 5.3: local vs cloud on a real debugging task](docs/local-vs-cloud-model-comparison.md)** is the seven-run head-to-head, rated against verified ground truth.
+Every number in this README is measured and logged - **[the full benchmark numbers](docs/BENCHMARKS.md)** hold the receipts. **[Flash-Next vs GLM 5.3: local vs cloud on a real debugging task](docs/local-vs-cloud-model-comparison.md)** is the seven-run head-to-head, rated against verified ground truth.
 
 ![Flash-Next vs GLM 5.3 tiers: time to first token and decode rate](docs/charts/local-vs-cloud.png)
 
@@ -99,6 +99,14 @@ Upstream also ships an optional `ht43.hgn` checkpoint (57.6 GB, smaller/faster t
 
 Plain `pi` also works after setup - startup defaults point at halogen (existing overrides are never touched).
 
+**Pi on another machine?** Two supported shapes:
+
+- `./setup.sh --no-halogen` - pi-only install: no halogen provider, no NPU
+  extensions, no container management. For a laptop pi against your own or cloud providers.
+- Remote Strix Halo appliance: normal install on the laptop, then point `models.json`'s
+  halogen `baseUrl` at the appliance and export `PI_NPU_BASE` so `codebase_search` and
+  `auto-guard` reach its NPU endpoints over the network.
+
 **Context size**: the default launch is halogen's native max, **262,144 ctx x 4 slots**. Memory isn't the constraint (~67 GB model + ~115 MiB/slot in-place cache) - allocator fragmentation is.
 
 The launcher's pre-flight gate handles it. If order-9 pages are low (box up a long time, big-model churn), it first attempts recovery (page-cache drop, compaction) and only proceeds on a healthy allocator.
@@ -171,7 +179,7 @@ see the ledger):
 | `decide` tool | dead - no NPU decider |
 | image input | dead as launched (no `--mmproj` wired) |
 | `/health` verification (cache, vision) | degrades to "unknown" |
-| warm-cache replay | ~2.5x slower on gufo (133–147k vs 336–382k tok/s) |
+| warm-cache replay | ~2.5x slower on gufo (133-147k vs 336-382k tok/s) |
 | deep context | gufo collapses past ~100k (13 vs 41 t/s at 131k) |
 
 `./setup.sh --doctor` tells you when a non-halogen engine is answering on :8731.

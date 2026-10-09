@@ -102,7 +102,7 @@ exec docker run --rm -i \
   -v /usr/lib/libxrt_core.so.2:/usr/lib/libxrt_core.so.2:ro \
   -v /usr/lib/libxrt_driver_xdna.so.2:/usr/lib/libxrt_driver_xdna.so.2:ro \
   -e HALOGEN_CTX=$CTX -e HALOGEN_KV_SLOTS=$SLOTS \
-  -e HALOGEN_NPU_MODELS=decider-0.8b,qwen3-embedding-0.6b,qwen3-reranker-0.6b,qwen3guard-gen-0.6b \
+  -e HALOGEN_NPU_MODELS=${HALOGEN_NPU_MODELS:-decider-0.8b,qwen3-embedding-0.6b,qwen3-reranker-0.6b,qwen3guard-gen-0.6b} \
   -e HALOGEN_VISION_TOWER=$VISION \
   -e HALOGEN_CHECKPOINT=/models/$(basename "$CKPT") \
   --group-add "${RENDER_GID:-44}" --group-add "${VIDEO_GID:-99}" \

@@ -5,12 +5,16 @@
 #
 #   ./setup.sh                  install + verify everything
 #   ./setup.sh --doctor         read-only status check
-#   ./setup.sh --halogen [auto|path/to/checkpoint.hgn]   also launch halogen
+#   ./setup.sh --no-halogen     pi-only install: skip the halogen provider, the NPU
+#                               extensions and all container management (for boxes that
+#                               run pi without a local halogen, e.g. a laptop against a
+#                               remote Strix Halo appliance)
 #   ./setup.sh --index <dir>    build NPU search index for a repo
 set -u
-HALOGEN_CKPT=""; INDEX_DIR=""; DOCTOR=0
+HALOGEN_CKPT=""; INDEX_DIR=""; DOCTOR=0; VOICE=0; NO_HALOGEN=0
 while [ $# -gt 0 ]; do
   case "$1" in
+    --no-halogen)  NO_HALOGEN=1; shift ;;
     --halogen) HALOGEN_CKPT="${2:-auto}"; shift 2 ;;
     --index)   INDEX_DIR="${2:-}"; shift 2 ;;
     --doctor)  DOCTOR=1; shift ;;
@@ -29,6 +33,18 @@ warn(){ printf '  \033[33m!\033[0m %s\n' "$1"; }
 fail(){ printf '  \033[31m✗\033[0m %s\n' "$1"; }
 tiny_up(){ curl -sf -m 3 "localhost:$TINY_PORT/health" >/dev/null 2>&1; }
 hal_up(){  curl -sf -m 3 "localhost:$HAL_PORT/health"  >/dev/null 2>&1; }
+# fabric clock held? GPU+NPU together on Strix Halo are only safe with it held
+# (halogen NPU docs). The container holds it while it runs via /sys, but any NPU
+# program outside the container (voice STT, fine-tune jobs) needs the host unit.
+fclk_held(){
+  local d perf
+  for d in /sys/class/drm/card*/device; do
+    [ -e "$d/pp_dpm_fclk" ] || continue
+    perf=$(cat "$d/power_dpm_force_performance_level" 2>/dev/null)
+    if [ "$perf" = high ] || { [ "$perf" = manual ] && grep -q '\*' "$d/pp_dpm_fclk"; }; then return 0; fi
+  done
+  return 1
+}
 # resolve a usable llama-server for the sidecar (PATH, then known build dirs)
 LLS="$(command -v llama-server 2>/dev/null || true)"
 [ -z "$LLS" ] && for c in "$HOME/.local/bin/llama-server" \
@@ -57,8 +73,12 @@ echo "== harness doctor =="
                                     && ok "providers configured"   || fail "providers missing - run ./setup.sh"
   [ -f "$PI_HOME/agent/mcp.json" ]  && ok "mcp.json present (serena+jina)" || warn "no mcp.json - serena/jina unavailable (run ./setup.sh)"
   tiny_up                           && ok "sidecar up (:8090)"     || fail "sidecar down - run ./setup.sh (or: systemctl --user enable --now ling-tiny)"
-  hal_up                            && ok "halogen up (:8731)"     || fail "halogen down - run: ./setup.sh --halogen auto   (or existing start-halogen.sh)"
-  # non-halogen engine detection: the harness contract (NPU guard/search/decide,
+  if [ -f "$EXT_DIR/npu-retrieval.ts" ]; then
+    hal_up                          && ok "halogen up (:8731)"     || fail "halogen down - run: ./setup.sh --halogen auto   (or existing start-halogen.sh)"
+  else
+    # pi-only install (--no-halogen or extensions never installed): halogen is not ours to manage
+    hal_up                          && ok "halogen up (:8731, not managed by this install)" || warn "halogen down (pi-only install - fine unless you want the NPU tools)"
+  fi
   # vision tower, /health cache+vision fields) exists only on halogen. Other
   # engines degrade gracefully (extensions fail open) but the user should know.
   if curl -sf --max-time 3 http://127.0.0.1:8731/health 2>/dev/null | grep -qv 'prompt_cache'; then
@@ -69,6 +89,7 @@ echo "== harness doctor =="
   [ -f "$REPO/start-halogen.sh" ]   && ok "start-halogen.sh ready" || warn "no start-halogen.sh yet (written on first --halogen launch)"
   O9=$(awk '$4=="Normal"{u=0; for(i=14;i<=NF;i++) u+=$(i)*2**(i-14); print u}' /proc/buddyinfo 2>/dev/null | head -1)
   [ -n "$O9" ] && [ "$O9" -ge 200 ] && ok "order-9 pages: $O9"     || warn "order-9 pages: ${O9:-n/a} (<200): reboot before full-ctx (262k) halogen; 65k/2-slot fine"
+  fclk_held && ok "gpu fabric clock held (GPU+NPU concurrency safe)" || { warn "gpu fabric clock NOT held - NPU beside GPU can hang or corrupt (halogen NPU docs). one-time install (sudo):"; warn "  sudo install -m 755 $REPO/config/systemd/halogen-fabric-clock /usr/local/sbin/ && sudo install -m 644 $REPO/config/systemd/halogen-fabric-clock.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now halogen-fabric-clock.service"; }
   if ! systemctl list-timers vm-compact.timer >/dev/null 2>&1; then
     warn "vm-compact.timer not installed - install it to stretch time between reboots:"
     warn "  sudo cp $REPO/config/systemd/vm-compact.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now vm-compact.timer"
@@ -84,6 +105,10 @@ mkdir -p "$EXT_DIR"
 N=0
 for f in "$REPO"/extensions/*.ts; do
   b=$(basename "$f")
+  # voice.ts is opt-in (--voice): speak tool is only useful with a Lemonade server
+  [ "$b" = "voice.ts" ] && [ "$VOICE" != 1 ] && continue
+  # NPU extensions are opt-out (--no-halogen): they need a local halogen on :8731
+  { [ "$b" = "npu-retrieval.ts" ] || [ "$b" = "auto-guard.ts" ]; } && [ "$NO_HALOGEN" = 1 ] && continue
   if ! cmp -s "$f" "$EXT_DIR/$b"; then cp "$f" "$EXT_DIR/$b"; echo "  installed $b"; N=$((N+1)); fi
 done
 # drop measured no-op extensions from older installs (kept in extensions/optional/)
@@ -100,6 +125,10 @@ done
 [ "$N" != 0 ] && ok "installed/updated $N extensions"
 
 echo "== 2. pi providers (models.json) =="
+if [ "$NO_HALOGEN" = 1 ]; then
+  ok "pi-only install: halogen provider, NPU extensions and container management skipped"
+  ok "point pi at your own provider, or at a remote halogen appliance by setting its baseUrl in models.json"
+else
 if ! command -v python3 >/dev/null; then fail "python3 required for models.json merge — install python3 and re-run"; else
 python3 - "$MODELS_JSON" <<'PY'
 import json, sys, os
@@ -170,6 +199,7 @@ if changed:
     json.dump(s, open(sp, "w"), indent=2); print("  pi startup defaults -> halogen (existing user overrides untouched)")
 PY
 ok "providers configured in $MODELS_JSON"
+fi
 fi
 
 echo "== 2a-2. prompt templates =="
@@ -311,7 +341,9 @@ UNIT
 fi
 
 echo "== 4. halogen server (:8731) =="
-if hal_up; then
+if [ "$NO_HALOGEN" = 1 ]; then
+  ok "skipped (--no-halogen: pi-only install)"
+elif hal_up; then
   ok "halogen is up"
   cache=$(curl -sf --max-time 5 http://127.0.0.1:8731/health | python3 -c "import json,sys; h=json.load(sys.stdin); pc=h.get('prompt_cache'); v=(pc.get('enabled') if isinstance(pc,dict) else pc) if pc is not None else h.get('cache'); print('on' if v else 'off')" 2>/dev/null || echo unknown)
   if [ "$cache" = off ]; then
@@ -399,6 +431,23 @@ O9=$(awk '$4=="Normal"{u=0; for(i=14;i<=NF;i++) u+=$(i)*2**(i-14); print u}' /pr
 if [ -n "$O9" ] && [ "$O9" -lt 200 ]; then
   warn "order-9 contiguous pages = $O9 (<200): full-ctx halogen (262k) will wedge. 65k/2-slot is fine. reboot before full-ctx."
 else ok "order-9 pages: ${O9:-n/a}"; fi
+fclk_held && ok "gpu fabric clock held (GPU+NPU concurrency safe)" || { warn "gpu fabric clock NOT held - NPU beside GPU can hang or corrupt (halogen NPU docs). one-time install (sudo):"; warn "  sudo install -m 755 $REPO/config/systemd/halogen-fabric-clock /usr/local/sbin/ && sudo install -m 644 $REPO/config/systemd/halogen-fabric-clock.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now halogen-fabric-clock.service"; }
+# fabric clock: GPU+NPU together on Strix Halo are only safe with it held
+# (halogen NPU docs). The container holds it while it runs via /sys, but any
+# NPU program outside the container (voice STT, fine-tune jobs) needs the
+# boot/resume-proof host unit.
+FCLK_HELD=0
+for d in /sys/class/drm/card*/device; do
+  [ -e "$d/pp_dpm_fclk" ] || continue
+  perf=$(cat "$d/power_dpm_force_performance_level" 2>/dev/null)
+  if [ "$perf" = high ] || { [ "$perf" = manual ] && grep -q '\*' "$d/pp_dpm_fclk"; }; then FCLK_HELD=1; fi
+done
+if [ "$FCLK_HELD" = 1 ]; then
+  ok "gpu fabric clock held (GPU+NPU concurrency safe)"
+else
+  warn "gpu fabric clock NOT held - NPU work beside the GPU can hang or corrupt (halogen NPU docs). one-time install (sudo):"
+  warn "  sudo install -m 755 $REPO/config/systemd/halogen-fabric-clock /usr/local/sbin/ && sudo install -m 644 $REPO/config/systemd/halogen-fabric-clock.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now halogen-fabric-clock.service"
+fi
 if systemctl list-timers vm-compact.timer >/dev/null 2>&1; then
   ok "vm-compact.timer active (15-min allocator hygiene)"
 else

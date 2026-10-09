@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `./setup.sh --no-halogen`: pi-only install - skips the halogen provider, the NPU
+  extensions and all container management (pi on a laptop against your own providers,
+  or against a remote Strix Halo appliance via baseUrl + `PI_NPU_BASE`)
+- doctor: GPU fabric-clock probe. On Strix Halo, NPU work beside GPU work is only safe
+  with the fabric clock held; the probe warns with the one-time host-unit install
+  command when it isn't. Unit staged at `config/systemd/halogen-fabric-clock{,.service}`
+- `start-halogen.sh`: `HALOGEN_NPU_MODELS` is env-overridable (load custom NPU
+  fine-tunes without editing the script)
+- `bench/guard-canary.py --model`: run the injection canary against any
+  moderation-capable model served by halogen
+
 ## 1.0.0 - 2026-10-07
 
 Initial public release. A coding-agent harness for Qwen3.8-Flash-Next on AMD Strix Halo
