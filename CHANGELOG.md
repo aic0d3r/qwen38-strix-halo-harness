@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- `thinkingLevelMap` sends the model's real effort tier for pi's `high`: `xhigh`
+  instead of the `high` alias. Behavior is unchanged on halogen (serve_api folds
+  both spellings to xhigh) but the config no longer contradicts the chat template,
+  which supports exactly low/medium/xhigh. The llama.cpp-path example carries the
+  same map, and there no wrapper folds the alias, so the real tier name is the
+  safe form
+
 ## 1.1 - 2026-10-10
 
 Post-release audit round: two full review passes plus self-review of the fixes, plus a

@@ -152,7 +152,7 @@ def model(id_, name, ctx):
             "compat": {"thinkingFormat": "chat-template",
                        "chatTemplateKwargs": {"reasoning_effort": {"$var": "thinking.effort"},
                                               "enable_thinking": {"$var": "thinking.enabled"}}},
-            "thinkingLevelMap": {"minimal": None, "low": "low", "medium": "medium", "high": "high", "xhigh": None, "max": None},
+            "thinkingLevelMap": {"minimal": None, "low": "low", "medium": "medium", "high": "xhigh", "xhigh": None, "max": None},
             "samplingParams": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0},
             "input": ["text", "image"]}  # vision tower enabled in start-halogen.sh (HALOGEN_VISION_TOWER=1)
 HAL = m["providers"].get("halogen", {})
