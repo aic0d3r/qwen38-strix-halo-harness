@@ -3,6 +3,17 @@
 ## Unreleased
 
 ### Changed
+- semantic codebase search moved from the NPU rag pipeline to the semble MCP server
+  (`mcp.json`, `search` + `find_related` direct, pinned 0.6.2 via uvx). A/B on 18
+  ground-truth queries across this repo and an unfamiliar one: semble 17/18 (94%)
+  top-3 hit-rate vs NPU 13/18 (72%), 2-3x faster queries (0.55-0.61s vs 1.0-1.7s),
+  ~40x faster index builds (1.2s vs ~52s). `npu-retrieval.ts` keeps `triage` and
+  `dedup_scan` (-178 lines of index machinery); `codebase_search`, `/rag-index`,
+  auto-index, `rag-index.py`, `rag-query.py` and `setup.sh --index` are gone. Search
+  now works on --no-halogen and llama.cpp-path installs (no NPU involved); setup
+  warns if `uvx` is missing; scout/reviewer agents declare `mcp__semble__search`
+
+### Changed
 - subagents spawn with `--no-skills`: every scout/worker/reviewer was paying ~1.4s of
   skill scanning + description prefill per dispatch for skills a subagent never routes
   to (0 loads across all 225 recorded sessions). Skills stay a main-session feature;

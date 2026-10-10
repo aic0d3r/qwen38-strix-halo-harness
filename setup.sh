@@ -9,14 +9,12 @@
 #                               extensions and all container management (for boxes that
 #                               run pi without a local halogen, e.g. a laptop against a
 #                               remote Strix Halo appliance)
-#   ./setup.sh --index <dir>    build NPU search index for a repo
 set -u
-HALOGEN_CKPT=""; INDEX_DIR=""; DOCTOR=0; VOICE=0; NO_HALOGEN=0
+HALOGEN_CKPT=""; DOCTOR=0; VOICE=0; NO_HALOGEN=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-halogen)  NO_HALOGEN=1; shift ;;
     --halogen) HALOGEN_CKPT="${2:-auto}"; shift 2 ;;
-    --index)   INDEX_DIR="${2:-}"; shift 2 ;;
     --doctor)  DOCTOR=1; shift ;;
     --voice)   VOICE=1; shift ;;
     --halogen-upgrade) HALOGEN_UPGRADE="${2:-latest}"; shift 2>/dev/null || shift ;;
@@ -77,7 +75,7 @@ if [ "$DOCTOR" = 1 ]; then
                                     && ok "core extensions in place" || fail "extensions missing - run ./setup.sh"
   python3 -c "import json;m=json.load(open('$MODELS_JSON'));m['providers']['halogen'];m['providers']['llamacpp-tiny']" 2>/dev/null \
                                     && ok "providers configured"   || fail "providers missing - run ./setup.sh"
-  [ -f "$PI_HOME/agent/mcp.json" ]  && ok "mcp.json present (serena+jina)" || warn "no mcp.json - serena/jina unavailable (run ./setup.sh)"
+  [ -f "$PI_HOME/agent/mcp.json" ]  && ok "mcp.json present (serena+jina+semble)" || warn "no mcp.json - serena/jina/semble unavailable (run ./setup.sh)"
   tiny_up                           && ok "sidecar up (:8090)"     || fail "sidecar down - run ./setup.sh (or: systemctl --user enable --now ling-tiny)"
   if [ -f "$EXT_DIR/npu-retrieval.ts" ]; then
     hal_up                          && ok "halogen up (:8731)"     || fail "halogen down - run: ./setup.sh --halogen auto   (or existing start-halogen.sh)"
@@ -95,7 +93,7 @@ if [ "$DOCTOR" = 1 ]; then
   # engines degrade gracefully (extensions fail open) but the user should know.
   if curl -sf --max-time 3 http://127.0.0.1:8731/health 2>/dev/null | grep -qv 'prompt_cache'; then
     warn "something that is not halogen is answering on :8731 (no prompt_cache in /health)."
-    warn "  auto-guard, codebase_search, decide and image input will not work; /tune knobs partly inert."
+    warn "  auto-guard, the NPU tools (triage, dedup_scan) and image input will not work; /tune knobs partly inert."
     warn "  supported main engine: halogen only (see README 'Using another engine')."
   fi
   [ -f "$REPO/start-halogen.sh" ]   && ok "start-halogen.sh ready" || warn "no start-halogen.sh yet (written on first --halogen launch)"
@@ -222,8 +220,8 @@ for f in "$REPO"/templates/*.md; do
   if ! diff -q "$f" "$PI_HOME/templates/$b" >/dev/null 2>&1; then cp "$f" "$PI_HOME/templates/$b"; T=$((T+1)); fi
 done
 ok "prompt templates current ($T updated, $(ls "$PI_HOME/templates" 2>/dev/null | wc -l) total)"
-# generic home for rag-index.py so npu-retrieval's auto-index finds it without machine-specific paths
-cmp -s "$REPO/rag-index.py" "$PI_HOME/agent/rag-index.py" || cp "$REPO/rag-index.py" "$PI_HOME/agent/rag-index.py"
+# codebase search is the semble MCP server (mcp.json): verify its runtime is available
+if command -v uvx >/dev/null; then ok "uvx found (semble MCP runnable)"; else warn "uvx not found - semantic search (semble) unavailable; install uv (https://docs.astral.sh/uv)"; fi
 
 echo "== 2a. skills + ponytail =="
 SKILL_DIR="$PI_HOME/agent/skills"; mkdir -p "$SKILL_DIR"
@@ -270,12 +268,17 @@ servers = {
         "headers": {"Authorization": "!echo Bearer $(cat ~/.config/opencode/jina.key)"},
         "enabled": False,
         "description": "Jina web search and page reading (enable via /mcp; needs the key file)"},
+    "semble": {
+        "command": "uvx", "args": ["--from", "semble[mcp]==0.6.2", "semble"],
+        "exposure": "hidden",
+        "toolExposure": {"search": "direct", "find_related": "direct", "*": "hidden"},
+        "description": "Semble instant semantic code search (local or remote git repos; replaced the NPU rag pipeline - A/B 17/18 vs 13/18, 2026-10-10)"},
 }
 key = os.path.expanduser("~/.config/opencode/jina.key")
 if not os.path.exists(key):
     servers["jina"]["headers"] = {"Authorization": "${JINA_API_KEY}"}
 json.dump({"mcpServers": servers}, open(path, "w"), indent=2)
-print("  wrote mcp.json (serena direct x9, jina disabled)")
+print("  wrote mcp.json (serena direct x9, jina disabled, semble direct x2)")
 PYM
   ok "MCP servers configured (pi mcp list to inspect)"
 else
@@ -484,14 +487,6 @@ else
   warn "halogen down (optional: main model). start with: ./setup.sh --halogen auto"
 fi
 
-echo "== 5. NPU index (optional) =="
-if [ -n "$INDEX_DIR" ]; then
-  [ -d "$INDEX_DIR" ] || fail "not a directory: $INDEX_DIR"
-  [ -d "$INDEX_DIR" ] && { [ -f "$REPO/rag-index.py" ] && python3 "$REPO/rag-index.py" --dir "$INDEX_DIR" --incremental --ext '.cpp,.h,.c,.hpp,.go,.py,.ts,.js,.html,.css,.sh' --exclude '(\.git|build|vendor|node_modules)' || fail "rag-index.py not found"; }
-else
-  warn "run when needed:  ./setup.sh --index <repo-dir>"
-fi
-
 O9=$(awk '$4=="Normal"{u=0; for(i=14;i<=NF;i++) u+=$(i)*2**(i-14); print u}' /proc/buddyinfo 2>/dev/null | head -1)
 if [ -n "$O9" ] && [ "$O9" -lt 200 ]; then
   warn "order-9 contiguous pages = $O9 (<200): full-ctx halogen (262k) will wedge. 65k/2-slot is fine. reboot before full-ctx."
@@ -511,5 +506,5 @@ echo "done. doctor check any time:  ./setup.sh --doctor"
 echo "smoke test:"
 echo "  pi -p --no-skills --no-context-files --provider halogen \\"
 echo "    --model halogen-qwen3.8-flash-next --thinking medium \\"
-echo "    --tools commit,codebase_search,bash,read,write \\"
+echo "    --tools commit,bash,read,write \\"
 echo '    "List the 5 largest source files and write them to SMOKE.md"'

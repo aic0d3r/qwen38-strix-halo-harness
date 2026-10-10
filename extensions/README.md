@@ -38,18 +38,15 @@ flash-next, ~4 GB for the sidecar.
    maxTokens 8192, not 32768: the server hard-rejects requests once
    context + max_tokens crosses the 65,536 window (~32.7k context trips it).
 
-5. NPU retrieval index for each repo you want semantic search in (one-time,
-   ~2.5 min for a 1M-token repo):
+5. Nothing for search: semantic search is the semble MCP server (wired by
+   setup.sh into mcp.json; indexes on first query, ~1s for this repo).
 
-       python3 rag-index.py --dir <repo> --ext '.cpp,.h,.py,.ts,.sh' \
-         --exclude '(\.git|build|vendor)'
-
-Smoke test (expect the tool list to include commit + codebase_search;
+Smoke test (expect the tool list to include commit + mcp__semble__search;
 "[progress-tracker] wrote PROGRESS.md" after ~10 responses):
 
     cd <indexed repo> && pi -p --no-skills --no-context-files \
       --provider halogen --model halogen-qwen3.8-flash-next --thinking medium \
-      --tools commit,codebase_search,triage,bash,read,write \
+      --tools commit,mcp__semble__search,triage,bash,read,write \
       "List the 5 largest source files and write them to SMOKE.md"
 
 Resume test: kill the session mid-task (Ctrl-C / timeout), then run again with
@@ -63,7 +60,7 @@ Core three - these carry the measured value:
 | extension | measured saving |
 |---|---|
 | `progress-tracker.ts` | resume after crash/kill: recovery 455s vs 572s fresh baseline; note auto-injects, zero agent adoption needed |
-| `NPU-retrieval.ts` (codebase_search) | ~70ms/query, 7/7 ground-truth precision on a 943k-token index; replaces ~8.5 grep-chain turns per locate (~3-5 min/task) |
+| semble MCP (`search`/`find_related`) | replaced NPU codebase_search 2026-10-10: A/B 17/18 vs 13/18 top-3 hit-rate, 0.55s p50 queries, 1.2s index builds; no NPU required |
 | `ling-tiny-compaction.ts` | summaries ~24s non-blocking vs ~52s blocking on the main model (decode-bound: tiny 122 t/s vs 27B ~45 t/s) |
 
 Optional / situational:
@@ -75,7 +72,7 @@ Optional / situational:
 - `context-prune.ts`, `NPU-triage.ts`, `ling-tiny-triage.ts` - moved to
   `extensions/optional/` (0.0k saved / 0 firings across all in-session A/Bs;
   setup.sh removes stale copies on upgrade). `triage` + `dedup_scan` still
-  ship inside NPU-retrieval.ts (same file as codebase_search) - agents never
+  ship inside NPU-retrieval.ts (search moved to the semble MCP server) - agents never
   call them unprompted, and the tables below are component-level numbers,
   not in-session results.
 
@@ -118,10 +115,8 @@ Three tools + one command, each measured and earned:
 
 | tool | what it does | measured |
 |---|---|---|
-| `codebase_search(query, k?)` | semantic search (NPU embed + rerank, ~100-300ms) | 15/20 correct-file vs 9/20 for grep on 20 intent queries across 2 repos |
 | `dedup_scan(dirs[], threshold?)` | find near-duplicate files across directories | 45 pairs found across 4 repos in 8.4s, catches renames |
 | `triage(text, question, options[])` | fast routing decision (0.8B classifier, ~120ms) | 78% on binary decisions; use for guardrail hints and issue classification, NOT as a security boundary |
-| `/rag-index <dir>` | build `<dir>/.rag/{index.json,vectors.f32}` | ~5,700 tok/s on NPU |
 
 
 ## harness-tune.ts

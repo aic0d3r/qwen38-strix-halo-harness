@@ -41,19 +41,6 @@ if(CAP/3.9>131072-4096-2048) throw new Error("cap exceeds sidecar window budget"
 console.log("  ok: cap in "+f+" (CAP="+CAP+" fits 131k window)")' || FAIL=1
 done
 
-# [5] rag staleness expr counts changed AND deleted files (mirrors npu-retrieval.ts)
-$JS -e 'const fs=require("fs"),os=require("os"),p=fs.mkdtempSync(os.tmpdir()+"/stale");
-fs.writeFileSync(p+"/a.ts","x".repeat(200));
-const meta={files:{a:Math.floor(Date.now()/1000)-50,b:1}}; let stale=0;
-for(const rel of Object.keys(meta.files)){try{if(Math.floor(fs.statSync(p+"/"+rel).mtimeMs/1000)!==meta.files[rel])stale++}catch{stale++}}
-fs.rmSync(p,{recursive:true});
-if(stale!==2) throw new Error("stale calc wrong: got "+stale+", want 2 (changed+deleted)");
-console.log("  ok: staleness counts changed + deleted")' || FAIL=1
-
-# [6] index meta carries an exact byte count and the reader uses it (crash-order fix)
-grep -q '"bytes": len(flat)' rag-index.py && grep -q "bytes: flat.byteLength" extensions/npu-retrieval.ts \
-  && grep -q "meta.bytes" extensions/npu-retrieval.ts \
-  && ok "index writers record exact bytes; guard checks it" || bad "bytes guard was removed from a writer or the reader"
 
 # [7] git-commit guard blocks direct commits, allows message-free amends (mirrors ling-tiny-commit.ts)
 $JS -e 'const BLOCK=/\bgit\b[^|;&]*\bcommit\b/, ALLOW=/commit[^|;&]*--amend[^|;&]*(--no-edit|-C\s+HEAD)/;

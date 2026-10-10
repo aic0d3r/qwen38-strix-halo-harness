@@ -31,7 +31,7 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 
 - **`start.sh <dir>`** - the daily command: heals any dead server, then drops you into the pi TUI.
 - **`extensions/`** - ten extensions, each earning its place by measurement:
   - `progress-tracker` - crash recovery checkpointing
-  - `npu-retrieval` - `codebase_search` + `/rag-index` (semantic search, ~0.2-1.3s on 0.17.1; first call after a reboot loads the NPU models)
+  - `npu-retrieval` - NPU utility tools: `triage` (0.8B constrained decisions ~120ms) and `dedup_scan` (embedding near-dup finder). Semantic search moved to the semble MCP server - see `mcp.json` below
   - `ling-tiny-compaction` / `ling-tiny-commit` / `ling-tiny-branch-summary` / `ling-tiny-repomap` - the sidecar suite (compaction is non-blocking with thinking off and 10/10 rule retention; the repomap is freshness-cached)
   - `auto-guard` - injection screening, fail-open tripwire (42% recall / 0% false positives on our 30-prompt canary)
   - `harness-tune` (`/tune`), `turn-timer`, `subagent/` (worker/scout/reviewer/planner, session-model inheritance)
@@ -39,7 +39,7 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 
 - **voice (opt-in)**: `./setup.sh --voice` wires the [privateer-speak](https://npm.im/privateer-speak) pi package to a local Lemonade server - whisper STT into the composer (`/talk`, alt+t) and kokoro TTS answers (`/speak`), all on the CPU while the NPU handles the agent's small jobs. STT measured 0.43s, TTS 0.3s.
 
   - measured no-ops live in `extensions/optional/` with their receipts; details in `extensions/README.md`.
-- **`rag-index.py` / `rag-query.py`** - NPU retrieval toolkit: chunk + embed a repo with qwen3-embedding-0.6b on the NPU (~5-6k tok/s), cosine top-k + NPU rerank. Incremental (mtime-based). Runs standalone or through the extension.
+- **Codebase search = semble (MCP)** - `setup.sh` wires the pinned semble server into `mcp.json` (`search` + `find_related`, direct exposure). A/B on 18 ground-truth queries vs the old NPU rag pipeline: 17/18 vs 13/18 top-3 hit-rate, 2-3x faster queries, ~40x faster indexing. Indexes any local path or remote git URL; no NPU required, so search works on `--no-halogen` and llama.cpp-path installs too. Needs `uvx` on PATH (checked at setup).
 - **`server/`** - llama.cpp-path launch scripts: `start-flashnext.sh` (MTP sidecar, the reasoning flags that stop it burning its whole output on thinking), `start-qwen38.sh` (27B, DFlash2, 256k ctx), `start-ling-tiny.sh` (aux). Ubatch ceiling documented in headers.
 - **`config/`** - `models.json.example` (llama.cpp path, both models pre-wired) and the compaction snippet (`reserveTokens` is per-model, don't copy it blindly; on **halogen** `maxTokens` must be ≤8192 or the server 400s past ~32.7k ctx - the 32768 in the llama.cpp-path entries applies to that engine only).
 - **`bench/`** - `harness-ab.sh` (baseline vs kill+resume A/B, one command), `report-accuracy.py` (grade every file:line claim in a report against the tree), `check-sidecar.sh`, `guard-canary.py` + `compaction-retention.py` (the measurement canaries).
@@ -58,8 +58,8 @@ Prerequisites: an **AMD Strix Halo box** (gfx1151), **docker**, the **[pi coding
 | `qwen38-flash-next-vision.hgn` | 0.9 GB | vision tower - image input is enabled by default |
 | `tokenizer/` | small | chat template the engine loads |
 | `NPU/decider-0.8b/` | 2.3 GB | NPU `decide` tool (constrained decisions) |
-| `NPU/qwen3-embedding-0.6b/` | 848 MB | `codebase_search` embeddings |
-| `NPU/qwen3-reranker-0.6b/` | 821 MB | search re-ranking |
+| `NPU/qwen3-embedding-0.6b/` | 848 MB | `dedup_scan` embeddings |
+| `NPU/qwen3-reranker-0.6b/` | 821 MB | (unused since search moved to semble; still shipped by the image) |
 | `NPU/qwen3guard-gen-0.6b/` | 787 MB | injection screening (`auto-guard`) |
 
 Don't have them? `./setup.sh --halogen auto` offers to fetch exactly this set
@@ -92,7 +92,7 @@ git clone https://github.com/aic0d3r/qwen38-strix-halo-harness && cd qwen38-stri
 ./setup.sh --doctor             # status check any time (ends with a live model ping)
 
 ./start.sh ~/my-project         # daily use: heals dead servers, opens the pi TUI
-./setup.sh --index ~/my-project # NPU codebase_search for a repo (once per repo, incremental after)
+                                # (codebase search needs no setup: semble indexes on first query)
 ```
 
 `--halogen auto` finds `*.hgn` in `.`, `/models`, `~/models`, `~/Downloads` (or pass the path explicitly). The launch is pinned to your local files: no `HALOGEN_DOWNLOAD`, NPU models load from `/models/NPU/`, the engine makes no outbound connections. Restart later with `./start-halogen.sh` (written on first launch).
@@ -106,8 +106,9 @@ Plain `pi` also works after setup - startup defaults point at halogen (existing 
 - `./setup.sh --no-halogen` - pi-only install: no halogen provider, no NPU
   extensions, no container management. For a laptop pi against your own or cloud providers.
 - Remote Strix Halo appliance: normal install on the laptop, then point `models.json`'s
-  halogen `baseUrl` at the appliance and export `PI_NPU_BASE` so `codebase_search` and
-  `auto-guard` reach its NPU endpoints over the network.
+  halogen `baseUrl` at the appliance and export `PI_NPU_BASE` so `auto-guard` and the
+  NPU tools reach its NPU endpoints over the network. Codebase search needs none of
+  this - semble indexes locally wherever pi runs.
 
 **Context size**: the default launch is halogen's native max, **262,144 ctx x 4 slots**. Memory isn't the constraint (~67 GB model + ~115 MiB/slot in-place cache) - allocator fragmentation is.
 
@@ -177,7 +178,7 @@ see the ledger):
 |---|---|
 | chat, tools, streaming, reasoning control, structured output | works |
 | `auto-guard` (injection screening) | dead - `/v1/moderations` doesn't exist |
-| `codebase_search`, `/rag-index` | dead - `/v1/embeddings` + `/v1/rerank` are 501s |
+| semantic search (semble MCP) | works - no NPU involved |
 | `decide` tool | dead - no NPU decider |
 | image input | dead as launched (no `--mmproj` wired) |
 | `/health` verification (cache, vision) | degrades to "unknown" |
@@ -231,7 +232,7 @@ your prefix warm (within its LRU) for when you switch back.
 | halogen won't launch, order-9 < 200 | reboot (memory fragmentation); the launcher's 65k/2-slot fallback works without one |
 | halogen tries to download something | your launch has `HALOGEN_DOWNLOAD` set - remove it; everything loads from local files |
 | sessions 2.5x slower | prompt cache is OFF - never set `HALOGEN_PROMPT_CACHE=0` |
-| `codebase_search` unavailable in a session | `./setup.sh --index <dir>`; the extension also self-indexes on first use |
+| semantic search unavailable | `uvx` missing (install uv) or mcp.json lacks the semble entry - rerun `./setup.sh` and check `pi mcp list` |
 | stale task on resume | checkpoint from a previous task - `rm PROGRESS.md`, restart |
 | want zero-touch sidecar after reboot | `systemctl --user enable ling-tiny` (off by default on purpose) |
 

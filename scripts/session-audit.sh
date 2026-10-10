@@ -95,17 +95,6 @@ if [ -n "$C" ]; then
 else bad "halogen container not running"; W=$((W+1)); fi
 hr
 
-# --- npu-retrieval: auto-index risk, scoped to session ---
-NEWT=$(grep '"ragDir":"NONE"' "$HOME/.pi/agent/npu-retrieval-usage.log" 2>/dev/null | while read -r l; do
-  t=$(echo "$l" | grep -oE '"t":"[^"]+"' | cut -d'"' -f4)
-  [ -n "$t" ] && [ "$(date -d "$t" +%s 2>/dev/null)" -ge "$(date -d "$START" +%s 2>/dev/null)" ] && echo "$l"
-done)
-OLDN=$(grep -c '"ragDir":"NONE"' "$HOME/.pi/agent/npu-retrieval-usage.log" 2>/dev/null || echo 0)
-if [ -n "$NEWT" ]; then
-  bad "codebase_search ran with NO index during this session (auto-index risk):"
-  echo "$NEWT" | tail -2 | sed 's/^/       /'; W=$((W+1))
-elif [ "${OLDN:-0}" -gt 0 ]; then info "$OLDN older ragDir-NONE entries (pre-session) — resolved or benign"
-else ok "no index-less searches"; fi
 hr
 
 if [ "$W" -eq 0 ]; then echo "${G}RESULT: clean — no anomalies in this session's window${N}"
