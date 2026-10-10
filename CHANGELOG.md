@@ -1,39 +1,11 @@
 # Changelog
 
-## Unreleased
-
-### Changed
-- semantic codebase search moved from the NPU rag pipeline to the semble MCP server
-  (`mcp.json`, `search` + `find_related` direct, pinned 0.6.2 via uvx). A/B on 18
-  ground-truth queries across this repo and an unfamiliar one: semble 17/18 (94%)
-  top-3 hit-rate vs NPU 13/18 (72%), 2-3x faster queries (0.55-0.61s vs 1.0-1.7s),
-  ~40x faster index builds (1.2s vs ~52s). `npu-retrieval.ts` keeps `triage` and
-  `dedup_scan` (-178 lines of index machinery); `codebase_search`, `/rag-index`,
-  auto-index, `rag-index.py`, `rag-query.py` and `setup.sh --index` are gone. Search
-  now works on --no-halogen and llama.cpp-path installs (no NPU involved); setup
-  warns if `uvx` is missing; scout/reviewer agents declare `mcp__semble__search`
-
-### Changed
-- subagents spawn with `--no-skills`: every scout/worker/reviewer was paying ~1.4s of
-  skill scanning + description prefill per dispatch for skills a subagent never routes
-  to (0 loads across all 225 recorded sessions). Skills stay a main-session feature;
-  `/skill:name` there forces a load when a task needs one
-- the four vendored design skills (frontend-design, token-optimizer, ui-ux-pro-max,
-  web-design-guidelines) are removed from the repo and from installs - zero loads
-  across every recorded session, 9.3 MB of repo and ~1.4s of every session startup
-  for nothing. Project-scoped skill directories remain the way to add skills where
-  they are actually used. `uninstall.sh` cleans them from pre-1.1 installs
-- measured on this box (50W profile): sustained single-stream decode is ~43 tok/s
-  (power pins at 52W, no thermal decay); 2 concurrent streams 71 tok/s aggregate,
-  4 streams 80; a 4-way subagent burst does NOT evict the resident main session's
-  prompt-cache entry (24-entry LRU, restore-on-hit), so `MAX_CONCURRENCY=4` is safe;
-  MTP draft acceptance 90-100% across counting/code/reasoning workloads
-
 ## 1.1 - 2026-10-10
 
-Post-release audit round: two full review passes plus self-review of the fixes. All
-changes are in `bench/check-fixes.sh`-covered territory - install/uninstall correctness,
-silent sidecar fallbacks, crash-safe index writes, /tune consistency.
+Post-release audit round: two full review passes plus self-review of the fixes, plus a
+measured slimming pass (search moved to the semble MCP server, dead weight dropped).
+The audit fixes are in `bench/check-fixes.sh`-covered territory - install/uninstall
+correctness, silent sidecar fallbacks, crash-safe index writes, /tune consistency.
 
 ### Added
 - `./setup.sh --no-halogen`: pi-only install - skips the halogen provider, the NPU
@@ -50,6 +22,31 @@ silent sidecar fallbacks, crash-safe index writes, /tune consistency.
   a local Lemonade server - whisper STT into the composer (`/talk`, alt+t) and kokoro
   TTS answers (`/speak`). Measured STT 0.43s / TTS 0.3s, both on CPU; the FLM NPU STT
   path benched slower (1.91s) and stays documented in the receipts. Nothing starts at boot.
+
+### Changed
+- semantic codebase search moved from the NPU rag pipeline to the semble MCP server
+  (`mcp.json`, `search` + `find_related` direct, pinned 0.6.2 via uvx). A/B on 18
+  ground-truth queries across this repo and an unfamiliar one: semble 17/18 (94%)
+  top-3 hit-rate vs NPU 13/18 (72%), 2-3x faster queries (0.55-0.61s vs 1.0-1.7s),
+  ~40x faster index builds (1.2s vs ~52s). `npu-retrieval.ts` keeps `triage` and
+  `dedup_scan` (-178 lines of index machinery); `codebase_search`, `/rag-index`,
+  auto-index, `rag-index.py`, `rag-query.py` and `setup.sh --index` are gone. Search
+  now works on --no-halogen and llama.cpp-path installs (no NPU involved); setup
+  warns if `uvx` is missing; scout/reviewer agents declare `mcp__semble__search`
+- subagents spawn with `--no-skills`: every scout/worker/reviewer was paying ~1.4s of
+  skill scanning + description prefill per dispatch for skills a subagent never routes
+  to (0 loads across all 225 recorded sessions). Skills stay a main-session feature;
+  `/skill:name` there forces a load when a task needs one
+- the four vendored design skills (frontend-design, token-optimizer, ui-ux-pro-max,
+  web-design-guidelines) are removed from the repo and from installs - zero loads
+  across every recorded session, 9.3 MB of repo and ~1.4s of every session startup
+  for nothing. Project-scoped skill directories remain the way to add skills where
+  they are actually used. `uninstall.sh` cleans them from pre-1.1 installs
+- measured on this box (50W profile): sustained single-stream decode is ~43 tok/s
+  (power pins at 52W, no thermal decay); 2 concurrent streams 71 tok/s aggregate,
+  4 streams 80; a 4-way subagent burst does NOT evict the resident main session's
+  prompt-cache entry (24-entry LRU, restore-on-hit), so `MAX_CONCURRENCY=4` is safe;
+  MTP draft acceptance 90-100% across counting/code/reasoning workloads
 
 ### Fixed
 - `setup.sh --uninstall` / `--halogen-upgrade` ran the full installer instead (handlers
