@@ -19,45 +19,60 @@
   path benched slower (1.91s) and stays documented in the receipts. Nothing starts at boot.
 
 ### Fixed
-- re-audit round: branch-summary got the same sidecar payload cap as compaction (long
-  abandoned branches silently fell back to slow main-model summarization); the systemd
-  unit and first-boot sidecar spawn now carry `-b/-ub` from /tune (default 4096, was
-  llama.cpp's 512 - 8x below the measured setting); /tune maxTokens bound raised cap
-  to the documented 8192; start-halogen no longer reverts a /tune'd reserveTokens on
-  every launch (only overwrites its own defaults) and harness-tune computes compactAt
-  from the actual contextWindow (65k-fallback days included); repomap: 90s timeout on
-  the tiny call (wedged sidecar can no longer hang turn 1) and its cache moved to
-  ~/.pi/repomaps/<cwd> instead of dirtying every repo; harness-ab baseline now also
-  parks subagent/; check-sidecar health-probes :8090 instead of trusting systemctl
-  is-active; hw-telemetry creates its log dir
+- `setup.sh --uninstall` / `--halogen-upgrade` ran the full installer instead (handlers
+  were gated behind `--doctor`); they now work standalone as documented
+- `uninstall.sh` backup: a second `tar czf` truncated the first archive - one tar call
+  with re-anchored `-C` switches now backs up extensions, settings, providers AND the
+  systemd units together; `rag-index.py` is backed up and removed like the rest
+- progress-tracker: checkpoints recorded `(no changes)` for sessions that only create
+  new files (`git diff` misses untracked) - `git status --short` is now included;
+  removed v5.1 debug logging to /tmp; history filenames carry the pid
+- compaction: a session past the sidecar's window silently fell back to slow main-model
+  summarization; the conversation is now capped head+tail (420k chars) so big sessions
+  keep the fast path
+- branch-summary: same oversized-payload fallback as compaction - same head+tail cap
+- auto-guard: duplicate `signal` object key let a stale 5s timeout silently override
+  the documented 15s ceiling - single timeout now
 - commits always go through tiny: a `tool_call` guard in ling-tiny-commit blocks direct
-  `git commit` from tool calls (`--amend --no-edit`/`-C HEAD` allowed - no new message);
+  `git commit` from tool calls (`--amend --no-edit` / `-C HEAD` allowed - no new message);
   the commit tool's own git call uses pi.exec and is unaffected
-- `bench/check-fixes.sh`: offline regression checks for every fix below (tar-member list,
-  uninstall routing, guard timeout, compaction cap budget, staleness calc, bytes guard)
-- `setup.sh --uninstall` / `--halogen-upgrade` ran the full installer instead (handlers were
-  gated behind `--doctor`); they now work standalone as documented
-- `uninstall.sh` backup: the second `tar czf` truncated the first archive - one tar call
-  with multiple `-C` now backs up extensions AND the systemd unit together
-- progress-tracker: checkpoints recorded `(no changes)` for sessions that only create new
-  files (`git diff` misses untracked) - `git status --short` now included; removed v5.1
-  debug logging to /tmp; history filenames carry the pid (parallel-session collisions)
-- compaction: an oversized session could no longer use the sidecar (whole conversation
-  serialized against tiny's 131k window -> silent fallback to slow main-model compaction);
-  the conversation is now capped head+tail so big sessions keep the fast path
-- auto-guard: duplicate `signal` object key meant the documented 15s timeout was silently
-  overridden by 5s - single timeout now
-- rag: `--index` and auto-index now pass `--incremental` (README always promised it);
-  index writes are tmp+rename (no torn index on crash); `codebase_search` appends a
-  "N indexed files changed" staleness note; corrupt vectors.f32 now errors actionably;
-  `buildIndex` records the file-mtime map, keeping TS-built indexes consistent
+- rag: `--index` and auto-index now pass `--incremental` (the README always promised it);
+  index writes are tmp+rename with an exact byte count in the meta, so a crash mid-write
+  fails actionably instead of pairing meta against shifted vectors; `codebase_search`
+  appends an "N indexed files changed" staleness note; `buildIndex` records the file-mtime
+  map, keeping TS-built indexes consistent with the python tool
+- sidecar batch size: the systemd unit and first-boot spawn omitted `-b/-ub`, running
+  llama.cpp's 512 default - 8x below the measured 4096; both now read the `/tune`
+  value (default 4096) like `start-ling-tiny.sh` does
+- `/tune maxTokens` accepted values past the documented halogen hard reject (8192);
+  the bound now matches the documentation
+- `/tune compactAt` survived no server restart: the launcher rewrote `reserveTokens` on
+  every launch and computed from a hardcoded 262k window. The launcher now only replaces
+  its own default values, and `harness-tune` reads the live `contextWindow` (65k-fallback
+  days included), with bounds that keep the reserve smaller than the context
+- ling-tiny-repomap: 90s timeout on the sidecar call (a wedged server can no longer hang
+  turn 1 of every session in a directory); the map cache moved to
+  `~/.pi/repomaps/<cwd>` instead of writing `.pi/` into every mapped repo
 - setup: first-run halogen launch works from any cwd (image-pin grep was cwd-relative);
   `rag-index.py` installs to `~/.pi/agent/` and npu-retrieval finds it there - removed
-  machine-specific fallback paths; removed the duplicated fabric-clock block
-- upgrade battery: guard smoke added (benign prompt must not flag; attack verdict prints
-  but cannot gate the upgrade - 42% recall is too weak for that)
-- repo: dropped 7.4 MB demo binaries from the vendored token-optimizer skill; setup no
-  longer copies `extensions/optional/` (reference archive, never loaded by pi's loader)
+  machine-specific fallback paths; removed a duplicated fabric-clock check
+- `bench/check-sidecar.sh` health-probes `:8090/health` instead of trusting
+  `systemctl is-active` (which lies for a wedged-but-running process), restarts on
+  failure and exits non-zero if still unhealthy
+- `bench/harness-ab.sh`: the baseline arm now also parks `subagent/` (it only moved
+  `*.ts` files, so the "baseline" still ran the subagent extension)
+- upgrade battery: guard smoke added - a benign prompt must not flag; the attack verdict
+  prints but cannot gate the upgrade (42% recall is too weak for that)
+- `scripts/hw-telemetry.sh` creates its log directory before appending
+- `extensions/optional/` is no longer copied into the extensions directory (it is a
+  reference archive; pi's loader never reads it)
+- repo: dropped 7.4 MB of demo binaries from the vendored token-optimizer skill
+
+### Tests
+- `bench/check-fixes.sh`: nine offline regression checks covering every fix above
+  (tar member list, uninstall routing, guard timeout, both sidecar caps, staleness
+  calc, byte guard, commit guard, ubatch/reserve/maxTokens guards); run after any
+  change to the touched files
 
 ## 1.0.0 - 2026-10-07
 
