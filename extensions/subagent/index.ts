@@ -297,7 +297,11 @@ async function runSingleAgent(
 		};
 	}
 
-	const args: string[] = ["--mode", "json", "-p", "--no-session"];
+	// --no-skills: skills are main-session concerns; a subagent paying ~1.4s of
+	// skill scanning + description prefill per dispatch was measured pure loss
+	// (0 skill loads across 225 recorded sessions). Force-load with /skill: in
+	// the main session if a task ever needs one.
+	const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-skills"];
 	const inheritsDispatchConfig = !agent.model;
 	const model = agent.model ?? dispatchDefaults.model;
 	if (model) args.push("--model", model);

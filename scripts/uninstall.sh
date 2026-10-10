@@ -67,6 +67,11 @@ for f in gauntlet.md speedtest.md; do rm -f "$PI_HOME/templates/$f"; done
 for d in "$REPO"/skills/*/; do
   b=$(basename "$d"); [ -d "$AG/skills/$b" ] && rm -rf "$AG/skills/$b"
 done
+# design skills vendored before 1.0.1 no longer live in skills/ - clean them from
+# older installs explicitly (the repo loop above can't see them anymore)
+for b in frontend-design token-optimizer ui-ux-pro-max web-design-guidelines; do
+  [ -d "$AG/skills/$b" ] && rm -rf "$AG/skills/$b"
+done
 if [ -f "$AG/themes/opencode.json" ] && cmp -s "$AG/themes/opencode.json" "$REPO/config/themes/opencode.json" 2>/dev/null; then
   rm -f "$AG/themes/opencode.json"; echo "      theme removed (we installed it)"
 fi

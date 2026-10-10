@@ -2,7 +2,21 @@
 
 ## Unreleased
 
-_No unreleased changes._
+### Changed
+- subagents spawn with `--no-skills`: every scout/worker/reviewer was paying ~1.4s of
+  skill scanning + description prefill per dispatch for skills a subagent never routes
+  to (0 loads across all 225 recorded sessions). Skills stay a main-session feature;
+  `/skill:name` there forces a load when a task needs one
+- the four vendored design skills (frontend-design, token-optimizer, ui-ux-pro-max,
+  web-design-guidelines) are removed from the repo and from installs - zero loads
+  across every recorded session, 9.3 MB of repo and ~1.4s of every session startup
+  for nothing. Project-scoped skill directories remain the way to add skills where
+  they are actually used. `uninstall.sh` cleans them from pre-1.0.1 installs
+- measured on this box (50W profile): sustained single-stream decode is ~43 tok/s
+  (power pins at 52W, no thermal decay); 2 concurrent streams 71 tok/s aggregate,
+  4 streams 80; a 4-way subagent burst does NOT evict the resident main session's
+  prompt-cache entry (24-entry LRU, restore-on-hit), so `MAX_CONCURRENCY=4` is safe;
+  MTP draft acceptance 90-100% across counting/code/reasoning workloads
 
 ## 1.0.1 - 2026-10-10
 
