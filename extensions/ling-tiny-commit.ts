@@ -120,6 +120,18 @@ ${fullDiff}
 		handler: async (args: any, ctx: any) => runCommit((args ?? "").trim(), ctx),
 	});
 
+	// enforce "tiny always writes the message": block direct git commits from tool
+	// calls so the message can only come from runCommit. runCommit's own git call
+	// goes through pi.exec, which tool_call hooks never see. --amend --no-edit /
+	// -C HEAD are allowed: they reuse an existing message, so there is none to write.
+	pi.on("tool_call", async (event: any) => {
+		if (event?.toolName !== "bash") return;
+		const cmd: string = String(event?.input?.command ?? "");
+		if (!/\bgit\b[^|;&]*\bcommit\b/.test(cmd)) return;
+		if (/commit[^|;&]*--amend[^|;&]*(--no-edit|-C\s+HEAD)/.test(cmd)) return;
+		return { block: true, reason: "Commits go through the commit tool (ling-tiny writes the message). Call the commit tool (or /commit) instead of git commit." };
+	});
+
 	// agent-invocable tool: agents reach for tools, not slash commands (3 /commit misses measured)
 	pi.registerTool({
 		name: "commit",

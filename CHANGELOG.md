@@ -19,6 +19,9 @@
   path benched slower (1.91s) and stays documented in the receipts. Nothing starts at boot.
 
 ### Fixed
+- commits always go through tiny: a `tool_call` guard in ling-tiny-commit blocks direct
+  `git commit` from tool calls (`--amend --no-edit`/`-C HEAD` allowed - no new message);
+  the commit tool's own git call uses pi.exec and is unaffected
 - `bench/check-fixes.sh`: offline regression checks for every fix below (tar-member list,
   uninstall routing, guard timeout, compaction cap budget, staleness calc, bytes guard)
 - `setup.sh --uninstall` / `--halogen-upgrade` ran the full installer instead (handlers were

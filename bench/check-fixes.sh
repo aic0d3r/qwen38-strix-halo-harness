@@ -52,4 +52,13 @@ grep -q '"bytes": len(flat)' rag-index.py && grep -q "bytes: flat.byteLength" ex
   && grep -q "meta.bytes" extensions/npu-retrieval.ts \
   && ok "index writers record exact bytes; guard checks it" || bad "bytes guard was removed from a writer or the reader"
 
+# [7] git-commit guard blocks direct commits, allows message-free amends (mirrors ling-tiny-commit.ts)
+$JS -e 'const BLOCK=/\bgit\b[^|;&]*\bcommit\b/, ALLOW=/commit[^|;&]*--amend[^|;&]*(--no-edit|-C\s+HEAD)/;
+const t=(c)=>BLOCK.test(c)&&!ALLOW.test(c);
+for(const c of ["git commit -m x","git add -A && git commit -m x","git commit --amend -m y","cd r; git commit"])
+  if(!t(c)) throw new Error("should block: "+c);
+for(const c of ["git commit --amend --no-edit","git commit --amend -C HEAD","echo committing history","git log --oneline"])
+  if(t(c)) throw new Error("should allow: "+c);
+console.log("  ok: git-commit guard blocks direct commits, allows --amend --no-edit")' || FAIL=1
+
 [ "$FAIL" = 0 ] && echo "check-fixes: all checks pass" || { echo "check-fixes: FAILURES above"; exit 1; }
