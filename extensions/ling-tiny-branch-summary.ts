@@ -54,10 +54,17 @@ export default function (pi: ExtensionAPI) {
 			visit(e?.message ?? e);
 			return out.join("\n");
 		};
-		const conversationText = entriesToSummarize
+		const conversationTextRaw = entriesToSummarize
 			.map(serializeEntry)
 			.filter((s: string) => s.trim().length > 0)
 			.join("\n\n");
+		// same cap as ling-tiny-compaction: the sidecar window is 131k tokens and an
+		// oversized prompt 400s llama.cpp, silently falling back to slow main-model
+		// summarization - which is exactly the long branches this runs on
+		const CAP = 420_000;
+		const conversationText = conversationTextRaw.length > CAP
+			? conversationTextRaw.slice(0, 40_000) + "\n[...middle truncated to fit the sidecar window...]\n" + conversationTextRaw.slice(-(CAP - 40_000))
+			: conversationTextRaw;
 		const summaryMessages = [
 			{
 				role: "user" as const,

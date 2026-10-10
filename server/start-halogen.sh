@@ -86,7 +86,10 @@ try:
             print(f"models.json: halogen contextWindow -> {ctx}")
     sp = os.path.join(os.path.dirname(mp), "settings.json")
     s = json.load(open(sp))
-    s.setdefault("compaction", {})["reserveTokens"] = 60000 if ctx > 65536 else 10240
+    comp = s.setdefault("compaction", {})
+    # only overwrite launcher-owned values; a /tune compactAt survives a restart
+    if comp.get("reserveTokens") in (None, 60000, 10240):
+        comp["reserveTokens"] = 60000 if ctx > 65536 else 10240
     json.dump(s, open(sp, "w"), indent=2)
 except Exception: pass
 PY

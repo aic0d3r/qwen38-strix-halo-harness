@@ -3,6 +3,7 @@
 # Answers (after a week+): does vm-compact.timer actually stretch the
 # time between reboots? Trend of order-9 high-order pages + DirectMap2M.
 LOG="${HW_TELEMETRY_LOG:-$HOME/LLMBench/results/qwen38-27b/telemetry-order9.log}"
+mkdir -p "$(dirname "$LOG")" 2>/dev/null || true
 o9=$(awk '$4=="Normal"{u=0; for(i=14;i<=NF;i++) u+=$(i)*2**(i-14); print u}' /proc/buddyinfo 2>/dev/null | head -1)
 d2m=$(grep DirectMap2M /proc/meminfo 2>/dev/null | awk '{print $2}')
 d1g=$(grep DirectMap1G /proc/meminfo 2>/dev/null | awk '{print $2}')

@@ -23,10 +23,13 @@ json.dump(s, open('$HOME/.pi/agent/settings.json', 'w'), indent=2)"; }
 baseline(){
   set_repo
   mkdir -p ~/.pi/agent/extensions.bak && mv ~/.pi/agent/extensions/*.ts ~/.pi/agent/extensions.bak/ 2>/dev/null
+  # dirs are not *.ts: subagent/ must go too or the "baseline" arm still runs it
+  mv ~/.pi/agent/extensions/subagent ~/.pi/agent/extensions.bak/ 2>/dev/null
   local t0=$(date +%s); timeout 2400 pi -p --no-skills --no-context-files \
     --provider halogen --model halogen-qwen3.8-flash-next --thinking medium \
     "$(cat $TASK_FILE)" > $OUT/baseline.txt 2>&1; local rc=$?; local t1=$(date +%s)
   mv ~/.pi/agent/extensions.bak/*.ts ~/.pi/agent/extensions/ 2>/dev/null
+  mv ~/.pi/agent/extensions.bak/subagent ~/.pi/agent/extensions/ 2>/dev/null
   echo "baseline: $((t1-t0))s rc=$rc report=$(wc -c < "$REPO"/BIG_TEST_REPORT.md 2>/dev/null || echo 0)B"
 }
 resume(){

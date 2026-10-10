@@ -19,6 +19,17 @@
   path benched slower (1.91s) and stays documented in the receipts. Nothing starts at boot.
 
 ### Fixed
+- re-audit round: branch-summary got the same sidecar payload cap as compaction (long
+  abandoned branches silently fell back to slow main-model summarization); the systemd
+  unit and first-boot sidecar spawn now carry `-b/-ub` from /tune (default 4096, was
+  llama.cpp's 512 - 8x below the measured setting); /tune maxTokens bound raised cap
+  to the documented 8192; start-halogen no longer reverts a /tune'd reserveTokens on
+  every launch (only overwrites its own defaults) and harness-tune computes compactAt
+  from the actual contextWindow (65k-fallback days included); repomap: 90s timeout on
+  the tiny call (wedged sidecar can no longer hang turn 1) and its cache moved to
+  ~/.pi/repomaps/<cwd> instead of dirtying every repo; harness-ab baseline now also
+  parks subagent/; check-sidecar health-probes :8090 instead of trusting systemctl
+  is-active; hw-telemetry creates its log dir
 - commits always go through tiny: a `tool_call` guard in ling-tiny-commit blocks direct
   `git commit` from tool calls (`--amend --no-edit`/`-C HEAD` allowed - no new message);
   the commit tool's own git call uses pi.exec and is unaffected

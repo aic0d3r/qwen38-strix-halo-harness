@@ -6,6 +6,8 @@
  * spending its first turns on exploratory reads.
  */
 
+import * as os from "node:os";
+import * as nodePath from "node:path";
 import { uuidv7 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -13,6 +15,9 @@ const TINY_PROVIDER = "llamacpp-tiny";
 const TINY_MODEL = "ling3.0-tiny";
 const MAX_FILES = 400;
 const HEAD_CHARS = 1500;
+// cache lives in ~/.pi/repomaps/<cwd-key>, not in the repo: writing .pi/ into
+// every mapped project showed up as untracked noise in git status and checkpoints
+const mapDir = () => nodePath.join(os.homedir(), ".pi", "repomaps", process.cwd().replace(/[^A-Za-z0-9]+/g, "-").slice(0, 64));
 
 // shared map builder: git inventory -> tiny summary
 async function buildRepoMap(pi: ExtensionAPI, ctx: any): Promise<string | null> {
@@ -53,15 +58,18 @@ ${inventory}
 		},
 	];
 
-	const response = await ctx.modelRegistry.complete(
-		model,
-		{ messages: summaryMessages },
-		{
-			maxTokens: 2048,
-			cacheRetention: "none",
-			sessionId: uuidv7(),
-		},
-	);
+				const response = await ctx.modelRegistry.complete(
+				model,
+				{ messages: summaryMessages },
+				{
+					maxTokens: 2048,
+					// a wedged sidecar must not hang turn 1 of every session in this
+					// directory; same ceiling lesson as auto-guard's 10-07 queue wedge
+					signal: AbortSignal.timeout(90_000),
+					cacheRetention: "none",
+					sessionId: uuidv7(),
+				},
+			);
 	const map = response.content
 		.filter((c): c is { type: "text"; text: string } => c.type === "text")
 		.map((c) => c.text)
@@ -86,7 +94,7 @@ export default function (pi: ExtensionAPI) {
 			let map: string | null = null;
 			let cached = false;
 			try {
-				const [sum, prev] = await Promise.all([fs.readFile(".pi/repomap.sum", "utf-8"), fs.readFile(".pi/repomap.md", "utf-8")]);
+				const [sum, prev] = await Promise.all([fs.readFile(nodePath.join(mapDir(), "repomap.sum"), "utf-8"), fs.readFile(nodePath.join(mapDir(), "repomap.md"), "utf-8")]);
 				if (sum.trim() === hash.trim() && prev.trim()) {
 					map = prev.trim();
 					cached = true;
@@ -97,9 +105,9 @@ export default function (pi: ExtensionAPI) {
 				map = await buildRepoMap(pi, ctx);
 			}
 			if (!map) return;
-			await fs.mkdir(".pi", { recursive: true });
-			await fs.writeFile(".pi/repomap.md", map, "utf-8");
-			await fs.writeFile(".pi/repomap.sum", hash.trim() + "\n", "utf-8");
+			await fs.mkdir(mapDir(), { recursive: true });
+			await fs.writeFile(nodePath.join(mapDir(), "repomap.md"), map, "utf-8");
+			await fs.writeFile(nodePath.join(mapDir(), "repomap.sum"), hash.trim() + "\n", "utf-8");
 			ctx.ui.notify(cached ? `[${TINY_MODEL}] repo map reused (tracked files unchanged)` : `[${TINY_MODEL}] repo map injected (${map.length} chars)`, "info");
 			// structured section: reaches the model's system prompt WITHOUT rendering in chat
 			// (a returned custom_message used to print the whole map into the TUI)
@@ -135,9 +143,10 @@ export default function (pi: ExtensionAPI) {
 					return;
 				}
 				const fs = await import("node:fs/promises");
-				await fs.mkdir(".pi", { recursive: true });
-				await fs.writeFile(".pi/repomap.md", map, "utf-8");
-				ctx.ui.notify(`Repo map written to .pi/repomap.md (${map.length} chars). Next message: "Read .pi/repomap.md first, then <task>"`, "info");
+				await fs.mkdir(mapDir(), { recursive: true });
+				const mapPath = nodePath.join(mapDir(), "repomap.md");
+				await fs.writeFile(mapPath, map, "utf-8");
+				ctx.ui.notify(`Repo map written to ${mapPath} (${map.length} chars). Next message: "Read ${mapPath} first, then <task>"`, "info");
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				ctx.ui.notify(`/repomap failed: ${message}`, "error");

@@ -29,6 +29,9 @@ PI_HOME="${PI_HOME:-$HOME/.pi}"
 EXT_DIR="$PI_HOME/agent/extensions"
 MODELS_JSON="$PI_HOME/agent/models.json"
 TINY_PORT=8090; HAL_PORT=8731
+# sidecar batch size shared with /tune and start-ling-tiny.sh; without this the
+# unit and first-boot spawn ran llama.cpp's 512 default, 8x below the measured 4096
+UB_TINY=$(tr -dc '0-9' < "$HOME/.pi/agent/harness-ubatch" 2>/dev/null); UB_TINY=${UB_TINY:-4096}
 ok(){ printf '  \033[32m✓\033[0m %s\n' "$1"; }
 warn(){ printf '  \033[33m!\033[0m %s\n' "$1"; }
 fail(){ printf '  \033[31m✗\033[0m %s\n' "$1"; }
@@ -309,7 +312,7 @@ else
     fi
   fi
   if [ -n "${LLS:-}" ] && [ -n "${GGUF:-}" ]; then
-    setsid nohup "$LLS" -a ling3.0-tiny -m "$GGUF" -ngl 99 -c 131072 --jinja \
+    setsid nohup "$LLS" -a ling3.0-tiny -m "$GGUF" -ngl 99 -c 131072 -b $UB_TINY -ub $UB_TINY --jinja \
       --host 127.0.0.1 --port $TINY_PORT > "$REPO/ling-tiny.log" 2>&1 < /dev/null &
     for i in $(seq 1 12); do sleep 5; tiny_up && break; done
     tiny_up && ok "sidecar started (log: $REPO/ling-tiny.log)" || fail "started but not healthy yet — check $REPO/ling-tiny.log"
@@ -332,7 +335,7 @@ Description=Ling-3.0-tiny sidecar (llama.cpp)
 After=network.target
 
 [Service]
-ExecStart=$LLS -a ling3.0-tiny -m $UNIT_GGUF -ngl 99 -c 131072 --jinja --host 127.0.0.1 --port $TINY_PORT --metrics
+ExecStart=$LLS -a ling3.0-tiny -m $UNIT_GGUF -ngl 99 -c 131072 -b $UB_TINY -ub $UB_TINY --jinja --host 127.0.0.1 --port $TINY_PORT --metrics
 Restart=always
 RestartSec=5
 

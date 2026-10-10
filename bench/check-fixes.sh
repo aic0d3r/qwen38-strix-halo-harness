@@ -28,15 +28,18 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 [ "$(grep -c 'AbortSignal' extensions/auto-guard.ts)" = 1 ] \
   && ok "auto-guard: single signal/timeout" || bad "auto-guard: duplicate signal key is back"
 
-# [4] sidecar compaction cap keeps head+tail and fits the window (mirrors ling-tiny-compaction.ts)
-$JS -e 'const fs=require("fs");const src=fs.readFileSync("extensions/ling-tiny-compaction.ts","utf8");
+# [4] sidecar payload caps keep head+tail and fit the window in BOTH summarizers
+# (mirrors ling-tiny-compaction.ts and ling-tiny-branch-summary.ts)
+for TSRC in extensions/ling-tiny-compaction.ts extensions/ling-tiny-branch-summary.ts; do
+TSRC="$TSRC" $JS -e 'const fs=require("fs");const f=process.env.TSRC;const src=fs.readFileSync(f,"utf8");
 const m=src.match(/const CAP = ([\d_]+);[\s\S]*?slice\(0, ([\d_]+)\)[\s\S]*?slice\(-\(CAP - ([\d_]+)\)/);
-if(!m) throw new Error("cap pattern changed shape in source - update this check");
+if(!m) throw new Error("cap pattern changed shape in "+f+" - update this check");
 const N=s=>+s.replace(/_/g,""); const CAP=N(m[1]), HEAD=N(m[2]); const ct="x".repeat(CAP*2);
 const out=ct.slice(0,HEAD)+"\n[...middle truncated to fit the sidecar window...]\n"+ct.slice(-(CAP-HEAD));
 if(out.length>=CAP+60||!out.startsWith("xxxx")||!out.endsWith("xxxx")) throw new Error("cap math wrong");
 if(CAP/3.9>131072-4096-2048) throw new Error("cap exceeds sidecar window budget");
-console.log("  ok: compaction cap (CAP="+CAP+" fits 131k window, head+tail kept)")' || FAIL=1
+console.log("  ok: cap in "+f+" (CAP="+CAP+" fits 131k window)")' || FAIL=1
+done
 
 # [5] rag staleness expr counts changed AND deleted files (mirrors npu-retrieval.ts)
 $JS -e 'const fs=require("fs"),os=require("os"),p=fs.mkdtempSync(os.tmpdir()+"/stale");
@@ -60,5 +63,14 @@ for(const c of ["git commit -m x","git add -A && git commit -m x","git commit --
 for(const c of ["git commit --amend --no-edit","git commit --amend -C HEAD","echo committing history","git log --oneline"])
   if(t(c)) throw new Error("should allow: "+c);
 console.log("  ok: git-commit guard blocks direct commits, allows --amend --no-edit")' || FAIL=1
+
+# [8] sidecar launchers all carry the tuned batch size; launcher respects /tune reserveTokens
+grep -q -- '-b $UB_TINY -ub $UB_TINY --jinja' setup.sh \
+  && [ "$(grep -c -- '-b $UB_TINY -ub $UB_TINY' setup.sh)" -ge 2 ] \
+  && grep -q -- '-b $UBBATCH -ub $UBBATCH' server/start-ling-tiny.sh \
+  && grep -q 'launcher-owned values' server/start-halogen.sh \
+  && grep -q 'maxTokens: \[1024, 8192\]' extensions/harness-tune.ts \
+  && ok "ubatch baked into unit+spawn; reserveTokens guard; maxTokens bound = documented cap" \
+  || bad "ubatch/reserve/maxTokens guards were removed"
 
 [ "$FAIL" = 0 ] && echo "check-fixes: all checks pass" || { echo "check-fixes: FAILURES above"; exit 1; }

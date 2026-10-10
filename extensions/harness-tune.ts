@@ -22,7 +22,6 @@ const SETTINGS = path.join(HOME, ".pi/agent/settings.json");
 const MODELS = path.join(HOME, ".pi/agent/models.json");
 const MAIN_PROVIDER = "halogen";
 const MAIN_MODEL = "halogen-qwen3.8-flash-next";
-const CONTEXT_WINDOW = 262144;
 
 // canonical post-setup values = what setup.sh provisions (keep in sync):
 // maxTokens 8192 because halogen hard-rejects bigger requests past ~32.7k ctx;
@@ -31,6 +30,11 @@ const DEFAULTS: Record<string, number> = { compactAt: 202, maxTokens: 8192, temp
 
 const readJson = (p: string): any => (fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : {});
 const writeJson = (p: string, v: any) => fs.writeFileSync(p, JSON.stringify(v, null, 2) + "\n");
+// the launcher syncs contextWindow on every start (262k normally, 65k on the
+// allocator fallback); computing compactAt from the hardcoded 262k on a 65k
+// day produced a reserve larger than the context - compaction never fired
+const ctxWindow = (): number =>
+	readJson(MODELS)?.providers?.[MAIN_PROVIDER]?.models?.find((x: any) => x?.id === MAIN_MODEL)?.contextWindow || 262144;
 
 function current(): Record<string, number> {
 	const s = readJson(SETTINGS);
@@ -43,7 +47,7 @@ function current(): Record<string, number> {
 		if (Number.isFinite(v)) ubatch = v;
 	}
 	return {
-		compactAt: Math.round((CONTEXT_WINDOW - (s?.compaction?.reserveTokens ?? 16384)) / 1000),
+		compactAt: Math.round((ctxWindow() - (s?.compaction?.reserveTokens ?? 16384)) / 1000),
 		maxTokens: entry?.maxTokens ?? DEFAULTS.maxTokens,
 		temperature: entry?.samplingParams?.temperature ?? DEFAULTS.temperature,
 		ubatch,
@@ -83,7 +87,7 @@ export default function (pi: ExtensionAPI) {
 				ctx.ui.notify(`value must be a non-negative number, got '${val}'`, "error");
 				return;
 			}
-			const bounds: Record<string, [number, number]> = { compactAt: [10, 245], maxTokens: [1024, 65536], temperature: [0, 2], ubatch: [128, 8192] };
+			const bounds: Record<string, [number, number]> = { compactAt: [10, Math.round((ctxWindow() - 10240) / 1000)], maxTokens: [1024, 8192], temperature: [0, 2], ubatch: [128, 8192] };
 			const [lo, hi] = bounds[key];
 			if (num < lo || num > hi) {
 				ctx.ui.notify(`${key} must be between ${lo} and ${hi}`, "error");
@@ -97,7 +101,7 @@ export default function (pi: ExtensionAPI) {
 	async function apply(key: string, num: number) {
 		if (key === "compactAt") {
 			const s = readJson(SETTINGS);
-			s.compaction = Object.assign({}, s.compaction, { enabled: true, reserveTokens: CONTEXT_WINDOW - Math.round(num * 1000) });
+			s.compaction = Object.assign({}, s.compaction, { enabled: true, reserveTokens: ctxWindow() - Math.round(num * 1000) });
 			writeJson(SETTINGS, s);
 		} else if (key === "maxTokens" || key === "temperature") {
 			const m = readJson(MODELS);
