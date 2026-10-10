@@ -91,18 +91,27 @@ async function buildIndex(dir: string, all: boolean) {
 	vecs.forEach((v, i) => flat.set(v, i * dims));
 	const ragDir = path.join(dir, ".rag");
 	fs.mkdirSync(ragDir, { recursive: true });
-	fs.writeFileSync(path.join(ragDir, "vectors.f32"), Buffer.from(flat.buffer));
-	fs.writeFileSync(path.join(ragDir, "index.json"), JSON.stringify({
-		dims, count: chunks.length, secs: (Date.now() - t0) / 1000,
+	// mtime map keeps TS-built indexes consistent with rag-index.py (stale hint)
+	const filesMeta: Record<string, number> = {};
+	for (const rel of new Set(srcs)) { try { filesMeta[rel] = Math.floor(fs.statSync(path.join(dir, rel)).mtimeMs / 1000); } catch { /* deleted mid-index */ } }
+	// meta renamed FIRST + exact byte count: a crash between the two renames then
+	// always trips loadIndex's guard instead of pairing meta against shifted vectors
+	fs.writeFileSync(path.join(ragDir, "vectors.f32.tmp"), Buffer.from(flat.buffer));
+	fs.writeFileSync(path.join(ragDir, "index.json.tmp"), JSON.stringify({
+		dims, count: chunks.length, bytes: flat.byteLength, secs: (Date.now() - t0) / 1000,
 		tokens: Math.round(chunks.reduce((a, c) => a + c.length, 0) / 3.9),
-		chunks, srcs,
+		files: filesMeta, chunks, srcs,
 	}));
+	fs.renameSync(path.join(ragDir, "index.json.tmp"), path.join(ragDir, "index.json"));
+	fs.renameSync(path.join(ragDir, "vectors.f32.tmp"), path.join(ragDir, "vectors.f32"));
 	return { count: chunks.length, dims, ragDir };
 }
 
 function loadIndex(ragDir: string) {
 	const meta = JSON.parse(fs.readFileSync(path.join(ragDir, "index.json"), "utf8"));
 	const buf = fs.readFileSync(path.join(ragDir, "vectors.f32"));
+	if (meta.bytes ? buf.byteLength !== meta.bytes : buf.byteLength < meta.count * meta.dims * 4)
+		throw new Error("index corrupt (vectors.f32 does not match index.json) - rerun /rag-index");
 	const f32 = new Float32Array(buf.buffer, buf.byteOffset, meta.count * meta.dims);
 	const vectors: Float32Array[] = [];
 	for (let i = 0; i < meta.count; i++) vectors.push(f32.slice(i * meta.dims, (i + 1) * meta.dims));
@@ -154,7 +163,7 @@ export default function (pi: ExtensionAPI) {
 				if (cwd === HOME) {
 					return text("codebase_search: refusing to auto-index the home directory. cd into a project repo (or run /rag-index <project-dir>) and search again.");
 				}
-				const script = [process.env.PI_RAG_SCRIPT || "", path.join(cwd, "rag-index.py"), path.join(HOME, "coding/qwen38-strix-halo-harness", "rag-index.py"), path.join(HOME, "neon-ladder", "rag-index.py")].find((c) => c && fs.existsSync(c));
+				const script = [process.env.PI_RAG_SCRIPT || "", path.join(cwd, "rag-index.py"), path.join(HOME, ".pi", "agent", "rag-index.py")].find((c) => c && fs.existsSync(c));
 				let tooBig = false;
 				if (script) {
 					try {
@@ -168,7 +177,7 @@ export default function (pi: ExtensionAPI) {
 				if (script && !autoIndexed.has(cwd)) {
 					autoIndexed.add(cwd);
 					try {
-						const out = execSync('python3 "' + script + '" --dir "' + cwd + '" --ext .cpp,.h,.c,.hpp,.cu,.go,.py,.ts,.js,.sh,.html,.css --exclude "(\\.git|build|vendor|node_modules|__pycache__)"', { cwd, timeout: 600_000, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+						const out = execSync('python3 "' + script + '" --dir "' + cwd + '" --incremental --ext .cpp,.h,.c,.hpp,.cu,.go,.py,.ts,.js,.sh,.html,.css --exclude "(\\.git|build|vendor|node_modules|__pycache__)"', { cwd, timeout: 600_000, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 						const last = String(out).trim().split("\n").pop() || "indexed";
 						log(JSON.stringify({ t: new Date().toISOString(), cwd, autoIndex: last }));
 						return text("No index existed; one was built just now (auto-index). Call codebase_search again with the same query - it will hit the fresh index.");
@@ -179,7 +188,16 @@ export default function (pi: ExtensionAPI) {
 				return text("No NPU index found for this directory. Build one with /rag-index <directory> (needs the halogen NPU server on :8731).");
 			}
 			try {
-				const { vectors, chunks, srcs } = loadIndex(ragDir);
+				const { meta, vectors, chunks, srcs } = loadIndex(ragDir);
+				// freshness hint: index.json stores {relpath: mtime}; a stale index still
+				// answers, but the agent should know before trusting a "not found"
+				let stale = 0;
+				for (const rel of Object.keys(meta.files || {})) {
+					try {
+						if (Math.floor(fs.statSync(path.join(ragDir, "..", rel)).mtimeMs / 1000) !== meta.files[rel]) stale++;
+					} catch { stale++; }
+				}
+				const staleNote = stale > 0 ? `\n\n(note: ${stale} indexed file(s) changed since indexing - rerun /rag-index if results look outdated)` : "";
 				const qv = await embed([args.query]);
 				const scored = vectors.map((v, i) => ({ i, s: cosine(qv[0], v) }));
 				scored.sort((a, b) => b.s - a.s);
@@ -188,7 +206,7 @@ export default function (pi: ExtensionAPI) {
 				const r = await post("/v1/rerank", { model: "qwen3-reranker-0.6b", query: args.query, documents: cands, top_n: k });
 				const results = r.results.map((x: any) => ({ file: cands[x.index].file, score: +x.relevance_score.toFixed(3), chunk: cands[x.index].text }));
 				const lines = results.map((res: any, i: number) => `${i + 1}. ${res.file}  [${res.score}]\n${res.chunk.slice(0, 700)}`);
-				return text(`codebase_search: ${results.length} results for "${args.query}"\n\n` + lines.join("\n\n"));
+				return text(`codebase_search: ${results.length} results for "${args.query}"\n\n` + lines.join("\n\n") + staleNote);
 			} catch (e: any) {
 				log(JSON.stringify({ err: String(e?.message || e).slice(0, 300), stack: String(e?.stack || "").slice(0, 300) }));
 				return text(`codebase_search failed: ${String(e?.message || e).slice(0, 300)}`);

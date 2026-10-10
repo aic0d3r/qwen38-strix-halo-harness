@@ -87,7 +87,7 @@ for dp, _, fns in os.walk(a.dir):
 
 # ---- prior index (for --incremental) ----
 old_files, old_chunks, old_srcs = {}, [], []
-old_flat, old_dims = None, None
+old_flat, old_dims, old_bytes = None, None, None
 if a.incremental and os.path.exists(meta_path) and os.path.exists(vec_path):
     try:
         meta = json.load(open(meta_path))
@@ -95,6 +95,7 @@ if a.incremental and os.path.exists(meta_path) and os.path.exists(vec_path):
         old_chunks = meta.get("chunks", [])
         old_srcs = meta.get("srcs", [])
         old_dims = meta.get("dims")
+        old_bytes = meta.get("bytes")
         raw = array("f")
         raw.frombytes(open(vec_path, "rb").read())
         old_flat = raw
@@ -110,8 +111,9 @@ changed = [r for r, mt in sorted(cur.items()) if old_files.get(r) != mt]
 
 if a.incremental and not changed:
     print(f"incremental: nothing changed ({len(kept_chunks)} chunks kept)")
-    json.dump({"count": len(kept_chunks), "dims": old_dims, "files": cur,
-               "chunks": kept_chunks, "srcs": kept_srcs}, open(meta_path, "w"))
+    json.dump({"count": len(kept_chunks), "dims": old_dims, "bytes": old_bytes, "files": cur,
+               "chunks": kept_chunks, "srcs": kept_srcs}, open(meta_path + ".tmp", "w"))
+    os.replace(meta_path + ".tmp", meta_path)
     sys.exit(0)
 
 new_chunks, new_srcs = [], []
@@ -149,10 +151,15 @@ dt = time.time() - t0
 chunks = kept_chunks + new_chunks
 srcs = kept_srcs + new_srcs
 toks = sum(len(c) for c in chunks) / 3.9
-with open(vec_path, "wb") as f:
+# tmp+rename: a crash mid-write must never leave a torn index behind a good meta
+with open(vec_path + ".tmp", "wb") as f:
     f.write(flat.tobytes())
-json.dump({"count": len(chunks), "dims": dims, "files": cur,
-           "chunks": chunks, "srcs": srcs}, open(meta_path, "w"))
+json.dump({"count": len(chunks), "dims": dims, "bytes": len(flat) * 4, "files": cur,
+           "chunks": chunks, "srcs": srcs}, open(meta_path + ".tmp", "w"))
+# meta renamed FIRST + exact byte count: a crash between the two renames then
+# always trips the reader's byte guard instead of pairing meta with shifted vectors
+os.replace(meta_path + ".tmp", meta_path)
+os.replace(vec_path + ".tmp", vec_path)
 rate = int(toks / dt) if dt > 0 else 0
 print(f"indexed {len(chunks)} chunks ({int(toks):,} tok) from {len(set(srcs))} files "
       f"in {dt:.1f}s = {rate:,} tok/s -> {rag_dir}")

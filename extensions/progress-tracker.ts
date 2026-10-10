@@ -94,13 +94,10 @@ let responseCount = 0;
 	});
 
 	function lastAssistantText(): string {
-		const dbg = (s: string) => { try { fs.appendFileSync("/tmp/pt-v51-debug.log", s + "\n"); } catch {} };
 		try {
 			const slug = "--" + process.cwd().replace(/\//g, "-").replace(/^-+/, "") + "--";
 			const dir = path.join(os.homedir(), ".pi", "agent", "sessions", slug);
-			dbg(`lastAssistant: dir=${dir} exists=${fs.existsSync(dir)} cwd=${process.cwd()}`);
 			const files = fs.readdirSync(dir).filter((f) => f.endsWith(".jsonl"));
-			dbg(`lastAssistant: ${files.length} session files`);
 			if (!files.length) return "";
 			const newest = files.map((f) => ({ f, m: fs.statSync(path.join(dir, f)).mtimeMs }))
 				.sort((a, b) => b.m - a.m)[0].f;
@@ -114,16 +111,21 @@ let responseCount = 0;
 							if (b?.type === "text" && b.text?.trim()) return b.text.trim().slice(0, 1200);
 						}
 					}
-				} catch (e) { dbg(`line parse: ${e}`); }
+				} catch { /* unparsable transcript line */ }
 			}
-		} catch (e) { dbg(`lastAssistant ERROR: ${e}`); }
+		} catch { /* no session dir */ }
 		return "";
 	}
 
 	async function writeProgress() {
 		const cwd = process.cwd();
 		const { code, stdout } = await pi.exec("git", ["diff", "--stat"], { cwd });
-		const diffStat = code === 0 ? stdout.trim() : "(no changes)";
+		// diff --stat only shows tracked files: a session that only creates new
+		// files checkpointed as "(no changes)", which crash recovery must not miss
+		const { code: sc, stdout: ss } = await pi.exec("git", ["status", "--short"], { cwd });
+		const pb = path.basename(PROGRESS_FILE);
+		const statusLines = sc === 0 ? ss.split("\n").filter((l: string) => l.trim() && !l.includes(pb) && !l.includes(".progress-log")).join("\n") : "";
+		const diffStat = [code === 0 ? stdout.trim() : "", statusLines].filter(Boolean).join("\n") || "(no changes)";
 		const { code: lc, stdout: ls } = await pi.exec("git", ["log", "--oneline", "-3"], { cwd });
 		const recentCommits = lc === 0 ? ls.trim() : "";
 		const taskLine = (taskDescription || "(unspecified)").replace(/\n+/g, " ").slice(0, 2000);
@@ -134,7 +136,9 @@ let responseCount = 0;
 			// session history: append-only copy so past sessions stay queryable
 			try {
 				fs.mkdirSync(HISTORY_DIR, { recursive: true });
-				const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+				const stamp = new Date().toISOString().replace(/[:.]/g, "-") + `-p${process.pid}`;
+				// shortcut: pid suffix keeps parallel sessions' history distinct; PROGRESS.md
+				// itself stays last-writer-wins (single active session per dir assumed)
 				fs.writeFileSync(path.join(HISTORY_DIR, `${stamp}.md`), entry);
 			} catch {}
 			// HUD: machine-readable per-checkpoint stats (tail -f it)

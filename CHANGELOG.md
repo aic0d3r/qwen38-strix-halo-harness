@@ -18,6 +18,33 @@
   TTS answers (`/speak`). Measured STT 0.43s / TTS 0.3s, both on CPU; the FLM NPU STT
   path benched slower (1.91s) and stays documented in the receipts. Nothing starts at boot.
 
+### Fixed
+- `bench/check-fixes.sh`: offline regression checks for every fix below (tar-member list,
+  uninstall routing, guard timeout, compaction cap budget, staleness calc, bytes guard)
+- `setup.sh --uninstall` / `--halogen-upgrade` ran the full installer instead (handlers were
+  gated behind `--doctor`); they now work standalone as documented
+- `uninstall.sh` backup: the second `tar czf` truncated the first archive - one tar call
+  with multiple `-C` now backs up extensions AND the systemd unit together
+- progress-tracker: checkpoints recorded `(no changes)` for sessions that only create new
+  files (`git diff` misses untracked) - `git status --short` now included; removed v5.1
+  debug logging to /tmp; history filenames carry the pid (parallel-session collisions)
+- compaction: an oversized session could no longer use the sidecar (whole conversation
+  serialized against tiny's 131k window -> silent fallback to slow main-model compaction);
+  the conversation is now capped head+tail so big sessions keep the fast path
+- auto-guard: duplicate `signal` object key meant the documented 15s timeout was silently
+  overridden by 5s - single timeout now
+- rag: `--index` and auto-index now pass `--incremental` (README always promised it);
+  index writes are tmp+rename (no torn index on crash); `codebase_search` appends a
+  "N indexed files changed" staleness note; corrupt vectors.f32 now errors actionably;
+  `buildIndex` records the file-mtime map, keeping TS-built indexes consistent
+- setup: first-run halogen launch works from any cwd (image-pin grep was cwd-relative);
+  `rag-index.py` installs to `~/.pi/agent/` and npu-retrieval finds it there - removed
+  machine-specific fallback paths; removed the duplicated fabric-clock block
+- upgrade battery: guard smoke added (benign prompt must not flag; attack verdict prints
+  but cannot gate the upgrade - 42% recall is too weak for that)
+- repo: dropped 7.4 MB demo binaries from the vendored token-optimizer skill; setup no
+  longer copies `extensions/optional/` (reference archive, never loaded by pi's loader)
+
 ## 1.0.0 - 2026-10-07
 
 Initial public release. A coding-agent harness for Qwen3.8-Flash-Next on AMD Strix Halo

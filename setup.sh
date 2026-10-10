@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# neon-ladder pi harness — automated setup.
+# pi harness for Strix Halo — automated setup.
 # Idempotent: safe to re-run. Applies what it safely can (extensions, pi
 # providers, sidecar), checks servers, prints exact next steps for what it can't fix.
 #
@@ -60,14 +60,15 @@ find_ckpt(){ ls "$PWD"/*.hgn /models/*.hgn "$HOME"/models/*.hgn "$HOME"/Download
     "${LLMBENCH:-$HOME/LLMBench}"/models/*/*.hgn 2>/dev/null \
     | grep -v 'ngram\|vision\|mtp\|w4b' | grep 'v2\.hgn' | head -1; }
 
-if [ "$DOCTOR" = 1 ]; then
-  if [ -n "${HALOGEN_UPGRADE:-}" ]; then
-  exec bash "$REPO/scripts/upgrade-halogen.sh" "$HALOGEN_UPGRADE"
-fi
+# README-documented standalone commands: must run WITHOUT --doctor
 if [ -n "${UNINSTALL:-}" ]; then
   exec bash "$REPO/scripts/uninstall.sh" ${UNINSTALL_YES:+--yes}
 fi
-echo "== harness doctor =="
+if [ -n "${HALOGEN_UPGRADE:-}" ]; then
+  exec bash "$REPO/scripts/upgrade-halogen.sh" "$HALOGEN_UPGRADE"
+fi
+if [ "$DOCTOR" = 1 ]; then
+  echo "== harness doctor =="
   command -v pi >/dev/null          && ok "pi installed"           || fail "pi not found - install the pi coding agent first"
   [ -d "$EXT_DIR" ] && [ "$(ls "$EXT_DIR"/progress-tracker.ts "$EXT_DIR"/npu-retrieval.ts 2>/dev/null | wc -l)" = 2 ] \
                                     && ok "core extensions in place" || fail "extensions missing - run ./setup.sh"
@@ -125,6 +126,7 @@ done
 for d in "$REPO"/extensions/*/; do
   [ -d "$d" ] || continue
   b=$(basename "$d")
+  [ "$b" = "optional" ] && continue # reference archive of measured no-ops; pi's loader never reads it
   if ! diff -rq "$d" "$EXT_DIR/$b" >/dev/null 2>&1; then rm -rf "$EXT_DIR/$b"; cp -r "$d" "$EXT_DIR/$b"; echo "  installed $b/"; N=$((N+1)); fi
 done
 [ "$N" = 0 ] && ok "all extensions already current ($(ls "$EXT_DIR"/*.ts 2>/dev/null | wc -l) files + $(find "$EXT_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l) dirs)"
@@ -217,6 +219,8 @@ for f in "$REPO"/templates/*.md; do
   if ! diff -q "$f" "$PI_HOME/templates/$b" >/dev/null 2>&1; then cp "$f" "$PI_HOME/templates/$b"; T=$((T+1)); fi
 done
 ok "prompt templates current ($T updated, $(ls "$PI_HOME/templates" 2>/dev/null | wc -l) total)"
+# generic home for rag-index.py so npu-retrieval's auto-index finds it without machine-specific paths
+cmp -s "$REPO/rag-index.py" "$PI_HOME/agent/rag-index.py" || cp "$REPO/rag-index.py" "$PI_HOME/agent/rag-index.py"
 
 echo "== 2a. skills + ponytail =="
 SKILL_DIR="$PI_HOME/agent/skills"; mkdir -p "$SKILL_DIR"
@@ -456,7 +460,7 @@ elif [ -n "$HALOGEN_CKPT" ]; then
     if [ -z "$HALOGEN_CKPT" ] || [ ! -f "$HALOGEN_CKPT" ]; then
       fail "no .hgn checkpoint found (looked in ., /models, ~/models, ~/Downloads, LLMBench/models) - pass it: ./setup.sh --halogen /path/to/checkpoint.hgn"
     else
-      PIN=$(grep -oE 'HALOGEN_IMAGE_TAG:-[0-9.a-z]+' server/start-halogen.sh | head -1 | cut -d- -f2)
+      PIN=$(grep -oE 'HALOGEN_IMAGE_TAG:-[0-9.a-z]+' "$REPO/server/start-halogen.sh" | head -1 | cut -d- -f2)
       docker image inspect "ghcr.io/peonist-ai/halogen-flash-server:$PIN" >/dev/null 2>&1 \
         || { echo "  pulling halogen image (first run, ~GB) ..."; docker pull "ghcr.io/peonist-ai/halogen-flash-server:$PIN"; }
       W=$(dirname "$HALOGEN_CKPT")
@@ -480,7 +484,7 @@ fi
 echo "== 5. NPU index (optional) =="
 if [ -n "$INDEX_DIR" ]; then
   [ -d "$INDEX_DIR" ] || fail "not a directory: $INDEX_DIR"
-  [ -d "$INDEX_DIR" ] && { [ -f "$REPO/rag-index.py" ] && python3 "$REPO/rag-index.py" --dir "$INDEX_DIR" --ext '.cpp,.h,.c,.hpp,.go,.py,.ts,.js,.html,.css,.sh' --exclude '(\.git|build|vendor|node_modules)' || fail "rag-index.py not found"; }
+  [ -d "$INDEX_DIR" ] && { [ -f "$REPO/rag-index.py" ] && python3 "$REPO/rag-index.py" --dir "$INDEX_DIR" --incremental --ext '.cpp,.h,.c,.hpp,.go,.py,.ts,.js,.html,.css,.sh' --exclude '(\.git|build|vendor|node_modules)' || fail "rag-index.py not found"; }
 else
   warn "run when needed:  ./setup.sh --index <repo-dir>"
 fi
@@ -490,22 +494,8 @@ if [ -n "$O9" ] && [ "$O9" -lt 200 ]; then
   warn "order-9 contiguous pages = $O9 (<200): full-ctx halogen (262k) will wedge. 65k/2-slot is fine. reboot before full-ctx."
 else ok "order-9 pages: ${O9:-n/a}"; fi
 fclk_held && ok "gpu fabric clock held (GPU+NPU concurrency safe)" || { warn "gpu fabric clock NOT held - NPU beside GPU can hang or corrupt (halogen NPU docs). one-time install (sudo):"; warn "  sudo install -m 755 $REPO/config/systemd/halogen-fabric-clock /usr/local/sbin/ && sudo install -m 644 $REPO/config/systemd/halogen-fabric-clock.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now halogen-fabric-clock.service"; }
-# fabric clock: GPU+NPU together on Strix Halo are only safe with it held
-# (halogen NPU docs). The container holds it while it runs via /sys, but any
-# NPU program outside the container (voice STT, fine-tune jobs) needs the
-# boot/resume-proof host unit.
-FCLK_HELD=0
-for d in /sys/class/drm/card*/device; do
-  [ -e "$d/pp_dpm_fclk" ] || continue
-  perf=$(cat "$d/power_dpm_force_performance_level" 2>/dev/null)
-  if [ "$perf" = high ] || { [ "$perf" = manual ] && grep -q '\*' "$d/pp_dpm_fclk"; }; then FCLK_HELD=1; fi
-done
-if [ "$FCLK_HELD" = 1 ]; then
-  ok "gpu fabric clock held (GPU+NPU concurrency safe)"
-else
-  warn "gpu fabric clock NOT held - NPU work beside the GPU can hang or corrupt (halogen NPU docs). one-time install (sudo):"
-  warn "  sudo install -m 755 $REPO/config/systemd/halogen-fabric-clock /usr/local/sbin/ && sudo install -m 644 $REPO/config/systemd/halogen-fabric-clock.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now halogen-fabric-clock.service"
-fi
+# fabric clock: GPU+NPU together are only safe with it held (halogen NPU docs);
+# fclk_held() above checks it, container holds it while it runs via /sys.
 if systemctl list-timers vm-compact.timer >/dev/null 2>&1; then
   ok "vm-compact.timer active (15-min allocator hygiene)"
 else

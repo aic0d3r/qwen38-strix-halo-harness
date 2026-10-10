@@ -41,7 +41,7 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 
   - measured no-ops live in `extensions/optional/` with their receipts; details in `extensions/README.md`.
 - **`rag-index.py` / `rag-query.py`** - NPU retrieval toolkit: chunk + embed a repo with qwen3-embedding-0.6b on the NPU (~5-6k tok/s), cosine top-k + NPU rerank. Incremental (mtime-based). Runs standalone or through the extension.
 - **`server/`** - llama.cpp-path launch scripts: `start-flashnext.sh` (MTP sidecar, the reasoning flags that stop it burning its whole output on thinking), `start-qwen38.sh` (27B, DFlash2, 256k ctx), `start-ling-tiny.sh` (aux). Ubatch ceiling documented in headers.
-- **`config/`** - `models.json.example` (llama.cpp path, both models pre-wired) and the compaction snippet (`reserveTokens` is per-model, don't copy it blindly; `maxTokens` must be ≤8192 or the server 400s past ~32.7k ctx).
+- **`config/`** - `models.json.example` (llama.cpp path, both models pre-wired) and the compaction snippet (`reserveTokens` is per-model, don't copy it blindly; on **halogen** `maxTokens` must be ≤8192 or the server 400s past ~32.7k ctx - the 32768 in the llama.cpp-path entries applies to that engine only).
 - **`bench/`** - `harness-ab.sh` (baseline vs kill+resume A/B, one command), `report-accuracy.py` (grade every file:line claim in a report against the tree), `check-sidecar.sh`, `guard-canary.py` + `compaction-retention.py` (the measurement canaries).
 - **`templates/`** - pi prompt templates: `/gauntlet` (multi-phase stress session that crosses the compaction trigger) and `/speedtest` (9-probe engine benchmark with pass/fail bands).
 

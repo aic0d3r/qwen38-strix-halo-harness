@@ -25,7 +25,6 @@ async function moderate(text: string): Promise<{ flagged: boolean; label?: strin
 			// delay every user message with no ceiling. 15s then screen nothing.
 			signal: AbortSignal.timeout(15_000),
 			body: JSON.stringify({ model: "qwen3guard-gen-0.6b", input: text.slice(0, 12000) }),
-			signal: AbortSignal.timeout(5000),
 		});
 		if (!res.ok) return { flagged: false };
 		const r = await res.json();

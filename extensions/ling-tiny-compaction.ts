@@ -35,7 +35,16 @@ export default function (pi: ExtensionAPI) {
 			"info",
 		);
 
-		const conversationText = serializeConversation(convertToLlm(allMessages));
+		// the sidecar window is 131k tokens (~3.9 chars/tok); an oversized prompt
+		// 400s llama.cpp and silently falls back to slow main-model compaction,
+		// which is exactly what big sessions must not pay - cap head+tail instead
+		const CAP = 420_000;
+		let conversationText = serializeConversation(convertToLlm(allMessages));
+		if (conversationText.length > CAP) {
+			conversationText = conversationText.slice(0, 40_000)
+				+ "\n[...middle truncated to fit the sidecar window...]\n"
+				+ conversationText.slice(-(CAP - 40_000));
+		}
 		const previousContext = previousSummary ? `\n\nPrevious session summary for context:\n${previousSummary}` : "";
 
 		const summaryMessages = [

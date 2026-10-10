@@ -25,8 +25,11 @@ if [ "$ASSUME_YES" -ne 1 ]; then
 fi
 
 echo "[1/8] backup -> $BACKUP"
-tar czf "$BACKUP" -C "$PI_HOME" agent/extensions agent/templates agent/skills agent/themes agent/settings.json agent/models.json agent/mcp.json 2>/dev/null
-[ -f "$HOME/.config/systemd/user/ling-tiny.service" ] && tar czf "$BACKUP" -C "$HOME/.config/systemd/user" ling-tiny.service 2>/dev/null
+# one tar call: a second `czf` would truncate the first archive (backup lost)
+TAR_ARGS=(-C "$PI_HOME" agent/extensions agent/templates agent/skills agent/themes agent/settings.json agent/models.json agent/mcp.json)
+[ -f "$HOME/.config/systemd/user/ling-tiny.service" ] && TAR_ARGS+=(-C "$HOME/.config/systemd/user" ling-tiny.service)
+[ -f "$AG/rag-index.py" ] && TAR_ARGS+=(-C "$PI_HOME" agent/rag-index.py) # own -C: tar applies earlier -C to later members
+tar czf "$BACKUP" "${TAR_ARGS[@]}" 2>/dev/null
 echo "      $(du -h "$BACKUP" | cut -f1)"
 
 echo "[2/8] systemd units"
@@ -56,6 +59,7 @@ for f in progress-tracker.ts npu-retrieval.ts ling-tiny-compaction.ts ling-tiny-
 done
 [ -d "$AG/extensions/subagent" ] && rm -rf "$AG/extensions/subagent"
 [ -d "$AG/extensions/optional" ] && rm -rf "$AG/extensions/optional"
+[ -f "$AG/rag-index.py" ] && rm -f "$AG/rag-index.py" && echo "      rag-index.py removed (installed by setup)"
 echo "      done (extensions you added yourself are left in place)"
 
 echo "[4/8] templates + skills + theme"
