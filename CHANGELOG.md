@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+_No unreleased changes._
+
+## 1.0.1 - 2026-10-10
+
+Post-release audit round: two full review passes plus self-review of the fixes. All
+changes are in `bench/check-fixes.sh`-covered territory - install/uninstall correctness,
+silent sidecar fallbacks, crash-safe index writes, /tune consistency.
+
 ### Added
 - `./setup.sh --no-halogen`: pi-only install - skips the halogen provider, the NPU
   extensions and all container management (pi on a laptop against your own providers,
