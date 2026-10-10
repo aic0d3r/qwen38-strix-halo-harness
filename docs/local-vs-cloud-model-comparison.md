@@ -1,12 +1,12 @@
 # Local vs cloud model comparison: Qwen3.8 Flash-Next vs GLM 5.3 (flash / flashx) on a real debugging task
 
-Seven runs, one real prompt, ground truth verified on the box. Same task given to the local
+Eight runs, one real prompt, ground truth verified on the box. Same task given to the local
 125B MoE (Qwen3.8 Flash-Next, served by halogen on a Strix Halo Flow Z13 at 70W) and to
 z.ai's GLM 5.3 tiers through two different coding clients. Every answer below was checked
 against a root-cause forensics pass done on the machine before any rating.
 
 This is the detailed companion to the Reddit post. All numbers here are from logged runs on
-2026-10-07 and 2026-10-08.
+2026-10-07, 2026-10-08 and 2026-10-10.
 
 ![Flash-Next vs GLM 5.3 tiers: time to first token and decode rate](charts/local-vs-cloud.png)
 
@@ -59,16 +59,18 @@ directory` line, does it need fixing?
 | 5 | opencode | glm-5.3-flashx | 1m30s | correct | correct | corroborated via web search; PR missed (suggested reporting upstream) |
 | 6 | opencode | GLM 5.3, the full 753B (max) | 6m15s | correct | correct (called the regression in the internal script runner) | pacman.log check; missed the existing upstream PR |
 | 7 | pi harness (cloud) | GLM 5.3, the full 753B (max) | 8m30s | correct | correct + deepest forensics of all runs (function names init_tmp/exit_app/dir_delete, exact 1s race window from journal timestamps, confirmed against source, upstream master status) | journal timestamps verified; duplicate pacman-hook finding verified on box; $0.425; missed the existing PR |
+| 8 | pi harness (local) | Flash-Next 125B (max effort) | 8m31s | correct | correct, same redirect race, source-level | upstream 26.09.0 tarball downloaded and grepped (Main.vala:1459, TeeJee.Process.vala:243), local cwd-deletion repro, upstream PR #496 found; 12,433 reasoning tokens, 723,487 cache reads (97.9% hit) |
 
-Only run 1 found the already-open upstream PR (linuxmint/timeshift#496). The other six
+Runs 1 and 8 - the same local model at medium and at max - are the only ones that found
+the already-open upstream PR (linuxmint/timeshift#496). The other six
 missed it or suggested reporting upstream - noted per run below. The user also had GLM 5.3
 flashx rate both pi-harness answers; it picked qwen's.
 
-## What the seven runs show
+## What the eight runs show
 
-1. **Verdicts were cheap; proof was rare.** All seven runs said "harmless, nothing broken."
-   Six of seven got the mechanism right, three backed it with on-box evidence, one found the
-   upstream PR.
+1. **Verdicts were cheap; proof was rare.** All eight runs said "harmless, nothing broken."
+   Seven of eight got the mechanism right, four backed it with on-box evidence, two found
+   the upstream PR (the same local model, at both efforts).
 2. **The harness changed the answer more than the model did.** The same glm-5.3-flash took
    1m8s in opencode (wrong mechanism) and 9m09s in the pi harness (correct mechanism,
    live reproduction, 93% cache hit, $0.022). Depth came from the tool loop, not the weights.
@@ -83,18 +85,25 @@ flashx rate both pi-harness answers; it picked qwen's.
 5. **Decode rate predicted almost nothing.** flashx decodes at ~151 tok/s and flash at ~45;
    the 151 tok/s run was 1m30s shallow, the 45 tok/s run (in pi) was 9m09s deep. Thinking
    budget and tool loop dominated wall time.
+6. **Effort buys depth, not correctness.** Run 8 reran the local model at max: same
+   verdict, same PR, 8m31s instead of 2m55s. The extra effort bought source-level receipts
+   (tarball, exact lines, local repro), not a better answer. The chat template's default
+   effort is the maximum, so bare-API users get run-8 depth on every question.
 
 ## Caveats
 
-- One task, seven runs. This is a depth comparison, not a capability benchmark.
-- Effort levels: halogen Flash-Next ran at pi's medium thinking; the GLM tiers ran at max.
+- One task, eight runs. This is a depth comparison, not a capability benchmark.
+- Effort levels: runs 1 and 8 are the local model at pi's medium and max thinking (the
+  template's xhigh); the GLM tiers ran at max. The flashx comparison is medium-vs-max, the
+  753B comparison max-vs-max.
 - Sizes: Flash-Next is 180B total footprint per unsloth's model card - "125B with 6B
   activated, plus 51B n-gram embedding and 4B MTP". glm-5.3-flash and flashx are
   320B-total / 18B-active MoEs (z.ai); full glm-5.3 is 753B. The local model is the
   smaller one. Discount accordingly, both directions.
-- Runs 4-6 ran in opencode, runs 1-3 and 7 in the pi harness; client system prompts and
+- Runs 4-6 ran in opencode, runs 1-3, 7 and 8 in the pi harness; client system prompts and
   tool loops differ. The three controlled pairs (same model, two clients) are run 3 vs
-  run 4 (flash), run 2 vs run 5 (flashx), and run 6 vs run 7 (the 753B).
+  run 4 (flash), run 2 vs run 5 (flashx), and run 6 vs run 7 (the 753B). Run 8 is the
+  effort pair for run 1.
 - Two early raw-API probes of the GLM tiers returned empty content (reasoning stream
   exhausting a fixed max_tokens). Those are harness artifacts of bare-endpoint testing and
   are excluded from the table; they are why the client runs above were done in real coding
@@ -130,6 +139,12 @@ Related: [halogen-flash-server](https://github.com/peonist-ai/halogen-flash-serv
   linuxmint/timeshift) and searched the issue tracker, coming up empty - likely because #496
   is a PR, not an issue. "PR missed" for flashx confirmed.
 
-- Session audit 3: all four pi sessions now searched. flash-pi (01a11923): zero PR
+- Session audit 3: all pi sessions now searched. flash-pi (01a11923): zero PR
   references, single "496" digit match inside a token count. Full audit table:
   halogen found and cited #496 in its answer; flash, flashx and glm-5.3 all missed it.
+
+- Session audit 4 (run 8, 01a126bc): the max-effort rerun cited linuxmint/timeshift#496
+  with title, state and date. All three verified against the GitHub API after the run:
+  open, opened 2026-01-11, unmerged, and its diff touches the exact culprit file the
+  answer named (src/Utility/TeeJee.Process.vala). The cited pacman.log range 3205-3216
+  lands on the error line. PR found confirmed.
