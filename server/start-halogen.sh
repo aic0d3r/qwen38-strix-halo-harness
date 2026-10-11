@@ -11,7 +11,7 @@ SLOTS="${HALOGEN_KV_SLOTS:-4}"
 # PINNED image tag: upgrades are deliberate - change the pin, restart, run the
 # post-upgrade checks (see README "Upgrading halogen"). Floating :latest runs
 # untested behavior against a harness validated on specific versions.
-IMAGE_TAG="${HALOGEN_IMAGE_TAG:-0.17.1}"
+IMAGE_TAG="${HALOGEN_IMAGE_TAG:-0.18.0}"
 
 # locate the main checkpoint at runtime (exclude ngram/vision/mtp/w4b sidecars)
 CKPT="${HALOGEN_CHECKPOINT:-}"
