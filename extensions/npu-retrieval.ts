@@ -126,9 +126,9 @@ export default function (pi: ExtensionAPI) {
 				}
 			}
 			log(JSON.stringify({ t: new Date().toISOString(), tool: "dedup_scan", files: files.length, pairs: pairs.length }));
-			return pairs.length
+			return text(pairs.length
 				? `dedup_scan: ${pairs.length} near-duplicate pairs (>${threshold}) across ${files.length} files:\n\n` + pairs.join("\n")
-				: `dedup_scan: no near-duplicates found across ${files.length} files.`;
+				: `dedup_scan: no near-duplicates found across ${files.length} files.`);
 		},
 	});
 }

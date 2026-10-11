@@ -38,12 +38,12 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 
 
 - **voice (opt-in)**: `./setup.sh --voice` wires the [privateer-speak](https://npm.im/privateer-speak) pi package to a local Lemonade server - whisper STT into the composer (`/talk`, alt+t) and kokoro TTS answers (`/speak`), all on the CPU while the NPU handles the agent's small jobs. STT measured 0.43s, TTS 0.3s.
 
-  - measured no-ops live in `extensions/optional/` with their receipts; details in `extensions/README.md`.
+  - measured no-ops were deleted (last in commit `5bc375f`, `extensions/optional/`); receipts in `extensions/README.md`.
 - **Codebase search = semble (MCP)** - `setup.sh` wires the pinned semble server into `mcp.json` (`search` + `find_related`, direct exposure). A/B on 18 ground-truth queries vs the old NPU rag pipeline: 17/18 vs 13/18 top-3 hit-rate, 2-3x faster queries, ~40x faster indexing. Indexes any local path or remote git URL; no NPU required, so search works on `--no-halogen` and llama.cpp-path installs too. Needs `uvx` on PATH (checked at setup).
 - **`server/`** - llama.cpp-path launch scripts: `start-flashnext.sh` (MTP sidecar, the reasoning flags that stop it burning its whole output on thinking), `start-qwen38.sh` (27B, DFlash2, 256k ctx), `start-ling-tiny.sh` (aux). Ubatch ceiling documented in headers.
 - **`config/`** - `models.json.example` (llama.cpp path, both models pre-wired) and the compaction snippet (`reserveTokens` is per-model, don't copy it blindly; on **halogen** `maxTokens` must be ≤8192 or the server 400s past ~32.7k ctx - the 32768 in the llama.cpp-path entries applies to that engine only).
 - **`bench/`** - `harness-ab.sh` (baseline vs kill+resume A/B, one command), `report-accuracy.py` (grade every file:line claim in a report against the tree), `check-sidecar.sh`, `guard-canary.py` + `compaction-retention.py` (the measurement canaries).
-- **`templates/`** - pi prompt templates: `/gauntlet` (multi-phase stress session that crosses the compaction trigger) and `/speedtest` (9-probe engine benchmark with pass/fail bands).
+- **`templates/`** - pi prompt templates (installed to `~/.pi/agent/prompts/`): `/gauntlet` (multi-phase stress session that crosses the compaction trigger) and `/speedtest` (9-probe engine benchmark with pass/fail bands).
 
 ## Quickstart: halogen
 

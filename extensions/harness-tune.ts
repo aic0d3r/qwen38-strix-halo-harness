@@ -54,6 +54,8 @@ function current(): Record<string, number> {
 	};
 }
 
+const bounds = (): Record<string, [number, number]> => ({ compactAt: [10, Math.round((ctxWindow() - 10240) / 1000)], maxTokens: [1024, 8192], temperature: [0, 2], ubatch: [128, 8192] });
+
 export default function (pi: ExtensionAPI) {
 	pi.registerCommand("tune", {
 		description: "Show or set harness tuning knobs (compactAt, maxTokens, temperature, ubatch)",
@@ -72,7 +74,8 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			if (argv[0] === "reset") {
-				for (const [k, v] of Object.entries(DEFAULTS)) await apply(k, v);
+				// clamp compactAt like the set path: 202k on a 65k window gave a negative reserve
+				for (const [k, v] of Object.entries(DEFAULTS)) await apply(k, k === "compactAt" ? Math.min(v, bounds().compactAt[1]) : v);
 				ctx.ui.notify(`reset to defaults: ${JSON.stringify(DEFAULTS)}`, "info");
 				return;
 			}
@@ -87,8 +90,7 @@ export default function (pi: ExtensionAPI) {
 				ctx.ui.notify(`value must be a non-negative number, got '${val}'`, "error");
 				return;
 			}
-			const bounds: Record<string, [number, number]> = { compactAt: [10, Math.round((ctxWindow() - 10240) / 1000)], maxTokens: [1024, 8192], temperature: [0, 2], ubatch: [128, 8192] };
-			const [lo, hi] = bounds[key];
+			const [lo, hi] = bounds()[key];
 			if (num < lo || num > hi) {
 				ctx.ui.notify(`${key} must be between ${lo} and ${hi}`, "error");
 				return;

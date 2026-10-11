@@ -20,6 +20,8 @@ if [ -z "$CKPT" ]; then
     "${LLMBENCH:-$HOME/LLMBench}"/models/*/*.hgn 2>/dev/null \
     | grep -v 'ngram\|vision\|mtp\|w4b' | grep 'v2\.hgn' | head -1)
 fi
+# the one checkpoint search: setup.sh and upgrade-halogen.sh ask here instead of copying it
+[ "${1:-}" = --print-ckpt ] && { echo "$CKPT"; exit 0; }
 if [ -z "$CKPT" ] || [ ! -f "$CKPT" ]; then
   echo "no main checkpoint found (looked in ., /models, ~/models, ~/Downloads, LLMBench/models)" >&2
   echo "pass one: HALOGEN_CHECKPOINT=/path/qwen38-flash-next-v2.hgn $0" >&2

@@ -5,6 +5,8 @@
 # (prints the rm command instead).
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+# decide BEFORE defaulting PI_HOME: an explicit PI_HOME means a sandbox install
+SANDBOX=${PI_HOME:+1}
 PI_HOME="${PI_HOME:-$HOME/.pi}"
 AG="$PI_HOME/agent"
 TS=$(date +%Y%m%d-%H%M%S)
@@ -16,7 +18,7 @@ echo "this removes everything the harness installer provisioned:"
 echo "  - extensions, templates, skills, theme under $AG"
 echo "  - halogen + llamacpp-tiny providers in models.json"
 echo "  - pi defaults (halogen) if they still match what setup set"
-echo "  - ling-tiny + hw-telemetry systemd units"
+echo "  - ling-tiny systemd unit"
 echo "  - NOT touched: mcp.json, the sidecar GGUF, the halogen container,"
 echo "    your checkpoint files, the vm-compact.timer (sudo; command printed)"
 if [ "$ASSUME_YES" -ne 1 ]; then
@@ -26,14 +28,14 @@ fi
 
 echo "[1/8] backup -> $BACKUP"
 # one tar call: a second `czf` would truncate the first archive (backup lost)
-TAR_ARGS=(-C "$PI_HOME" agent/extensions agent/templates agent/skills agent/themes agent/settings.json agent/models.json agent/mcp.json)
+TAR_ARGS=(-C "$PI_HOME" agent/extensions agent/prompts agent/skills agent/themes agent/settings.json agent/models.json agent/mcp.json)
 [ -f "$HOME/.config/systemd/user/ling-tiny.service" ] && TAR_ARGS+=(-C "$HOME/.config/systemd/user" ling-tiny.service)
 [ -f "$AG/rag-index.py" ] && TAR_ARGS+=(-C "$PI_HOME" agent/rag-index.py) # own -C: tar applies earlier -C to later members
 tar czf "$BACKUP" "${TAR_ARGS[@]}" 2>/dev/null
 echo "      $(du -h "$BACKUP" | cut -f1)"
 
 echo "[2/8] systemd units"
-if [ -n "${PI_HOME:-}" ]; then
+if [ -n "$SANDBOX" ]; then
   echo "      skipped (PI_HOME sandbox - real systemd units untouched)"
 else
   systemctl --user disable --now ling-tiny.service >/dev/null 2>&1 && echo "      ling-tiny stopped/disabled"
@@ -47,8 +49,6 @@ else
     rm -f "$AG/../speak.json" && echo "      speak.json removed (voice config)"
     echo "      privateer-speak package left installed (remove: pi remove npm:privateer-speak)"
   fi
-  systemctl --user disable --now hw-telemetry.timer >/dev/null 2>&1 && echo "      hw-telemetry timer stopped/disabled"
-  rm -f "$HOME/.config/systemd/user/hw-telemetry.service" "$HOME/.config/systemd/user/hw-telemetry.timer"
   systemctl --user daemon-reload 2>/dev/null
 fi
 
@@ -63,7 +63,7 @@ done
 echo "      done (extensions you added yourself are left in place)"
 
 echo "[4/8] templates + skills + theme"
-for f in gauntlet.md speedtest.md; do rm -f "$PI_HOME/templates/$f"; done
+for f in gauntlet.md speedtest.md; do rm -f "$AG/prompts/$f" "$PI_HOME/templates/$f"; done
 for d in "$REPO"/skills/*/; do
   b=$(basename "$d"); [ -d "$AG/skills/$b" ] && rm -rf "$AG/skills/$b"
 done

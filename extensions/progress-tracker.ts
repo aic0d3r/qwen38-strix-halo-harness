@@ -14,7 +14,6 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const PROGRESS_FILE = process.env.PI_PROGRESS_FILE || "PROGRESS.md";
 const HOME = os.homedir();
-const HISTORY_DIR = path.join(process.cwd(), ".progress-log");
 const WRITE_INTERVAL = 5;
 
 function promptText(p: any): string {
@@ -133,14 +132,6 @@ let responseCount = 0;
 		const entry = `# Session Progress\n\n**Task:** ${taskLine}\n**Last updated:** ${new Date().toISOString()}\n**Responses:** ${responseCount}\n\n## Last state (assistant note)\n\n${lastNote || "(none yet)"}\n\n## Files modified\n\n\`\`\`\n${diffStat}\n\`\`\`\n\n## Recent commits\n\n\`\`\`\n${recentCommits}\n\`\`\`\n`;
 		try {
 			fs.writeFileSync(path.join(cwd, PROGRESS_FILE), entry);
-			// session history: append-only copy so past sessions stay queryable
-			try {
-				fs.mkdirSync(HISTORY_DIR, { recursive: true });
-				const stamp = new Date().toISOString().replace(/[:.]/g, "-") + `-p${process.pid}`;
-				// shortcut: pid suffix keeps parallel sessions' history distinct; PROGRESS.md
-				// itself stays last-writer-wins (single active session per dir assumed)
-				fs.writeFileSync(path.join(HISTORY_DIR, `${stamp}.md`), entry);
-			} catch {}
 			// HUD: machine-readable per-checkpoint stats (tail -f it)
 			try {
 				fs.appendFileSync(path.join(HOME, ".pi", "agent", "hud.log"),

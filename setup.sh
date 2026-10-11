@@ -14,7 +14,7 @@ HALOGEN_CKPT=""; DOCTOR=0; VOICE=0; NO_HALOGEN=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-halogen)  NO_HALOGEN=1; shift ;;
-    --halogen) HALOGEN_CKPT="${2:-auto}"; shift 2 ;;
+    --halogen) HALOGEN_CKPT="${2:-auto}"; shift 2 2>/dev/null || shift ;;
     --doctor)  DOCTOR=1; shift ;;
     --voice)   VOICE=1; shift ;;
     --halogen-upgrade) HALOGEN_UPGRADE="${2:-latest}"; shift 2>/dev/null || shift ;;
@@ -56,10 +56,25 @@ LLS="$(command -v llama-server 2>/dev/null || true)"
     "$HOME/LLMBench/engines/strix-v0741/vulkan/bin/llama-server"; do
   [ -x "$c" ] && LLS="$c" && break
 done
-# find the main halogen checkpoint (exclude ngram/vision sidecars)
-find_ckpt(){ ls "$PWD"/*.hgn /models/*.hgn "$HOME"/models/*.hgn "$HOME"/Downloads/*.hgn \
-    "${LLMBENCH:-$HOME/LLMBench}"/models/*/*.hgn 2>/dev/null \
-    | grep -v 'ngram\|vision\|mtp\|w4b' | grep 'v2\.hgn' | head -1; }
+# find the main halogen checkpoint: one search, owned by the launcher
+find_ckpt(){ bash "$REPO/server/start-halogen.sh" --print-ckpt; }
+# host hygiene shared by --doctor and install: allocator, fabric clock, vm-compact timer
+host_checks(){
+  local o9
+  o9=$(awk '$4=="Normal"{u=0; for(i=14;i<=NF;i++) u+=$(i)*2**(i-14); print u}' /proc/buddyinfo 2>/dev/null | head -1)
+  [ -n "$o9" ] && [ "$o9" -lt 200 ] \
+    && warn "order-9 pages = $o9 (<200): full-ctx halogen (262k) will wedge; 65k/2-slot is fine. reboot before full-ctx." \
+    || ok "order-9 pages: ${o9:-n/a}"
+  # GPU+NPU together are only safe with the fabric clock held; the container holds it while it runs
+  fclk_held && ok "gpu fabric clock held (GPU+NPU concurrency safe)" || { warn "gpu fabric clock NOT held - NPU beside GPU can hang or corrupt (halogen NPU docs). one-time install (sudo):"; warn "  sudo install -m 755 $REPO/config/systemd/halogen-fabric-clock /usr/local/sbin/ && sudo install -m 644 $REPO/config/systemd/halogen-fabric-clock.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now halogen-fabric-clock.service"; }
+  # list-timers exits 0 even with "0 timers listed"; is-enabled actually checks
+  if systemctl is-enabled --quiet vm-compact.timer 2>/dev/null; then
+    ok "vm-compact.timer enabled (15-min allocator hygiene)"
+  else
+    warn "vm-compact.timer not installed - big-model days fragment the allocator (order-9 decay). one-time install:"
+    warn "  sudo cp $REPO/config/systemd/vm-compact.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now vm-compact.timer"
+  fi
+}
 
 # README-documented standalone commands: must run WITHOUT --doctor
 if [ -n "${UNINSTALL:-}" ]; then
@@ -71,9 +86,10 @@ fi
 if [ "$DOCTOR" = 1 ]; then
   echo "== harness doctor =="
   command -v pi >/dev/null          && ok "pi installed"           || fail "pi not found - install the pi coding agent first"
-  [ -d "$EXT_DIR" ] && [ "$(ls "$EXT_DIR"/progress-tracker.ts "$EXT_DIR"/npu-retrieval.ts 2>/dev/null | wc -l)" = 2 ] \
+  [ -f "$EXT_DIR/progress-tracker.ts" ] \
                                     && ok "core extensions in place" || fail "extensions missing - run ./setup.sh"
-  python3 -c "import json;m=json.load(open('$MODELS_JSON'));m['providers']['halogen'];m['providers']['llamacpp-tiny']" 2>/dev/null \
+  # halogen provider is only ours on NPU installs (--no-halogen skips it and the NPU extensions)
+  python3 -c "import json,os;p=json.load(open('$MODELS_JSON'))['providers'];p['llamacpp-tiny'];os.path.exists('$EXT_DIR/npu-retrieval.ts') and p['halogen']" 2>/dev/null \
                                     && ok "providers configured"   || fail "providers missing - run ./setup.sh"
   [ -f "$PI_HOME/agent/mcp.json" ]  && ok "mcp.json present (serena+jina+semble)" || warn "no mcp.json - serena/jina/semble unavailable (run ./setup.sh)"
   tiny_up                           && ok "sidecar up (:8090)"     || fail "sidecar down - run ./setup.sh (or: systemctl --user enable --now ling-tiny)"
@@ -97,15 +113,11 @@ if [ "$DOCTOR" = 1 ]; then
     warn "  supported main engine: halogen only (see README 'Using another engine')."
   fi
   [ -f "$REPO/start-halogen.sh" ]   && ok "start-halogen.sh ready" || warn "no start-halogen.sh yet (written on first --halogen launch)"
-  O9=$(awk '$4=="Normal"{u=0; for(i=14;i<=NF;i++) u+=$(i)*2**(i-14); print u}' /proc/buddyinfo 2>/dev/null | head -1)
-  [ -n "$O9" ] && [ "$O9" -ge 200 ] && ok "order-9 pages: $O9"     || warn "order-9 pages: ${O9:-n/a} (<200): reboot before full-ctx (262k) halogen; 65k/2-slot fine"
-  fclk_held && ok "gpu fabric clock held (GPU+NPU concurrency safe)" || { warn "gpu fabric clock NOT held - NPU beside GPU can hang or corrupt (halogen NPU docs). one-time install (sudo):"; warn "  sudo install -m 755 $REPO/config/systemd/halogen-fabric-clock /usr/local/sbin/ && sudo install -m 644 $REPO/config/systemd/halogen-fabric-clock.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now halogen-fabric-clock.service"; }
-  if ! systemctl list-timers vm-compact.timer >/dev/null 2>&1; then
-    warn "vm-compact.timer not installed - install it to stretch time between reboots:"
-    warn "  sudo cp $REPO/config/systemd/vm-compact.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now vm-compact.timer"
+  host_checks
+  if [ -f "$EXT_DIR/npu-retrieval.ts" ]; then
+    R=$(pi -p --no-skills --no-context-files --provider halogen --model halogen-qwen3.8-flash-next --thinking low "Reply with exactly: OK" 2>/dev/null | grep -c 'OK')
+    [ "$R" -ge 1 ] && ok "ready check: model answered" || fail "ready check: no reply from halogen"
   fi
-  R=$(pi -p --no-skills --no-context-files --provider halogen --model halogen-qwen3.8-flash-next --thinking low "Reply with exactly: OK" 2>/dev/null | grep -c 'OK')
-[ "$R" -ge 1 ] && ok "ready check: model answered" || fail "ready check: no reply from halogen"
   exit 0
 fi
 
@@ -119,15 +131,15 @@ for f in "$REPO"/extensions/*.ts; do
   { [ "$b" = "npu-retrieval.ts" ] || [ "$b" = "auto-guard.ts" ]; } && [ "$NO_HALOGEN" = 1 ] && continue
   if ! cmp -s "$f" "$EXT_DIR/$b"; then cp "$f" "$EXT_DIR/$b"; echo "  installed $b"; N=$((N+1)); fi
 done
-# drop measured no-op extensions from older installs (kept in extensions/optional/)
+# drop measured no-op extensions from older installs (deleted from the repo; see extensions/README.md)
 for f in context-prune npu-triage ling-tiny-triage; do
-  [ -f "$EXT_DIR/$f.ts" ] && rm -f "$EXT_DIR/$f.ts" && echo "  removed $f.ts (measured no-op — see extensions/optional/)"
+  [ -f "$EXT_DIR/$f.ts" ] && rm -f "$EXT_DIR/$f.ts" && echo "  removed $f.ts (measured no-op)"
 done
-[ -d "$EXT_DIR/plan-mode" ] && rm -rf "$EXT_DIR/plan-mode" && echo "  removed plan-mode/ (3 uses in 569 sessions — see extensions/optional/)"
+[ -d "$EXT_DIR/optional" ] && rm -rf "$EXT_DIR/optional" && echo "  removed optional/ (archive deleted from the repo)"
+[ -d "$EXT_DIR/plan-mode" ] && rm -rf "$EXT_DIR/plan-mode" && echo "  removed plan-mode/ (3 uses in 569 sessions)"
 for d in "$REPO"/extensions/*/; do
   [ -d "$d" ] || continue
   b=$(basename "$d")
-  [ "$b" = "optional" ] && continue # reference archive of measured no-ops; pi's loader never reads it
   if ! diff -rq "$d" "$EXT_DIR/$b" >/dev/null 2>&1; then rm -rf "$EXT_DIR/$b"; cp -r "$d" "$EXT_DIR/$b"; echo "  installed $b/"; N=$((N+1)); fi
 done
 [ "$N" = 0 ] && ok "all extensions already current ($(ls "$EXT_DIR"/*.ts 2>/dev/null | wc -l) files + $(find "$EXT_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l) dirs)"
@@ -212,14 +224,18 @@ fi
 fi
 
 echo "== 2a-2. prompt templates =="
-mkdir -p "$PI_HOME/templates"
+# pi loads personal prompt templates from agent/prompts/; older installs copied to
+# ~/.pi/templates, which pi never reads - drop those stale copies
+PROMPTS="$PI_HOME/agent/prompts"; mkdir -p "$PROMPTS"
+for f in "$REPO"/templates/*.md; do rm -f "$PI_HOME/templates/$(basename "$f")"; done
+rmdir "$PI_HOME/templates" 2>/dev/null
 T=0
 for f in "$REPO"/templates/*.md; do
   [ -f "$f" ] || continue
   b=$(basename "$f")
-  if ! diff -q "$f" "$PI_HOME/templates/$b" >/dev/null 2>&1; then cp "$f" "$PI_HOME/templates/$b"; T=$((T+1)); fi
+  if ! diff -q "$f" "$PROMPTS/$b" >/dev/null 2>&1; then cp "$f" "$PROMPTS/$b"; T=$((T+1)); fi
 done
-ok "prompt templates current ($T updated, $(ls "$PI_HOME/templates" 2>/dev/null | wc -l) total)"
+ok "prompt templates current ($T updated, $(ls "$PROMPTS" 2>/dev/null | wc -l) total)"
 # codebase search is the semble MCP server (mcp.json): verify its runtime is available
 if command -v uvx >/dev/null; then ok "uvx found (semble MCP runnable)"; else warn "uvx not found - semantic search (semble) unavailable; install uv (https://docs.astral.sh/uv)"; fi
 
@@ -436,10 +452,10 @@ elif [ -n "$HALOGEN_CKPT" ]; then
       AVAIL=$(df -BG --output=avail "$HOME" 2>/dev/null | tail -1 | tr -dc '0-9')
       echo "  required download: ~124 GB into $DL_DIR${AVAIL:+ (free: ${AVAIL} GB)}"
       read -r -p "  download now? [y/N] " A
-      [ "$A" = "y" ] || fail "aborted - download the files (see README 'Minimum download') or pass a checkpoint: ./setup.sh --halogen /path/to/checkpoint.hgn"
+      [ "$A" = "y" ] || { fail "aborted - download the files (see README 'Minimum download') or pass a checkpoint: ./setup.sh --halogen /path/to/checkpoint.hgn"; exit 1; }
       if [ "${AVAIL:-999}" -lt 135 ]; then
         warn "only ${AVAIL} GB free - the download will likely run out of space. Free up at least 135 GB first."
-        fail "not enough free space"
+        fail "not enough free space"; exit 1
       fi
       HF_BIN="$(command -v hf || command -v huggingface-cli || true)"
       if [ -z "$HF_BIN" ]; then
@@ -487,19 +503,7 @@ else
   warn "halogen down (optional: main model). start with: ./setup.sh --halogen auto"
 fi
 
-O9=$(awk '$4=="Normal"{u=0; for(i=14;i<=NF;i++) u+=$(i)*2**(i-14); print u}' /proc/buddyinfo 2>/dev/null | head -1)
-if [ -n "$O9" ] && [ "$O9" -lt 200 ]; then
-  warn "order-9 contiguous pages = $O9 (<200): full-ctx halogen (262k) will wedge. 65k/2-slot is fine. reboot before full-ctx."
-else ok "order-9 pages: ${O9:-n/a}"; fi
-fclk_held && ok "gpu fabric clock held (GPU+NPU concurrency safe)" || { warn "gpu fabric clock NOT held - NPU beside GPU can hang or corrupt (halogen NPU docs). one-time install (sudo):"; warn "  sudo install -m 755 $REPO/config/systemd/halogen-fabric-clock /usr/local/sbin/ && sudo install -m 644 $REPO/config/systemd/halogen-fabric-clock.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now halogen-fabric-clock.service"; }
-# fabric clock: GPU+NPU together are only safe with it held (halogen NPU docs);
-# fclk_held() above checks it, container holds it while it runs via /sys.
-if systemctl list-timers vm-compact.timer >/dev/null 2>&1; then
-  ok "vm-compact.timer active (15-min allocator hygiene)"
-else
-  warn "vm-compact.timer not installed - big-model days fragment the allocator (order-9 decay). one-time install:"
-  warn "  sudo cp $REPO/config/systemd/vm-compact.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now vm-compact.timer"
-fi
+host_checks
 
 echo
 echo "done. doctor check any time:  ./setup.sh --doctor"

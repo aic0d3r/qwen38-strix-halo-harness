@@ -69,8 +69,8 @@ Optional / situational:
   never fire slash commands: 3 measured misses). Offloads commit messages to
   the sidecar; keeps main-model turns free.
 - `ling-tiny-repomap.ts`, `auto-guard.ts` - cheap, fired, benefit unmeasured.
-- `context-prune.ts`, `NPU-triage.ts`, `ling-tiny-triage.ts` - moved to
-  `extensions/optional/` (0.0k saved / 0 firings across all in-session A/Bs;
+- `context-prune.ts`, `NPU-triage.ts`, `ling-tiny-triage.ts` - deleted
+  (last in commit `5bc375f` under `extensions/optional/`; 0.0k saved / 0 firings across all in-session A/Bs;
   setup.sh removes stale copies on upgrade). `triage` + `dedup_scan` still
   ship inside NPU-retrieval.ts (search moved to the semble MCP server) - agents never
   call them unprompted, and the tables below are component-level numbers,
@@ -125,7 +125,7 @@ Three tools + one command, each measured and earned:
 per-turn token budget, sampling temperature (0 for deterministic benches),
 llama.cpp-side ubatch. Reads and writes the real config files with validation.
 (Tool-result triage threshold was removed 10-06: it pointed at
-`extensions/optional/ling-tiny-triage.ts`, which is not installed or loaded, so
+`ling-tiny-triage.ts`, which was never installed or loaded, so
 the knob was a silent no-op.)
 
 ## Why this suite

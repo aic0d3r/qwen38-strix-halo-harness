@@ -42,8 +42,11 @@ console.log("  ok: cap in "+f+" (CAP="+CAP+" fits 131k window)")' || FAIL=1
 done
 
 
-# [7] git-commit guard blocks direct commits, allows message-free amends (mirrors ling-tiny-commit.ts)
-$JS -e 'const BLOCK=/\bgit\b[^|;&]*\bcommit\b/, ALLOW=/commit[^|;&]*--amend[^|;&]*(--no-edit|-C\s+HEAD)/;
+# [7] git-commit guard blocks direct commits, allows message-free amends (regexes read from the real file)
+$JS -e 'const src=require("fs").readFileSync("extensions/ling-tiny-commit.ts","utf8");
+const re=[...src.matchAll(/if \((!?)\/(.+?)\/\.test\(cmd\)\) return;/g)];
+if(re.length!==2) throw new Error("commit guard changed shape - update this check");
+const BLOCK=new RegExp(re[0][2]), ALLOW=new RegExp(re[1][2]);
 const t=(c)=>BLOCK.test(c)&&!ALLOW.test(c);
 for(const c of ["git commit -m x","git add -A && git commit -m x","git commit --amend -m y","cd r; git commit"])
   if(!t(c)) throw new Error("should block: "+c);
