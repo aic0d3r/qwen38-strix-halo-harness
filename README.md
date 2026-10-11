@@ -23,7 +23,7 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI MAX+ 395, Radeon 8060S, 128GB) at 70 
 
 ## Contents
 
-[Install](#install) | [Quickstart: halogen](#quickstart-halogen) | [Crash recovery](#crash-recovery) | [Uninstall](#uninstall) | [Upgrading halogen](#upgrading-halogen) | [Using another engine](#using-another-engine-gufo-llamacpp-as-the-main-model) | [llama.cpp path](#setup-llamacpp-path-full-control) | [Troubleshooting](#troubleshooting) | [Docs](#docs) | [Posts](#posts)
+[Install](#install) | [Quickstart: halogen](#quickstart-halogen) | [Crash recovery](#crash-recovery) | [Uninstall](#uninstall) | [Upgrading halogen](#upgrading-halogen) | [Watching speed](#watching-speed-prefill--decode) | [Using another engine](#using-another-engine-gufo-llamacpp-as-the-main-model) | [llama.cpp path](#setup-llamacpp-path-full-control) | [Troubleshooting](#troubleshooting) | [Docs](#docs) | [Posts](#posts)
 
 ## Repo map
 
@@ -165,6 +165,28 @@ then does the pin move; any failed check rolls back to the previous pin automati
 Manual path: pull, change the pin, restart, then `scripts/session-audit.sh` + NPU probes +
 `pi -p` smoke + `go test` in any active project. Read the changelog first - tool-calling,
 schema, cache and log-routing behavior have all changed between releases.
+
+## Watching speed (prefill / decode)
+
+Three official surfaces, no built-in web UI in the image (`/`, `/gui`, `/dashboard` are 404):
+
+- **per request** - every response (and the last streamed chunk) carries a `timings` object:
+  `prompt_per_second`, `predicted_per_second`, `cache_n`, `draft_n_accepted`.
+- **per session** - `serve_api:` lines in the container log, one per request.
+- **aggregate** - `GET /metrics` (Prometheus text, llama.cpp-compatible counter names) and
+  `GET /cache` (prompt-cache hit rate, evictions, KV-pool usage). The two
+  `*tokens_seconds` gauges mean "since the last scrape", so hand-curling them is misleading.
+
+Two tools ship for it:
+
+    ./scripts/halogen-top.sh              # live dashboard: window + lifetime t/s, Ctrl-C quits
+    ./scripts/session-audit.sh --perf     # prefill/decode for one session's own time window
+
+`halogen-top.sh` appends each scrape to `$XDG_STATE_HOME/halogen-top/history.csv`; that file is
+what `--perf` diffs `/metrics` over a window - the counters are cumulative and carry no session
+id, so a window that was never recorded can only be rebuilt from the logs. Leave one running in a
+screen for the diff to work. Grafana/Prometheus works too (scrape `127.0.0.1:8731/metrics`) - the
+dashboards are yours to build; these two scripts exist because they cost no extra containers.
 
 ## Using another engine (gufo, llama.cpp) as the main model
 

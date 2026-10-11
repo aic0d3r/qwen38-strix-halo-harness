@@ -73,7 +73,13 @@ ${fullDiff}
 				.trim();
 			if (!commitMessage) return notify("Empty commit message generated; aborting.", "warning");
 
-			const { code: aCode, stderr: aErr } = await pi.exec("git", ["add", "-A", "--", ".", `:(exclude)${PROGRESS}`, ":(exclude).progress-log"]);
+			// exclude pathspecs that name a gitignored path make `git add` exit 1, so only exclude un-ignored ones
+			const excludes: string[] = [];
+			for (const p of [PROGRESS, ".progress-log"]) {
+				const { code } = await pi.exec("git", ["check-ignore", "-q", p]);
+				if (code !== 0) excludes.push(`:(exclude)${p}`);
+			}
+			const { code: aCode, stderr: aErr } = await pi.exec("git", ["add", "-A", "--", ".", ...excludes]);
 			if (aCode !== 0) return notify(`git add failed: ${aErr}`, "error");
 			const { code: cCode, stdout: cOut, stderr: cErr } = await pi.exec("git", ["commit", "-m", commitMessage]);
 			if (cCode !== 0) return notify(`git commit failed: ${cErr || cOut}`, "error");

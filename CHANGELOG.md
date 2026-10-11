@@ -2,7 +2,18 @@
 
 ## Unreleased
 
+### Added
+- Speed visibility: `scripts/halogen-top.sh` (live prefill/decode dashboard from `/metrics`
+  deltas, with a history CSV) and `scripts/session-audit.sh --perf`, which reports
+  prefill/decode throughput for one session's window from the server's `serve_api:` log lines
+  plus a `/metrics` diff. Parser self-test: `scripts/halogen-perf.py --selftest`.
+
 ### Fixed
+- `scripts/session-audit.sh` passed its session-start time to `docker logs --since` as a naive
+  local string, so docker read the window as UTC and the audit grep'd a nearly empty tail (and
+  reported "clean" for it). Window now passed as UTC ISO. The cache-reuse filter also never
+  matched `cached, 98.9%` - it required `%` directly after two digits - so every large prefill
+  was flagged as cache-broken.
 - `thinkingLevelMap` sends the model's real effort tier for pi's `high`: `xhigh`
   instead of the `high` alias. Behavior is unchanged on halogen (serve_api folds
   both spellings to xhigh) but the config no longer contradicts the chat template,

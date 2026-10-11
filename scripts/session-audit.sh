@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 # session-audit.sh — post-session forensics for the pi harness.
 # Everything is scoped to the audited session's own lifetime.
-#   ./scripts/session-audit.sh [session.jsonl]   (default: newest session)
+#   ./scripts/session-audit.sh [--perf] [session.jsonl]   (default: newest session)
+#   --perf  prefill/decode throughput for this session's window (server log + metrics diff)
 set -uo pipefail
-F="${1:-}"
+PERF=0; _args=()
+for a in "$@"; do case "$a" in --perf) PERF=1 ;; *) _args+=("$a") ;; esac; done
+F="${_args[0]:-}"
+if [ -n "$F" ] && [ ! -f "$F" ]; then  # accept a bare session id too
+  F=$(find "$HOME/.pi/agent/sessions" -name "*${F%.jsonl}*" 2>/dev/null | head -1)
+fi
 if [ -z "$F" ]; then
   F=$(find "$HOME/.pi/agent/sessions" -name "*.jsonl" -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
 fi
 [ -z "$F" ] || [ ! -f "$F" ] && { echo "no session file found"; exit 1; }
 
-# session start (first event timestamp, ISO/UTC) -> local time for journalctl/docker
+# session start: START stays UTC ISO (docker --since wants the zone), SINCE is local for journalctl.
+# a naive local string here makes docker read the window as UTC and silently return ~nothing
 START=$(head -1 "$F" | grep -oE '"timestamp":"[0-9T:.Z-]+"' | head -1 | cut -d'"' -f4)
 SINCE=$(date -d "$START" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "today")
 
@@ -83,19 +90,29 @@ else ok "sidecar clean since session start"; fi
 # --- halogen: cache-broken prefills + errors since session start ---
 C=$(docker ps -q --filter publish=8731 2>/dev/null | head -1)
 if [ -n "$C" ]; then
-  CB=$(docker logs --since "$SINCE" "$C" 2>&1 | grep serve_api | grep -vE "cached, 9[0-9]%|cached,100" | grep -cE "prompt ([5-9][0-9]|[0-9]{3})[0-9]{3}")
+  CB=$(docker logs --since "$START" "$C" 2>&1 | grep serve_api | grep -vE "cached, (9[0-9]|100)[0-9.]*%" | grep -cE "prompt ([5-9][0-9]|[0-9]{3})[0-9]{3}")
   if [ "${CB:-0}" -gt 0 ]; then
     warn "$CB cache-broken prefill(s) >50k tok since session start (compaction signature):"
-    docker logs --since "$SINCE" "$C" 2>&1 | grep serve_api | grep -vE "cached, 9[0-9]%|cached,100" | grep -E "prompt ([5-9][0-9]|[0-9]{3})[0-9]{3}" | tail -2 | sed 's/^/       /'
+    docker logs --since "$START" "$C" 2>&1 | grep serve_api | grep -vE "cached, (9[0-9]|100)[0-9.]*%" | grep -E "prompt ([5-9][0-9]|[0-9]{3})[0-9]{3}" | tail -2 | sed 's/^/       /'
     W=$((W+1))
   else ok "no cache-broken prefills since session start"; fi
-  E=$(docker logs --since "$SINCE" "$C" 2>&1 | grep -ciE "send_error| 4[0-9][0-9] | 5[0-9][0-9] ")
+  E=$(docker logs --since "$START" "$C" 2>&1 | grep -ciE 'send_error|" 4[0-9][0-9] |" 5[0-9][0-9] ')
   if [ "${E:-0}" -gt 0 ]; then warn "$E error/4xx/5xx log lines since session start"; W=$((W+1))
   else ok "no error/4xx/5xx lines since session start"; fi
 else bad "halogen container not running"; W=$((W+1)); fi
 hr
 
-hr
+# --- --perf: prefill/decode throughput inside this session's window ---
+if [ "$PERF" = 1 ]; then
+  if [ -n "$C" ]; then
+    docker logs -t --since "$START" "$C" 2>&1 \
+      | python3 "$(cd "$(dirname "$0")" && pwd)/halogen-perf.py" "$F"
+    hr
+  else
+    bad "halogen container not running — no throughput data for this window"
+    W=$((W+1))
+  fi
+fi
 
 if [ "$W" -eq 0 ]; then echo "${G}RESULT: clean — no anomalies in this session's window${N}"
 else echo "${Y}RESULT: $W warning(s) above${N}"; fi
