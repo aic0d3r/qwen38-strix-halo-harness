@@ -66,6 +66,8 @@ the already-open upstream PR (linuxmint/timeshift#496). The other six
 missed it or suggested reporting upstream - noted per run below. The user also had GLM 5.3
 flashx rate both pi-harness answers; it picked qwen's.
 
+![wall clock per run](charts/wallclock-by-run.png)
+
 ## What the eight runs show
 
 1. **Verdicts were cheap; proof was rare.** All eight runs said "harmless, nothing broken."
@@ -89,6 +91,11 @@ flashx rate both pi-harness answers; it picked qwen's.
    verdict, same PR, 8m31s instead of 2m55s. The extra effort bought source-level receipts
    (tarball, exact lines, local repro), not a better answer. The chat template's default
    effort is the maximum, so bare-API users get run-8 depth on every question.
+7. **The clock was a tie where it was matched.** The only runs that beat the local box on
+   wall time were the two opencode runs: 1m08s (wrong mechanism) and 1m30s (shallow, no
+   repro, no PR) at flashx's ~151 t/s decode. In the same harness, GLM at max effort, the
+   gaps were 14 seconds (flashx over the local medium run) and one second (the 753B over
+   the local max rerun). Decode rate predicted nothing (#5); neither did the cloud.
 
 ## Caveats
 
