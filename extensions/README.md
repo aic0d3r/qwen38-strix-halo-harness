@@ -5,14 +5,16 @@ Extensions that make pi genuinely better for daily agentic coding on Strix Halo.
 ## Install (fresh machine, halogen setup)
 
 You need: a Strix Halo (or any gfx1151/UMA box) running pi, a halogen 0.16.2+
-server with the NPU models, and a Ling-3.0-tiny sidecar. ~70 GB free RAM for
-flash-next, ~4 GB for the sidecar.
+server with the NPU models (`decider-0.8b` for `triage`, `qwen3-embedding-0.6b`
+for `dedup_scan`, `qwen3guard-gen-0.6b` for `auto-guard`; the reranker is loaded
+but unused since search moved to semble), and a Ling-3.0-tiny sidecar on :8090.
+~70 GB free RAM for flash-next, ~4 GB for the sidecar.
 
 0. Automated setup (does steps 1-2, starts the sidecar if it can, checks the
    rest and prints exact fixes):
 
-       git clone https://github.com/aic0d3r/neon-ladder
-       cd neon-ladder && ./setup.sh            # add --index <repo-dir> to also index
+       git clone https://github.com/aic0d3r/qwen38-strix-halo-harness
+       cd qwen38-strix-halo-harness && ./setup.sh
 
 2. Halogen server on 127.0.0.1:8731, prompt cache ON - see the
    halogen-flash-server repo for the container/model download. Do NOT disable

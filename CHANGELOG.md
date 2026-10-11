@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Docs
+- README rewritten in the house format (badges, dot-separated nav, `> [!TIP]`/`[!NOTE]`/`[!WARNING]`
+  callouts, em-dash bullets) and reorganised so the first two sections answer "what does this
+  do and what runs where". Stale NPU claims fixed: the decider tool is `triage` (it was never
+  called `decide`), codebase search no longer uses the NPU (semble does, on CPU), the reranker is
+  idle since v1.1 and can be dropped from `HALOGEN_NPU_MODELS`, NPU dirs are lowercase `npu/`, and
+  the GPU+NPU fabric-clock requirement, the `/health` npu probe and a triage/dedup troubleshooting
+  row are now written down.
+- `docs/BENCHMARKS.md`: labels the retrieval eval as superseded by semble, marks the rerank
+  number idle, notes the pin moved to 0.18.0, and states that multi-option `triage` accuracy is
+  unmeasured for the constrained-enum implementation (the 40 % figure was the dropped variant).
+- `extensions/README.md`: install points at this repo (it said `neon-ladder`, the benchmark
+  repo), the removed `--index` hint is gone, and the NPU models are listed with the tool each one
+  serves.
+
 ### Added
 - Speed visibility: `scripts/halogen-top.sh` (live prefill/decode dashboard from `/metrics`
   deltas, with a history CSV) and `scripts/session-audit.sh --perf`, which reports
