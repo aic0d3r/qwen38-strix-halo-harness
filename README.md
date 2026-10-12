@@ -223,6 +223,22 @@ pre-flight gate; if order-9 pages are low it recovers or fails in seconds with t
 command. Context knobs, the `vm-compact.timer` and the small-context opt-out are in
 [Operations](docs/OPS.md).
 
+### Live stats
+
+```sh
+# live dashboard in a second terminal: busy state, queue, KV pool, per-request prefill/decode t/s, cache
+./scripts/halogen-top.sh          # optional refresh interval in seconds (default 1); piped = one log line per request
+
+# after a session: halogen version vs pin, sidecar rejections, cache-broken prefills, errors
+./scripts/session-audit.sh        # newest session by default; add --perf for its prefill/decode throughput
+```
+
+halogen only updates its counters when a request finishes, so the dashboard shows per-request
+rates, not a mid-stream ticker. Leave `halogen-top.sh` running if you want `--perf` to diff
+`/metrics` over a session — it records every scrape to `~/.local/state/halogen-top/history.csv`.
+Point it at a remote box with `HALOGEN_URL=http://host:8731`. Details in
+[Operations](docs/OPS.md).
+
 ## The NPU
 
 The NPU is not where the big model runs. It runs four small models whose whole job is to answer,
