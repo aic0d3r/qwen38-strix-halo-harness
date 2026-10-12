@@ -11,6 +11,11 @@
   (engine comparison, sidecar isolation, cloud hybrid), [docs/LLAMACPP.md](docs/LLAMACPP.md)
   (the full-control path) and [docs/OPS.md](docs/OPS.md) (context/fragmentation, speed surfaces,
   troubleshooting).
+- Title no longer claims "zero cloud" — switching to a cloud model mid-session is a supported
+  shape, so the intro states the local-by-default + cloud-optional split and links the measured
+  hybrid. Badge fix: the repo has tags but no GitHub *Releases*, so `github/v/release` rendered
+  "no releases or repo not found"; the version badge now uses `github/v/tag` (renders v1.1) and
+  the misleading `network: zero` badge became `hardware: Strix Halo` + `cloud: optional`.
 - Stale NPU claims fixed: the decider tool is `triage` (it was never called `decide`), codebase
   search no longer uses the NPU (semble does, on CPU), the reranker is idle since v1.1 and can be
   dropped from `HALOGEN_NPU_MODELS`, NPU dirs are lowercase `npu/`, and the GPU+NPU fabric-clock

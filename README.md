@@ -1,9 +1,10 @@
-# Pi on Strix Halo — a fully local coding agent: 125B on the GPU, four small models on the NPU, zero cloud
+# Pi on Strix Halo — a local coding agent for the Ryzen AI Max: 125B on the GPU, four small models on the NPU, cloud optional
 
 <div align="center">
 
-[![Release](https://img.shields.io/github/v/release/aic0d3r/qwen38-strix-halo-harness)](https://github.com/aic0d3r/qwen38-strix-halo-harness/releases)
-[![Offline](https://img.shields.io/badge/network-zero-brightgreen)](#install)
+[![Version](https://img.shields.io/github/v/tag/aic0d3r/qwen38-strix-halo-harness?label=version)](https://github.com/aic0d3r/qwen38-strix-halo-harness/tags)
+[![Hardware](https://img.shields.io/badge/hardware-Strix%20Halo-orange)](#install)
+[![Cloud](https://img.shields.io/badge/cloud-optional-blueviolet)](docs/ENGINES.md#cloud-models-are-a-supported-hybrid)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [What you get](#what-you-get) •
@@ -25,7 +26,12 @@ A coding-agent harness for the **AMD Strix Halo** (Ryzen AI Max+ 395 / gfx1151):
 the iGPU, with the NPU running the small side jobs (prompt-injection screening, fast routing
 decisions, embedding dedup) and a llama.cpp sidecar writing commits and compaction summaries.
 One-command setup, crash recovery that survives a killed server, and the **262k ctx** window the
-engine is capable of — no API key, no outbound calls.
+engine is capable of.
+
+It runs with **no API key and no outbound calls** by default, and switching to a cloud model mid
+session is a supported shape rather than a fallback: the NPU tools and the whole sidecar suite
+stay on-device either way, so screening, search and compaction never follow your code off the box
+— [the hybrid, measured](docs/ENGINES.md#cloud-models-are-a-supported-hybrid).
 
 **The model was never the hard part.** This repo is everything *around* the model: the launch
 scripts, the extension suite, the allocator pre-flight, the speed tooling, and the measured
