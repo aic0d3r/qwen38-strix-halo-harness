@@ -20,9 +20,8 @@ import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent"
 
 const BASE = process.env.PI_NPU_BASE || "http://127.0.0.1:8731";
 
-function log(line: string) {
-	try { fs.appendFileSync(path.join(getAgentDir(), "npu-retrieval-usage.log"), line + "\n"); } catch {}
-}
+// one JSON line per sidecar/NPU call; summarized by scripts/session-audit.sh --harness
+const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
 
 async function post(path: string, payload: any, timeout = 120000): Promise<any> {
 	const res = await fetch(BASE + path, {
@@ -63,6 +62,7 @@ export default function (pi: ExtensionAPI) {
 			required: ["text", "question", "options"],
 		},
 		execute: async (callId: string, args: { text: string; question: string; options: string[] }) => {
+			const t0 = Date.now();
 			try {
 				const r = await post("/v1/chat/completions", {
 					model: "decider-0.8b",
@@ -74,8 +74,10 @@ export default function (pi: ExtensionAPI) {
 				});
 				const c = r.choices[0];
 				const probs = (c.logprobs?.content?.[0]?.top_logprobs || []).map((t: any) => ({ opt: t.token, p: Math.exp(t.logprob) }));
+				ev({ c: "triage", ok: true, ms: Date.now() - t0, p: Math.max(0, ...probs.map((x: any) => x.p)) });
 				return text(JSON.stringify({ decision: c.message.content, probabilities: probs }, null, 1));
 			} catch (e: any) {
+				ev({ c: "triage", ok: false, ms: Date.now() - t0 });
 				return text(`triage failed: ${String(e?.message || e).slice(0, 200)}`);
 			}
 		},
@@ -97,6 +99,7 @@ export default function (pi: ExtensionAPI) {
 		},
 		execute: async (callId: string, args: { dirs: string[]; threshold?: number }) => {
 			const threshold = args.threshold ?? 0.90;
+			const t0 = Date.now();
 			const files: string[] = [];
 			for (const dir of args.dirs) {
 				if (!fs.existsSync(dir)) return text(`dedup_scan: directory not found: ${dir}`);
@@ -123,7 +126,7 @@ export default function (pi: ExtensionAPI) {
 					}
 				}
 			}
-			log(JSON.stringify({ t: new Date().toISOString(), tool: "dedup_scan", files: files.length, pairs: pairs.length }));
+			ev({ c: "dedup_scan", ok: true, ms: Date.now() - t0, files: files.length, pairs: pairs.length });
 			return text(pairs.length
 				? `dedup_scan: ${pairs.length} near-duplicate pairs (>${threshold}) across ${files.length} files:\n\n` + pairs.join("\n")
 				: `dedup_scan: no near-duplicates found across ${files.length} files.`);

@@ -6,9 +6,13 @@
  * Usage in pi: /commit [optional extra instructions]
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 
 const TINY_MODEL = "ling3.0-tiny";
+// one JSON line per sidecar/NPU call; summarized by scripts/session-audit.sh --harness
+const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
 // crash-recovery checkpoint (progress-tracker) must never ride along in a commit
 const PROGRESS = (process.env.PI_PROGRESS_FILE || "PROGRESS.md").split("/").pop()!;
 
@@ -47,6 +51,7 @@ export default function (pi: ExtensionAPI) {
 ${fullDiff}
 </changes>`;
 
+		const t0 = Date.now();
 		try {
 			// direct sidecar call: the tool ctx has no modelRegistry, and the
 			// sidecar runs with --jinja so the server applies the chat template
@@ -67,6 +72,7 @@ ${fullDiff}
 			});
 			if (!tinyRes.ok) throw new Error(`sidecar HTTP ${tinyRes.status}`);
 			const tinyJson: any = await tinyRes.json();
+			ev({ c: "commit", ok: true, ms: Date.now() - t0, tokIn: tinyJson?.usage?.prompt_tokens, tokOut: tinyJson?.usage?.completion_tokens });
 			const commitMessage = String(tinyJson?.choices?.[0]?.message?.content ?? "")
 				.trim()
 				.replace(/^```[a-z]*\n?|```$/gm, "")
@@ -86,6 +92,7 @@ ${fullDiff}
 			return notify(`Committed: ${commitMessage.split("\n")[0]}`, "info");
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
+			ev({ c: "commit", ok: false, ms: Date.now() - t0, why: message.slice(0, 120) });
 			return notify(`commit failed: ${message}`, "error");
 		}
 	};

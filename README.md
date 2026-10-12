@@ -230,7 +230,7 @@ command. Context knobs, the `vm-compact.timer` and the small-context opt-out are
 ./scripts/halogen-top.sh          # optional refresh interval in seconds (default 1); piped = one log line per request
 
 # after a session: halogen version vs pin, sidecar rejections, cache-broken prefills, errors
-./scripts/session-audit.sh        # newest session by default; add --perf for its prefill/decode throughput
+./scripts/session-audit.sh        # newest session by default; add --perf for its prefill/decode throughput, --harness for sidecar/NPU work
 ```
 
 halogen only updates its counters when a request finishes, so the dashboard shows per-request

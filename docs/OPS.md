@@ -34,6 +34,7 @@ Two tools ship for it:
 ```sh
 ./scripts/halogen-top.sh              # live dashboard: busy state, KV, per-request t/s, cache; piped = log lines
 ./scripts/session-audit.sh --perf     # prefill/decode for one session's own time window
+./scripts/session-audit.sh --harness  # sidecar/NPU calls, latency, tokens offloaded, fallbacks
 ```
 
 `halogen-top.sh` appends each scrape to `$XDG_STATE_HOME/halogen-top/history.csv`; that file is

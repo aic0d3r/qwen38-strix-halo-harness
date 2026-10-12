@@ -9,10 +9,13 @@
 import * as os from "node:os";
 import * as nodePath from "node:path";
 import { uuidv7 } from "@earendil-works/pi-ai";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import * as fs from "node:fs";
+import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 
 const TINY_PROVIDER = "llamacpp-tiny";
 const TINY_MODEL = "ling3.0-tiny";
+// one JSON line per sidecar/NPU call; summarized by scripts/session-audit.sh --harness
+const ev = (o: object) => { try { fs.appendFileSync(nodePath.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
 const MAX_FILES = 400;
 const HEAD_CHARS = 1500;
 // cache lives in ~/.pi/repomaps/<cwd-key>, not in the repo: writing .pi/ into
@@ -58,6 +61,7 @@ ${inventory}
 		},
 	];
 
+				const t0 = Date.now();
 				const response = await ctx.modelRegistry.complete(
 				model,
 				{ messages: summaryMessages },
@@ -70,6 +74,7 @@ ${inventory}
 					sessionId: uuidv7(),
 				},
 			);
+	ev({ c: "repomap", ok: true, ms: Date.now() - t0, tokIn: response.usage?.input, tokOut: response.usage?.output });
 	const map = response.content
 		.filter((c): c is { type: "text"; text: string } => c.type === "text")
 		.map((c) => c.text)

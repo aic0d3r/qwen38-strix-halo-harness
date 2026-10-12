@@ -3,9 +3,10 @@
 # Everything is scoped to the audited session's own lifetime.
 #   ./scripts/session-audit.sh [--perf] [session.jsonl]   (default: newest session)
 #   --perf  prefill/decode throughput for this session's window (server log + metrics diff)
+#   --harness  sidecar/NPU work in this session (from ~/.pi/agent/harness-events.jsonl)
 set -uo pipefail
-PERF=0; _args=()
-for a in "$@"; do case "$a" in --perf) PERF=1 ;; *) _args+=("$a") ;; esac; done
+PERF=0; HARN=0; _args=()
+for a in "$@"; do case "$a" in --perf) PERF=1 ;; --harness) HARN=1 ;; *) _args+=("$a") ;; esac; done
 F="${_args[0]:-}"
 if [ -n "$F" ] && [ ! -f "$F" ]; then  # accept a bare session id too
   F=$(find "$HOME/.pi/agent/sessions" -name "*${F%.jsonl}*" 2>/dev/null | head -1)
@@ -112,6 +113,12 @@ if [ "$PERF" = 1 ]; then
     bad "halogen container not running — no throughput data for this window"
     W=$((W+1))
   fi
+fi
+
+# --- --harness: what the sidecar + NPU models did inside this session's window ---
+if [ "$HARN" = 1 ]; then
+  python3 "$(cd "$(dirname "$0")" && pwd)/harness-events.py" "$F" "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/harness-events.jsonl" || W=$((W+1))
+  hr
 fi
 
 if [ "$W" -eq 0 ]; then echo "${G}RESULT: clean — no anomalies in this session's window${N}"

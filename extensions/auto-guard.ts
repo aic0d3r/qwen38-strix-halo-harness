@@ -11,11 +11,15 @@
  * Requires: halogen 0.16+ NPU server on :8731 with qwen3guard-gen-0.6b loaded.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 
 const BASE = process.env.PI_NPU_BASE || "http://127.0.0.1:8731";
+// one JSON line per sidecar/NPU call; summarized by scripts/session-audit.sh --harness
+const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
 
-async function moderate(text: string): Promise<{ flagged: boolean; label?: string; scores?: any }> {
+async function moderate(text: string): Promise<{ flagged: boolean; ok?: boolean; label?: string; scores?: any }> {
 	try {
 		const res = await fetch(BASE + "/v1/moderations", {
 			method: "POST",
@@ -29,7 +33,7 @@ async function moderate(text: string): Promise<{ flagged: boolean; label?: strin
 		if (!res.ok) return { flagged: false };
 		const r = await res.json();
 		const m = (r.results && r.results[0]) || r;
-		return { flagged: !!m.flagged, label: m.label, scores: m.label_scores };
+		return { flagged: !!m.flagged, ok: true, label: m.label, scores: m.label_scores };
 	} catch {
 		return { flagged: false }; // fail open — don't block on NPU errors
 	}
@@ -46,7 +50,9 @@ export default function (pi: ExtensionAPI) {
 		if (text.length < 20) return; // skip trivial messages
 
 		screenCount++;
+		const t0 = Date.now();
 		const result = await moderate(text);
+		ev({ c: "guard", ok: !!result.ok, ms: Date.now() - t0, flagged: result.flagged });
 
 		if (result.flagged) {
 			flaggedCount++;

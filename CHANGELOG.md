@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `scripts/session-audit.sh --harness`: what the sidecar and NPU models did in one session:
+  calls, average latency, tokens taken off the main model, guard flags, triage confidence,
+  and failures (which fell back to the main model). The extensions now append one line
+  per call to `~/.pi/agent/harness-events.jsonl`, which replaces `npu-retrieval-usage.log`.
+
 ## 1.2.1 - 2026-10-12
 
 ### Fixed

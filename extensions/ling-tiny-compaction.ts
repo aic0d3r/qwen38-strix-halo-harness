@@ -12,11 +12,15 @@
  */
 
 import { uuidv7 } from "@earendil-works/pi-ai";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { convertToLlm, serializeConversation } from "@earendil-works/pi-coding-agent";
 
 const TINY_PROVIDER = "llamacpp-tiny";
 const TINY_MODEL = "ling3.0-tiny";
+// one JSON line per sidecar/NPU call; summarized by scripts/session-audit.sh --harness
+const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
 
 export default function (pi: ExtensionAPI) {
 	pi.on("session_before_compact", async (event, ctx) => {
@@ -25,6 +29,7 @@ export default function (pi: ExtensionAPI) {
 
 		const model = ctx.modelRegistry.find(TINY_PROVIDER, TINY_MODEL);
 		if (!model) {
+			ev({ c: "compaction", ok: false, why: "no-provider" });
 			ctx.ui.notify(`[${TINY_MODEL}] provider not found, using default compaction`, "warning");
 			return;
 		}
@@ -73,6 +78,7 @@ ${conversationText}
 			},
 		];
 
+		const t0 = Date.now();
 		try {
 			const response = await ctx.modelRegistry.complete(
 				model,
@@ -91,10 +97,12 @@ ${conversationText}
 				.join("\n");
 
 			if (!summary.trim()) {
+				ev({ c: "compaction", ok: false, ms: Date.now() - t0, why: "empty" });
 				if (!signal.aborted) ctx.ui.notify("Compaction summary was empty, using default compaction", "warning");
 				return;
 			}
 
+			ev({ c: "compaction", ok: true, ms: Date.now() - t0, tokIn: response.usage?.input, tokOut: response.usage?.output });
 			return {
 				compaction: {
 					summary,
@@ -105,6 +113,7 @@ ${conversationText}
 			};
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
+			ev({ c: "compaction", ok: false, ms: Date.now() - t0, why: message.slice(0, 120) });
 			ctx.ui.notify(`Tiny compaction failed: ${message}, using default`, "error");
 			return;
 		}
