@@ -43,9 +43,45 @@ export const tidyMessage = (msg: string): string => {
 	return body ? `${subject}\n\n${body}` : subject;
 };
 
+const SIDECAR = "http://127.0.0.1:8090";
+
 export default function (pi: ExtensionAPI) {
+	// nothing-at-boot policy leaves the sidecar down after a reboot: start the unit on demand
+	const ensureSidecar = async (notify: (m: string, l?: string) => string): Promise<boolean> => {
+		const up = () => fetch(`${SIDECAR}/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok, () => false);
+		if (await up()) return true;
+		notify("Sidecar down, starting ling-tiny.service...", "info");
+		if ((await pi.exec("systemctl", ["--user", "start", "ling-tiny.service"])).code !== 0) return false;
+		for (let i = 0; i < 60; i++) { if (await up()) return true; await new Promise((r) => setTimeout(r, 500)); }
+		return false;
+	};
+
+	const generate = async (prompt: string, t0: number): Promise<string> => {
+		// direct sidecar call: the tool ctx has no modelRegistry, and the
+		// sidecar runs with --jinja so the server applies the chat template
+		const tinyRes = await fetch(`${SIDECAR}/v1/chat/completions`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				model: TINY_MODEL,
+				max_tokens: 400,
+				temperature: 0.2,
+				// ling3.0-tiny thinks by default; the think pass ate budget and
+				// 8.6x'd latency (measured 10-06: 3.10s+empty content vs 0.36s
+				// with real content; retention canary 10/10 without thinking)
+				chat_template_kwargs: { enable_thinking: false },
+				messages: [{ role: "user", content: prompt }],
+			}),
+			signal: AbortSignal.timeout(180_000),
+		});
+		if (!tinyRes.ok) throw new Error(`sidecar HTTP ${tinyRes.status}`);
+		const tinyJson: any = await tinyRes.json();
+		ev({ c: "commit", ok: true, ms: Date.now() - t0, tokIn: tinyJson?.usage?.prompt_tokens, tokOut: tinyJson?.usage?.completion_tokens });
+		return tidyMessage(String(tinyJson?.choices?.[0]?.message?.content ?? "").replace(/^```[a-z]*\n?|```$/gm, ""));
+	};
+
 	// returns the outcome so the tool caller (the model) sees failures, not just the UI
-	const runCommit = async (extra: string, ctx: any): Promise<string> => {
+	const runCommit = async (extra: string, ctx: any, message = ""): Promise<string> => {
 		const notify = (msg: string, level?: string) => {
 			try { ctx?.ui?.notify?.(msg, level); } catch { console.log(`[commit] ${msg}`); }
 			return msg;
@@ -73,8 +109,10 @@ export default function (pi: ExtensionAPI) {
 		}
 		const fullDiff = [stat, untrackedBlock, diff].join("\n").slice(0, 24000);
 		if (!fullDiff.trim()) return notify("Nothing to commit: no diff, staged changes, or untracked files.", "warning");
+		if (!message && !(await ensureSidecar(notify)))
+			return notify("commit failed: ling-tiny sidecar is down and could not be started (journalctl --user -u ling-tiny). Retry with the `message` parameter to commit with your own message.", "error");
 
-		notify(`Generating commit message with ${TINY_MODEL}...`, "info");
+		if (!message) notify(`Generating commit message with ${TINY_MODEL}...`, "info");
 		const prompt = `Write a git commit message for the working-tree changes below. Rules: a single subject line under 72 chars in the imperative mood ("Add X", "Fix Y"), then a blank line, then a short body (2-5 lines) explaining what and why if the change is non-trivial. Plain text, no markdown, no signature. ${extra ? `Extra instructions from the user: ${extra}` : ""}
 
 <changes>
@@ -83,27 +121,7 @@ ${fullDiff}
 
 		const t0 = Date.now();
 		try {
-			// direct sidecar call: the tool ctx has no modelRegistry, and the
-			// sidecar runs with --jinja so the server applies the chat template
-			const tinyRes = await fetch("http://127.0.0.1:8090/v1/chat/completions", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					model: TINY_MODEL,
-					max_tokens: 400,
-					temperature: 0.2,
-					// ling3.0-tiny thinks by default; the think pass ate budget and
-					// 8.6x'd latency (measured 10-06: 3.10s+empty content vs 0.36s
-					// with real content; retention canary 10/10 without thinking)
-					chat_template_kwargs: { enable_thinking: false },
-					messages: [{ role: "user", content: prompt }],
-				}),
-				signal: AbortSignal.timeout(180_000),
-			});
-			if (!tinyRes.ok) throw new Error(`sidecar HTTP ${tinyRes.status}`);
-			const tinyJson: any = await tinyRes.json();
-			ev({ c: "commit", ok: true, ms: Date.now() - t0, tokIn: tinyJson?.usage?.prompt_tokens, tokOut: tinyJson?.usage?.completion_tokens });
-			const commitMessage = tidyMessage(String(tinyJson?.choices?.[0]?.message?.content ?? "").replace(/^```[a-z]*\n?|```$/gm, ""));
+			const commitMessage = message ? message.trim() : await generate(prompt, t0);
 			if (!commitMessage) return notify("Empty commit message generated; aborting.", "warning");
 
 			// exclude pathspecs that name a gitignored path make `git add` exit 1, so only exclude un-ignored ones
@@ -118,9 +136,9 @@ ${fullDiff}
 			if (cCode !== 0) return notify(`git commit failed: ${cErr || cOut}`, "error");
 			return notify(`Committed: ${commitMessage.split("\n")[0]}`, "info");
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			ev({ c: "commit", ok: false, ms: Date.now() - t0, why: message.slice(0, 120) });
-			return notify(`commit failed: ${message}`, "error");
+			const why = error instanceof Error ? error.message : String(error);
+			ev({ c: "commit", ok: false, ms: Date.now() - t0, why: why.slice(0, 120) });
+			return notify(`commit failed: ${why}`, "error");
 		}
 	};
 
@@ -134,7 +152,7 @@ ${fullDiff}
 	// goes through pi.exec, which tool_call hooks never see.
 	pi.on("tool_call", async (event: any) => {
 		if (event?.toolName !== "bash" || !isDirectCommit(String(event?.input?.command ?? ""))) return;
-		return { block: true, reason: "Commits go through the commit tool (ling-tiny writes the message). Call the commit tool (or /commit) instead of git commit." };
+		return { block: true, reason: "Commits go through the commit tool (ling-tiny writes the message). Call the commit tool (or /commit) instead of git commit; pass `message` to use an exact message." };
 	});
 
 	// agent-invocable tool: agents reach for tools, not slash commands (3 /commit misses measured)
@@ -146,10 +164,11 @@ ${fullDiff}
 			type: "object",
 			properties: {
 				extra: { type: "string", description: "Optional extra instructions for the commit message" },
+				message: { type: "string", description: "Exact commit message to use verbatim (skips the sidecar). Only when the user dictated the message." },
 			},
 		},
-		execute: async (_callId: string, args: { extra?: string }, ctx: any) => {
-			const outcome = await runCommit((args?.extra ?? "").trim(), ctx);
+		execute: async (_callId: string, args: { extra?: string; message?: string }, ctx: any) => {
+			const outcome = await runCommit((args?.extra ?? "").trim(), ctx, args?.message ?? "");
 			return { content: [{ type: "text", text: outcome }] };
 		},
 	});
