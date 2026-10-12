@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Two leftovers from the retired NPU search. `bench/harness-ab.sh` still asked pi for the
+  `codebase_search` tool (deleted in v1.1) and its usage line still said `<repo-with-.rag>`; it
+  now runs `mcp__semble__search`. And the upgrade acceptance battery timed a `/v1/rerank` call to
+  the idle reranker, so trimming `HALOGEN_NPU_MODELS` the way the README suggests would have
+  failed the battery and rolled back every upgrade. `bench/check-fixes.sh` check [9] covers both.
+
 ## 1.2 - 2026-10-12
 
 ### Docs

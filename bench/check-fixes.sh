@@ -63,4 +63,11 @@ grep -q -- '-b $UB_TINY -ub $UB_TINY --jinja' setup.sh \
   && ok "ubatch baked into unit+spawn; reserveTokens guard; maxTokens bound = documented cap" \
   || bad "ubatch/reserve/maxTokens guards were removed"
 
+# [9] the NPU retrieval pipeline stays dead: no shipped runner asks pi for the removed
+# codebase_search tool, and the upgrade battery must not gate on the idle reranker
+! grep -rq --include='*.sh' --include='*.ts' codebase_search setup.sh server scripts extensions bench/harness-ab.sh \
+  && ! grep -q 't("/v1/rerank"' scripts/upgrade-halogen.sh \
+  && ok "no codebase_search in shipped runners; upgrade battery free of the idle reranker" \
+  || bad "retired NPU search crept back into a runner or the upgrade gate"
+
 [ "$FAIL" = 0 ] && echo "check-fixes: all checks pass" || { echo "check-fixes: FAILURES above"; exit 1; }

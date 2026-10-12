@@ -87,7 +87,8 @@ def t(path, payload):
     s=time.time(); urllib.request.urlopen(r,timeout=30).read(); return time.time()-s
 for _ in range(2): t("/v1/embeddings", {"model":"qwen3-embedding-0.6b","input":["warmup"]})
 res=[t("/v1/embeddings", {"model":"qwen3-embedding-0.6b","input":["x"]}),
-     t("/v1/rerank", {"model":"qwen3-reranker-0.6b","query":"q","documents":["a","b"]}),
+     # no /v1/rerank probe: nothing calls the reranker since search moved to semble, so a
+     # trimmed HALOGEN_NPU_MODELS must not be able to fail the battery
      t("/v1/moderations", {"model":"qwen3guard-gen-0.6b","input":"warmup message text"})]
 print("      " + " ".join(f"{x*1000:.0f}ms" for x in res))
 assert max(res) < 1.0, f"NPU call over 1s: {res}"

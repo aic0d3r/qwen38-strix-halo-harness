@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # One-command harness A/B: baseline vs (interrupt + resume) on the standard
 # survey task. Re-run after engine/extension updates; ~25 min.
-#   bench/harness-ab.sh <repo-with-.rag> [baseline-only|resume-only]
+#   bench/harness-ab.sh <repo-dir> [baseline-only|resume-only]
 set -u
-REPO="${1:?usage: harness-ab.sh <repo-with-.rag> [phase]}"
+REPO="${1:?usage: harness-ab.sh <repo-dir> [phase]}"
 PHASE="${2:-all}"
 TASK_FILE="$(dirname "$0")/harness-ab-task.txt"
 OUT=/tmp/harness-ab-$$; mkdir -p $OUT
@@ -36,12 +36,12 @@ resume(){
   set_repo
   local t0=$(date +%s); timeout 600 pi -p --no-skills --no-context-files \
     --provider halogen --model halogen-qwen3.8-flash-next --thinking medium \
-    --tools commit,codebase_search,triage,bash,read,write \
+    --tools commit,mcp__semble__search,triage,bash,read,write \
     "$(cat $TASK_FILE)" > $OUT/a1.txt 2>&1; local t1=$(date +%s)
   pkill -9 -f 'p[i] -p' 2>/dev/null; sleep 2
   local r0=$(date +%s); timeout 1800 pi -p --no-skills --no-context-files \
     --provider halogen --model halogen-qwen3.8-flash-next --thinking medium \
-    --tools commit,codebase_search,triage,bash,read,write \
+    --tools commit,mcp__semble__search,triage,bash,read,write \
     "Continue." > $OUT/a2.txt 2>&1; local r1=$(date +%s)
   echo "resume: kill@600s? a1=$((t1-t0))s + a2=$((r1-r0))s = total $(( (t1-t0)+(r1-r0) ))s report=$(wc -c < "$REPO"/BIG_TEST_REPORT.md 2>/dev/null || echo 0)B"
 }
