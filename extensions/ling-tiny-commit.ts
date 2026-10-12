@@ -16,6 +16,33 @@ const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "ha
 // crash-recovery checkpoint (progress-tracker) must never ride along in a commit
 const PROGRESS = (process.env.PI_PROGRESS_FILE || "PROGRESS.md").split("/").pop()!;
 
+// shortcut: quoted text is ignored, so `bash -c "git commit"` slips through; upgrade to a shell parser if agents start doing that
+const QUOTED = /<<-?\s*['"]?(\w+)['"]?[^\n]*\n[\s\S]*?\n\s*\1\b|'[^']*'|"(?:\\.|[^"\\])*"/g;
+/** true when a bash command runs `git commit` itself (not when it merely mentions it in a string/heredoc) */
+export const isDirectCommit = (cmd: string): boolean => {
+	const bare = cmd.replace(QUOTED, "");
+	// subcommand position only: `git log -- src/commit.ts` must not be blocked
+	if (!/\bgit\s+(?:-[cC]\s+\S+\s+)*commit\b/.test(bare)) return false;
+	// --amend --no-edit / -C HEAD reuse an existing message, so there is none to write
+	return !/commit[^|;&]*--amend[^|;&]*(--no-edit|-C\s+HEAD)/.test(bare);
+};
+
+/** tiny sometimes returns one long line: split it into a <=72-char subject + body */
+export const tidyMessage = (msg: string): string => {
+	const [first, ...rest] = msg.trim().split("\n");
+	let subject = first.trim(), body = rest.join("\n").trim();
+	if (subject.length > 72) {
+		// first sentence if it fits, else the last word break before 72
+		const cut = subject.slice(0, 73).search(/[.!?]\s/) + 1 || subject.lastIndexOf(" ", 72);
+		if (cut > 0) {
+			body = [subject.slice(cut).trim(), body].filter(Boolean).join("\n\n");
+			subject = subject.slice(0, cut).trim();
+		}
+	}
+	subject = subject.replace(/\.$/, "");
+	return body ? `${subject}\n\n${body}` : subject;
+};
+
 export default function (pi: ExtensionAPI) {
 	// returns the outcome so the tool caller (the model) sees failures, not just the UI
 	const runCommit = async (extra: string, ctx: any): Promise<string> => {
@@ -76,10 +103,7 @@ ${fullDiff}
 			if (!tinyRes.ok) throw new Error(`sidecar HTTP ${tinyRes.status}`);
 			const tinyJson: any = await tinyRes.json();
 			ev({ c: "commit", ok: true, ms: Date.now() - t0, tokIn: tinyJson?.usage?.prompt_tokens, tokOut: tinyJson?.usage?.completion_tokens });
-			const commitMessage = String(tinyJson?.choices?.[0]?.message?.content ?? "")
-				.trim()
-				.replace(/^```[a-z]*\n?|```$/gm, "")
-				.trim();
+			const commitMessage = tidyMessage(String(tinyJson?.choices?.[0]?.message?.content ?? "").replace(/^```[a-z]*\n?|```$/gm, ""));
 			if (!commitMessage) return notify("Empty commit message generated; aborting.", "warning");
 
 			// exclude pathspecs that name a gitignored path make `git add` exit 1, so only exclude un-ignored ones
@@ -107,14 +131,9 @@ ${fullDiff}
 
 	// enforce "tiny always writes the message": block direct git commits from tool
 	// calls so the message can only come from runCommit. runCommit's own git call
-	// goes through pi.exec, which tool_call hooks never see. --amend --no-edit /
-	// -C HEAD are allowed: they reuse an existing message, so there is none to write.
+	// goes through pi.exec, which tool_call hooks never see.
 	pi.on("tool_call", async (event: any) => {
-		if (event?.toolName !== "bash") return;
-		const cmd: string = String(event?.input?.command ?? "");
-		// subcommand position only: `git log -- src/commit.ts` must not be blocked
-		if (!/\bgit\s+(?:-[cC]\s+\S+\s+)*commit\b/.test(cmd)) return;
-		if (/commit[^|;&]*--amend[^|;&]*(--no-edit|-C\s+HEAD)/.test(cmd)) return;
+		if (event?.toolName !== "bash" || !isDirectCommit(String(event?.input?.command ?? ""))) return;
 		return { block: true, reason: "Commits go through the commit tool (ling-tiny writes the message). Call the commit tool (or /commit) instead of git commit." };
 	});
 

@@ -42,17 +42,20 @@ console.log("  ok: cap in "+f+" (CAP="+CAP+" fits 131k window)")' || FAIL=1
 done
 
 
-# [7] git-commit guard blocks direct commits, allows message-free amends (regexes read from the real file)
-$JS -e 'const src=require("fs").readFileSync("extensions/ling-tiny-commit.ts","utf8");
-const re=[...src.matchAll(/if \((!?)\/(.+?)\/\.test\(cmd\)\) return;/g)];
-if(re.length!==2) throw new Error("commit guard changed shape - update this check");
-const BLOCK=new RegExp(re[0][2]), ALLOW=new RegExp(re[1][2]);
-const t=(c)=>BLOCK.test(c)&&!ALLOW.test(c);
-for(const c of ["git commit -m x","git add -A && git commit -m x","git commit --amend -m y","cd r; git commit"])
-  if(!t(c)) throw new Error("should block: "+c);
-for(const c of ["git commit --amend --no-edit","git commit --amend -C HEAD","echo committing history","git log --oneline","git log -- src/commit.ts","git log --grep commit"])
-  if(t(c)) throw new Error("should allow: "+c);
-console.log("  ok: git-commit guard blocks direct commits, allows --amend --no-edit")' || FAIL=1
+# [7] git-commit guard + message tidy (the real exported functions; bun imports .ts directly)
+if command -v bun >/dev/null; then bun -e 'import { isDirectCommit as t, tidyMessage as m } from "./extensions/ling-tiny-commit.ts";
+for (const c of ["git commit -m x", "git add -A && git commit -m x", "git commit --amend -m y", "cd r; git commit", "git commit -m \"fix: it\"", "git -C repo commit -am x"])
+  if (!t(c)) throw new Error("should block: " + c);
+for (const c of ["git commit --amend --no-edit", "git commit --amend -C HEAD", "echo committing history", "git log --oneline", "git log -- src/commit.ts", "git log --grep commit",
+  "python3 -c \"print(\x27Write a git commit message\x27)\"", "grep -n \"git commit\" README.md", "python3 - <<\x27EOF\x27\nmsg = \"git commit message\"\nEOF"])
+  if (t(c)) throw new Error("should allow: " + c);
+const long = "Optimize diff generation by prefetching stat and reducing context lines. Reduce max_tokens to 400.";
+const cases = [["Add X\n\nWhy.", "Add X\n\nWhy."], ["Fix the thing.", "Fix the thing"],
+  [long, "Optimize diff generation by prefetching stat and reducing context lines\n\nReduce max_tokens to 400."]];
+for (const [i, want] of cases) if (m(i) !== want) throw new Error("tidyMessage(" + JSON.stringify(i) + ") = " + JSON.stringify(m(i)));
+const w = m("word ".repeat(30).trim()).split("\n")[0]; if (w.length > 72) throw new Error("no-sentence subject still " + w.length);
+console.log("  ok: git-commit guard ignores quoted mentions; long one-line messages split into subject+body")' || FAIL=1
+else echo "  skip: commit guard check needs bun"; fi
 
 # [8] sidecar launchers all carry the tuned batch size; launcher respects /tune reserveTokens
 grep -q -- '-b $UB_TINY -ub $UB_TINY --jinja' setup.sh \
