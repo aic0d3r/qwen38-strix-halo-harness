@@ -1,4 +1,7 @@
-# Pi on Strix Halo — a local coding agent for the Ryzen AI Max: 125B on the GPU, four small models on the NPU, cloud optional
+# Local AI Coding Agent for AMD Strix Halo (Ryzen AI Max+ 395)
+
+**Qwen3.8 125B on the Radeon 8060S iGPU, four small models on the NPU, cloud optional** — a
+self-hosted [pi](https://github.com/earendil-works/pi) coding-agent harness built on llama.cpp.
 
 <div align="center">
 
