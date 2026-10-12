@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2 - 2026-10-12
 
 ### Docs
 - README is now a landing page in the house format (badges, dot-separated nav,
@@ -14,8 +14,8 @@
 - Title no longer claims "zero cloud" — switching to a cloud model mid-session is a supported
   shape, so the intro states the local-by-default + cloud-optional split and links the measured
   hybrid. Badge fix: the repo has tags but no GitHub *Releases*, so `github/v/release` rendered
-  "no releases or repo not found"; the version badge now uses `github/v/tag` (renders v1.1) and
-  the misleading `network: zero` badge became `hardware: Strix Halo` + `cloud: optional`.
+  "no releases or repo not found"; the version badge now uses `github/v/tag` (renders the latest
+  tag) and the misleading `network: zero` badge became `hardware: Strix Halo` + `cloud: optional`.
 - Stale NPU claims fixed: the decider tool is `triage` (it was never called `decide`), codebase
   search no longer uses the NPU (semble does, on CPU), the reranker is idle since v1.1 and can be
   dropped from `HALOGEN_NPU_MODELS`, NPU dirs are lowercase `npu/`, and the GPU+NPU fabric-clock
@@ -26,12 +26,18 @@
 - `extensions/README.md`: install points at this repo (it said `neon-ladder`, the benchmark
   repo), the removed `--index` hint is gone, and the NPU models are listed with the tool each one
   serves.
+- `docs/BENCHMARKS.md` gained the eighth local-vs-cloud run (Flash-Next at max: 8m31s,
+  source-level fix, PR refound) and the wall-clock finding — a matched-harness tie, with the
+  fast-but-shallow runs called out — plus a per-run chart.
 
 ### Added
 - Speed visibility: `scripts/halogen-top.sh` (live prefill/decode dashboard from `/metrics`
   deltas, with a history CSV) and `scripts/session-audit.sh --perf`, which reports
   prefill/decode throughput for one session's window from the server's `serve_api:` log lines
   plus a `/metrics` diff. Parser self-test: `scripts/halogen-perf.py --selftest`.
+- Halogen image pin moved to **0.18.0**, and `--halogen-upgrade latest` resolves the tag up front
+  and exits early when already pinned. An upgrade refreshes the NPU model files before the restart
+  (0.18 added the embedding `u10.elf`), keeps one rollback copy, and prints how to restore it.
 
 ### Fixed
 - `scripts/session-audit.sh` passed its session-start time to `docker logs --since` as a naive
@@ -45,6 +51,18 @@
   which supports exactly low/medium/xhigh. The llama.cpp-path example carries the
   same map, and there no wrapper folds the alias, so the real tier name is the
   safe form
+- Post-release audit findings (each covered by `bench/check-fixes.sh`): `dedup_scan` returned a
+  bare string where pi expects a content block, so the tool result came back empty and pi exited;
+  `auto-guard` could no-op instead of failing open; `setup.sh` continued after an aborted model
+  download, mis-parsed a trailing `--halogen` argument and never checked the `vm-compact` timer;
+  `--uninstall` left the wrong systemd units behind; `/tune reset` did not restore the default; a
+  failed `--halogen-upgrade` did not roll its pin back; the sidecar message path reported success
+  on a failed run; prompt templates installed to the wrong path; and `--doctor` reported halogen
+  as down on a `--no-halogen` install. `extensions/optional/` and `scripts/hw-telemetry.sh` were
+  removed as measured no-ops.
+- The sidecar message tool staged the crash-recovery checkpoint and `.progress-log/` into every
+  commit; pathspecs now exclude those paths only when they are not already gitignored (naming an
+  ignored path makes `git add` exit 1).
 
 ## 1.1 - 2026-10-10
 
