@@ -29,7 +29,7 @@ MODELS_JSON="$PI_HOME/agent/models.json"
 TINY_PORT=8090; HAL_PORT=8731
 # sidecar batch size shared with /tune and start-ling-tiny.sh; without this the
 # unit and first-boot spawn ran llama.cpp's 512 default, 8x below the measured 4096
-UB_TINY=$(tr -dc '0-9' < "$HOME/.pi/agent/harness-ubatch" 2>/dev/null); UB_TINY=${UB_TINY:-4096}
+UB_TINY=$(tr -dc '0-9' < "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/harness-ubatch" 2>/dev/null); UB_TINY=${UB_TINY:-4096}
 ok(){ printf '  \033[32m✓\033[0m %s\n' "$1"; }
 warn(){ printf '  \033[33m!\033[0m %s\n' "$1"; }
 fail(){ printf '  \033[31m✗\033[0m %s\n' "$1"; }
@@ -115,7 +115,7 @@ if [ "$DOCTOR" = 1 ]; then
   [ -f "$REPO/start-halogen.sh" ]   && ok "start-halogen.sh ready" || warn "no start-halogen.sh yet (written on first --halogen launch)"
   host_checks
   if [ -f "$EXT_DIR/npu-retrieval.ts" ]; then
-    R=$(pi -p --no-skills --no-context-files --provider halogen --model halogen-qwen3.8-flash-next --thinking low "Reply with exactly: OK" 2>/dev/null | grep -c 'OK')
+    R=$(timeout 120 pi -p --no-skills --no-context-files --provider halogen --model halogen-qwen3.8-flash-next --thinking low "Reply with exactly: OK" 2>/dev/null | grep -c 'OK')
     [ "$R" -ge 1 ] && ok "ready check: model answered" || fail "ready check: no reply from halogen"
   fi
   exit 0
@@ -151,12 +151,13 @@ if [ "$NO_HALOGEN" = 1 ]; then
   ok "point pi at your own provider, or at a remote halogen appliance by setting its baseUrl in models.json"
 else
 if ! command -v python3 >/dev/null; then fail "python3 required for models.json merge — install python3 and re-run"; else
-python3 - "$MODELS_JSON" <<'PY'
+if python3 - "$MODELS_JSON" <<'PY'
 import json, sys, os
 path = sys.argv[1]
 os.makedirs(os.path.dirname(path), exist_ok=True)
+# only a missing file starts empty: a parse error must stop here, not overwrite the user's providers
 try: m = json.load(open(path))
-except Exception: m = {}
+except FileNotFoundError: m = {}
 m.setdefault("providers", {})
 def model(id_, name, ctx):
     return {"id": id_, "name": name, "reasoning": True, "contextWindow": ctx,
@@ -202,7 +203,7 @@ json.dump(m, open(path, "w"), indent=1)
 # startup defaults so plain `pi` opens the TUI on halogen (only if the user hasn't chosen)
 sp = os.path.join(os.path.dirname(path), "settings.json")
 try: s = json.load(open(sp))
-except Exception: s = {}
+except FileNotFoundError: s = {}
 changed = False
 for k, v in (("defaultProvider", "halogen"), ("defaultModel", "halogen-qwen3.8-flash-next"), ("defaultThinkingLevel", "medium")):
     if k not in s: s[k] = v; changed = True
@@ -219,7 +220,8 @@ if any("pi-llama-cpp" in p for p in pkgs):
 if changed:
     json.dump(s, open(sp, "w"), indent=2); print("  pi startup defaults -> halogen (existing user overrides untouched)")
 PY
-ok "providers configured in $MODELS_JSON"
+then ok "providers configured in $MODELS_JSON"
+else fail "could not parse $MODELS_JSON or settings.json - fix the JSON and re-run (left untouched)"; fi
 fi
 fi
 
@@ -324,7 +326,9 @@ else
       WANT=$(curl -sf -m 15 "https://huggingface.co/api/models/inclusionAI/Ling-3.0-tiny-GGUF/tree/main" \
         | python3 -c "import json,sys; print(next((s['lfs']['oid'] for s in json.load(sys.stdin) if s['path']=='Ling-3.0-tiny-Q4_K_M.gguf'),''))" 2>/dev/null)
       GOT=$(sha256sum "$GGUF" | cut -d' ' -f1)
-      if [ -n "$WANT" ] && [ "$WANT" != "$GOT" ]; then
+      if [ -z "$WANT" ]; then
+        warn "checksum unavailable (Hugging Face API unreachable) - download NOT verified"
+      elif [ "$WANT" != "$GOT" ]; then
         fail "sha256 MISMATCH (want $WANT, got $GOT) - deleting bad file, fetch manually"
         rm -f "$GGUF"; GGUF=""
       else ok "sha256 verified"; fi
@@ -482,16 +486,16 @@ elif [ -n "$HALOGEN_CKPT" ]; then
     if [ -z "$HALOGEN_CKPT" ] || [ ! -f "$HALOGEN_CKPT" ]; then
       fail "no .hgn checkpoint found (looked in ., /models, ~/models, ~/Downloads, LLMBench/models) - pass it: ./setup.sh --halogen /path/to/checkpoint.hgn"
     else
-      PIN=$(grep -oE 'HALOGEN_IMAGE_TAG:-[0-9.a-z]+' "$REPO/server/start-halogen.sh" | head -1 | cut -d- -f2)
-      docker image inspect "ghcr.io/peonist-ai/halogen-flash-server:$PIN" >/dev/null 2>&1 \
-        || { echo "  pulling halogen image (first run, ~GB) ..."; docker pull "ghcr.io/peonist-ai/halogen-flash-server:$PIN"; }
+      IMG=$(bash "$REPO/server/start-halogen.sh" --print-image)
+      docker image inspect "$IMG" >/dev/null 2>&1 \
+        || { echo "  pulling halogen image (first run, ~GB) ..."; docker pull "$IMG"; }
       W=$(dirname "$HALOGEN_CKPT")
       RENDER_GID=$(getent group render | cut -d: -f3); VIDEO_GID=$(getent group video | cut -d: -f3)
       echo "  launching halogen ($HALOGEN_CKPT, cache ON) ..."
       # also drop a one-command restart script (halogen is NOT auto-started at boot on purpose: full-ctx
       # launches need a fresh allocator - see README. 65k/2-slot is the safe default below.)
-      install -m 755 "$REPO/server/start-halogen.sh" "$REPO/start-halogen.sh"
-      chmod +x "$REPO/start-halogen.sh"; ok "wrote $REPO/start-halogen.sh (restart any time)"
+      # a link, not a copy: a copy kept the old image pin after upgrade-halogen.sh moved it
+      ln -sfn server/start-halogen.sh "$REPO/start-halogen.sh"; ok "linked $REPO/start-halogen.sh (restart any time)"
       setsid nohup "$REPO/start-halogen.sh" > "$REPO/halogen.log" 2>&1 < /dev/null &
       for i in $(seq 1 30); do sleep 10; hal_up && { ok "halogen up (~${i}0s)"; break; }; done
       hal_up || fail "not healthy after 5 min - check $REPO/halogen.log"

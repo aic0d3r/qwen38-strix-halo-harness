@@ -50,7 +50,7 @@ const BLOCK=new RegExp(re[0][2]), ALLOW=new RegExp(re[1][2]);
 const t=(c)=>BLOCK.test(c)&&!ALLOW.test(c);
 for(const c of ["git commit -m x","git add -A && git commit -m x","git commit --amend -m y","cd r; git commit"])
   if(!t(c)) throw new Error("should block: "+c);
-for(const c of ["git commit --amend --no-edit","git commit --amend -C HEAD","echo committing history","git log --oneline"])
+for(const c of ["git commit --amend --no-edit","git commit --amend -C HEAD","echo committing history","git log --oneline","git log -- src/commit.ts","git log --grep commit"])
   if(t(c)) throw new Error("should allow: "+c);
 console.log("  ok: git-commit guard blocks direct commits, allows --amend --no-edit")' || FAIL=1
 
@@ -69,5 +69,20 @@ grep -q -- '-b $UB_TINY -ub $UB_TINY --jinja' setup.sh \
   && ! grep -q 't("/v1/rerank"' scripts/upgrade-halogen.sh \
   && ok "no codebase_search in shipped runners; upgrade battery free of the idle reranker" \
   || bad "retired NPU search crept back into a runner or the upgrade gate"
+
+# [10] crash-recovery resume gate (the real exported function; bun imports .ts directly)
+if command -v bun >/dev/null; then bun -e 'import { isContinuation as c } from "./extensions/progress-tracker.ts";
+const cases = [["continue", true], ["Continue where we left off. It crashed mid-way through the migration; pick up from the last file and keep the same style.", true],
+  ["finish the login page", true], ["Build a REST API for invoices with pagination, auth middleware, and integration tests; we will continue the frontend later once that is done.", false], ["hi", false]];
+for (const [t, want] of cases) if (c(t) !== want) throw new Error(`isContinuation(${JSON.stringify(t.slice(0, 40))}) != ${want}`);
+console.log("  ok: resume gate (long continue keeps the note, long new task drops it)")' || FAIL=1
+else echo "  skip: resume gate check needs bun"; fi
+
+# [11] launcher reserveTokens sync (the real heredoc): a 262k-day /tune value must not survive a 65k day
+R=$(T2=$(mktemp -d); echo '{"compaction":{"reserveTokens":60144}}' > "$T2/settings.json"; echo '{}' > "$T2/models.json"
+  awk '/python3 - "\$CTX" <<.PY./{f=1;next} f&&/^PY$/{exit} f' server/start-halogen.sh > "$T2/s.py"
+  PI_CODING_AGENT_DIR="$T2" python3 "$T2/s.py" 65536 >/dev/null; python3 -c "import json;print(json.load(open('$T2/settings.json'))['compaction']['reserveTokens'])"; rm -rf "$T2")
+[ "$R" = 10240 ] && ok "launcher resets a reserve that no longer fits the window (60144 -> 10240 at 65k)" \
+  || bad "launcher kept reserve $R on a 65k window"
 
 [ "$FAIL" = 0 ] && echo "check-fixes: all checks pass" || { echo "check-fixes: FAILURES above"; exit 1; }

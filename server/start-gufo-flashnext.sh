@@ -33,6 +33,6 @@ exec docker run --rm -i \
     --speculative mtp \
     --mtp-model /models/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf \
     --think auto \
-    -c 65536 -j 2 \
+    -c "$CTX" -j 2 \
     --log-progress \
     -i 0.0.0.0 -p $PORT

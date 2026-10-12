@@ -40,7 +40,7 @@ MMPROJ_GGUF=${MMPROJ_GGUF:-mmproj-F16.gguf}   # vision: same repo as the target;
 # ~25-45k for identical builds without it). Opt in with REASONING_PRESERVE=1 if your
 # workload benefits from cross-turn reasoning continuity.
 REASONING_PRESERVE_FLAGS=${REASONING_PRESERVE:+--reasoning-preserve}
-UBBATCH=${UBBATCH:-$(cat "$HOME/.pi/agent/harness-ubatch" 2>/dev/null || echo 4096)}
+UBBATCH=${UBBATCH:-$(cat "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/harness-ubatch" 2>/dev/null || echo 4096)}
 DRIVER_DIR=${DRIVER_DIR:-}   # optional: dir with radeon_icd.x86_64.json + bundled RADV
 
 if [ -n "$DRIVER_DIR" ]; then

@@ -13,8 +13,16 @@ import * as os from "node:os";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const PROGRESS_FILE = process.env.PI_PROGRESS_FILE || "PROGRESS.md";
-const HOME = os.homedir();
+// pi's own config-dir rule (kept inline so bench/check-fixes.sh can import this file outside pi)
+const AGENT_DIR = process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), ".pi", "agent");
 const WRITE_INTERVAL = 5;
+
+// a continuation resumes the stored task: short prompts naming one, or any prompt that
+// STARTS with one ("Continue where we left off. <long explanation>" used to drop the note)
+export function isContinuation(t: string): boolean {
+	if (/^(continue|finish|keep going|resume|carry on)\b/i.test(t)) return true;
+	return t.length > 0 && t.length < 120 && /\b(continue|finish|keep going|resume|carry on)\b/i.test(t);
+}
 
 function promptText(p: any): string {
 	if (typeof p === "string") return p;
@@ -50,13 +58,13 @@ let responseCount = 0;
 		// task label AND get an irrelevant resume note). Only continuation-like
 		// prompts resume the stored task.
 		const t = promptText(event?.prompt).trim();
-		const isContinuation = t.length > 0 && t.length < 120 && /\b(continue|finish|keep going|resume|carry on)\b/i.test(t);
+		const cont = isContinuation(t);
 		// v6.3.1: a substantial prompt relabels the task but the note ALWAYS
 		// injects (marked data-not-instructions). v6.1 dropped the note on
 		// question-style resumes ("what were we doing?") - a real resume pattern.
 		// only SUBSTANTIAL prompts relabel the task (questions like "what were we
 		// doing?" must not overwrite it - that cannibalized the note in testing)
-		if (t && t.length >= 120 && !isContinuation && taskDescription !== t.slice(0, 2000)) {
+		if (t && t.length >= 120 && !cont && taskDescription !== t.slice(0, 2000)) {
 			taskDescription = t.slice(0, 2000);
 		} else if (!taskDescription && t) {
 			taskDescription = t.slice(0, 2000);
@@ -72,7 +80,7 @@ let responseCount = 0;
 			// whole session with it (same criterion as the task-relabel logic above).
 			// short prompts (greetings, questions) and continuation-like prompts get
 			// the note; it is context-shaped, so a false positive can't hijack.
-			if (t.length >= 120 && !isContinuation) {
+			if (t.length >= 120 && !cont) {
 				resumeNote = null;
 				if (DEBUG) console.log(`[progress-tracker] substantial new task - resume note dropped`);
 			} else if (!/^\s*(hi|hey|hello|yo|sup|good\s+(?:morning|afternoon|evening))(?:\s+\w+)?\s*[!.]*\s*$/i.test(t)) {
@@ -84,39 +92,32 @@ let responseCount = 0;
 			injected = true;
 			resumeNote = null;
 			if (DEBUG) console.log(`[progress-tracker] resume note returned via systemPrompt (${note.length} chars)`);
-			await writeProgress();
+			await writeProgress(ctx);
 			return { systemPrompt: `${event?.systemPrompt ?? ""}\n\n${note}` };
 			}
 		}
 		// v6.3: checkpoint at agent start - a kill during response 1 still leaves the task on disk
-		await writeProgress();
+		await writeProgress(ctx);
 	});
 
-	function lastAssistantText(): string {
+	// this session's own branch: the newest .jsonl in the folder belonged to whichever
+	// session in this directory wrote last, and re-reading it cost a full transcript parse
+	function lastAssistantText(ctx: any): string {
 		try {
-			const slug = "--" + process.cwd().replace(/\//g, "-").replace(/^-+/, "") + "--";
-			const dir = path.join(os.homedir(), ".pi", "agent", "sessions", slug);
-			const files = fs.readdirSync(dir).filter((f) => f.endsWith(".jsonl"));
-			if (!files.length) return "";
-			const newest = files.map((f) => ({ f, m: fs.statSync(path.join(dir, f)).mtimeMs }))
-				.sort((a, b) => b.m - a.m)[0].f;
-			const lines = fs.readFileSync(path.join(dir, newest), "utf8").trim().split("\n");
-			for (let i = lines.length - 1; i >= 0; i--) {
-				try {
-					const e = JSON.parse(lines[i]);
-					const m = e?.message;
-					if (e?.type === "message" && m?.role === "assistant") {
-						for (const b of m.content || []) {
-							if (b?.type === "text" && b.text?.trim()) return b.text.trim().slice(0, 1200);
-						}
+			const entries: any[] = ctx?.sessionManager?.getBranch?.() ?? [];
+			for (let i = entries.length - 1; i >= 0; i--) {
+				const m = entries[i]?.message;
+				if (entries[i]?.type === "message" && m?.role === "assistant") {
+					for (const b of m.content || []) {
+						if (b?.type === "text" && b.text?.trim()) return b.text.trim().slice(0, 1200);
 					}
-				} catch { /* unparsable transcript line */ }
+				}
 			}
-		} catch { /* no session dir */ }
+		} catch { /* no session manager */ }
 		return "";
 	}
 
-	async function writeProgress() {
+	async function writeProgress(ctx: any) {
 		const cwd = process.cwd();
 		const { code, stdout } = await pi.exec("git", ["diff", "--stat"], { cwd });
 		// diff --stat only shows tracked files: a session that only creates new
@@ -128,13 +129,13 @@ let responseCount = 0;
 		const { code: lc, stdout: ls } = await pi.exec("git", ["log", "--oneline", "-3"], { cwd });
 		const recentCommits = lc === 0 ? ls.trim() : "";
 		const taskLine = (taskDescription || "(unspecified)").replace(/\n+/g, " ").slice(0, 2000);
-		const lastNote = lastAssistantText();
+		const lastNote = lastAssistantText(ctx);
 		const entry = `# Session Progress\n\n**Task:** ${taskLine}\n**Last updated:** ${new Date().toISOString()}\n**Responses:** ${responseCount}\n\n## Last state (assistant note)\n\n${lastNote || "(none yet)"}\n\n## Files modified\n\n\`\`\`\n${diffStat}\n\`\`\`\n\n## Recent commits\n\n\`\`\`\n${recentCommits}\n\`\`\`\n`;
 		try {
 			fs.writeFileSync(path.join(cwd, PROGRESS_FILE), entry);
 			// HUD: machine-readable per-checkpoint stats (tail -f it)
 			try {
-				fs.appendFileSync(path.join(HOME, ".pi", "agent", "hud.log"),
+				fs.appendFileSync(path.join(AGENT_DIR, "hud.log"),
 					`${new Date().toISOString()} responses=${responseCount} task=${(taskDescription || "").slice(0, 60).replace(/\n/g, " ")}\n`);
 			} catch {}
 			if (DEBUG) console.log(`[progress-tracker] wrote ${PROGRESS_FILE} at response ${responseCount}`);
@@ -143,10 +144,10 @@ let responseCount = 0;
 
 	pi.on("after_provider_response", async (event: any, ctx: any) => {
 		responseCount++;
-		if (responseCount === 1 || responseCount % WRITE_INTERVAL === 0) await writeProgress();
+		if (responseCount === 1 || responseCount % WRITE_INTERVAL === 0) await writeProgress(ctx);
 	});
 
 	pi.on("session_shutdown", async (event: any, ctx: any) => {
-		if (responseCount > 0) await writeProgress();
+		if (responseCount > 0) await writeProgress(ctx);
 	});
 }

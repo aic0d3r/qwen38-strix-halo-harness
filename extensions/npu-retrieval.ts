@@ -15,15 +15,13 @@
  */
 
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 
-const HOME = os.homedir();
 const BASE = process.env.PI_NPU_BASE || "http://127.0.0.1:8731";
 
 function log(line: string) {
-	try { fs.appendFileSync(path.join(HOME, ".pi/agent/npu-retrieval-usage.log"), line + "\n"); } catch {}
+	try { fs.appendFileSync(path.join(getAgentDir(), "npu-retrieval-usage.log"), line + "\n"); } catch {}
 }
 
 async function post(path: string, payload: any, timeout = 120000): Promise<any> {

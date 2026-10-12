@@ -53,7 +53,7 @@ export default function (pi: ExtensionAPI) {
 				content: [
 					{
 						type: "text" as const,
-						text: `You are the context-compaction service for a coding agent. Summarize this session into a handoff document for the next turn. Capture:${previousContext}
+						text: `You are the context-compaction service for a coding agent. Summarize this session into a handoff document for the next turn. Capture:
 
 1. Project goal and current state (what exists, what works)
 2. Every file created/modified with its purpose and key exports/functions
@@ -62,7 +62,7 @@ export default function (pi: ExtensionAPI) {
 5. Exact next steps for continuation
 6. Critical constraints and API details future turns must know
 
-Be precise with names and paths; do not invent anything not present in the session.
+Be precise with names and paths; do not invent anything not present in the session.${previousContext}
 
 <conversation>
 ${conversationText}

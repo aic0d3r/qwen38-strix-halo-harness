@@ -102,7 +102,8 @@ ${fullDiff}
 	pi.on("tool_call", async (event: any) => {
 		if (event?.toolName !== "bash") return;
 		const cmd: string = String(event?.input?.command ?? "");
-		if (!/\bgit\b[^|;&]*\bcommit\b/.test(cmd)) return;
+		// subcommand position only: `git log -- src/commit.ts` must not be blocked
+		if (!/\bgit\s+(?:-[cC]\s+\S+\s+)*commit\b/.test(cmd)) return;
 		if (/commit[^|;&]*--amend[^|;&]*(--no-edit|-C\s+HEAD)/.test(cmd)) return;
 		return { block: true, reason: "Commits go through the commit tool (ling-tiny writes the message). Call the commit tool (or /commit) instead of git commit." };
 	});

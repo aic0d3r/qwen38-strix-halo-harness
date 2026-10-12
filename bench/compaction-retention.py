@@ -4,14 +4,15 @@
 Builds a synthetic session (10 seeded rules + filler), summarizes it with the
 EXACT prompt text from extensions/ling-tiny-compaction.ts via the ling3.0-tiny
 sidecar, and scores which rules survive into the handoff summary.
-Usage: python3 bench/compaction-retention.py [--base http://127.0.0.1:8090] [--improved]
+Usage: python3 bench/compaction-retention.py [--base http://127.0.0.1:8090] [--improved] [--think]
 """
-import json, sys, re, urllib.request
+import json, os, sys, re, urllib.request
 
 BASE = "http://127.0.0.1:8090"
 if "--base" in sys.argv: BASE = sys.argv[sys.argv.index("--base")+1]
 IMPROVED = "--improved" in sys.argv
-NOTHINK = "--nothink" in sys.argv
+# production sends enable_thinking: false (models.json compat); --think measures the other arm
+NOTHINK = "--think" not in sys.argv
 
 RULES = [
     ("R1", r"public remote|fail-closed pre-push",  "Never push to the public remote; the fail-closed pre-push hook stays in place."),
@@ -43,20 +44,13 @@ parts.append("=== WORK LOG ===")
 for i in range(9): parts += [f"[exchange {i}: {r}: {c}]" for r, c in filler(i)]
 conversation = "\n".join(parts)
 
-prompt = f"""You are the context-compaction service for a coding agent. Summarize this session into a handoff document for the next turn. Capture:
-
-1. Project goal and current state (what exists, what works)
-2. Every file created/modified with its purpose and key exports/functions
-3. Bugs encountered and their resolutions
-4. Verification status: which checks passed, which failed
-5. Exact next steps for continuation
-6. Critical constraints and API details future turns must know
-
-Be precise with names and paths; do not invent anything not present in the session.
-
-<conversation>
-{conversation}
-</conversation>"""
+# the EXACT prompt: read from the extension, not a copy that drifts from it
+src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "extensions", "ling-tiny-compaction.ts")).read()
+tmpl = re.search(r"text: `(You are the context-compaction service[\s\S]*?</conversation>)`", src).group(1)
+# exercise the chained path (2nd+ compaction): an earlier summary rides along, as in production
+previous = "\n\nPrevious session summary for context:\nEarlier work: scaffolded internal/services and wired the deploy CLI; all tests passed."
+prompt = tmpl.replace("${previousContext}", previous).replace("${conversationText}", conversation)
+assert "${" not in prompt, "compaction prompt gained a new placeholder - update this canary"
 
 if IMPROVED:
     prompt = prompt.replace("6. Critical constraints and API details future turns must know",

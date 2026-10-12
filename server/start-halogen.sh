@@ -12,6 +12,11 @@ SLOTS="${HALOGEN_KV_SLOTS:-4}"
 # post-upgrade checks (see README "Upgrading halogen"). Floating :latest runs
 # untested behavior against a harness validated on specific versions.
 IMAGE_TAG="${HALOGEN_IMAGE_TAG:-0.18.0}"
+# tags can be re-pushed; the digest is the real pin. HALOGEN_IMAGE_DIGEST= (empty) runs the bare tag
+# (upgrade-halogen.sh does that to test a new tag, then rewrites both lines)
+IMAGE_DIGEST="${HALOGEN_IMAGE_DIGEST-sha256:de3b47d2e5f24f98a38ba5fb66b0075b0cd8a3219c38917c78fb4bbeb42b88d9}"
+IMAGE="ghcr.io/peonist-ai/halogen-flash-server:${IMAGE_TAG}${IMAGE_DIGEST:+@$IMAGE_DIGEST}"
+[ "${1:-}" = --print-image ] && { echo "$IMAGE"; exit 0; }
 
 # locate the main checkpoint at runtime (exclude ngram/vision/mtp/w4b sidecars)
 CKPT="${HALOGEN_CHECKPOINT:-}"
@@ -29,13 +34,13 @@ if [ -z "$CKPT" ] || [ ! -f "$CKPT" ]; then
 fi
 W=$(dirname "$CKPT")
 # vision tower is enabled by default (HALOGEN_VISION_TOWER=1; file must sit beside the checkpoint)
-if [ ! -f "$W/qwen38-flash-next-vision.hgn" ]; then
+VISION="${VISION:-1}"
+if [ "$VISION" = 1 ] && [ ! -f "$W/qwen38-flash-next-vision.hgn" ]; then
   echo "vision tower missing: $W/qwen38-flash-next-vision.hgn" >&2
   echo "download it from huggingface.co/peonist-ai/halogen-qwen3.8-flash-next (0.9 GB)," >&2
   echo "or launch with VISION=0 to run text-only" >&2
   exit 1
 fi
-VISION="${VISION:-1}"
 
 # pre-flight: contiguous 2MiB-equivalent units (order-9 x1, order-10 x2, ...).
 # counting only order-9 false-positives on kernels where free memory coalesces up.
@@ -77,8 +82,7 @@ python3 - "$CTX" <<'PY' 2>/dev/null || true
 import json, os, sys
 ctx = int(sys.argv[1])
 base = os.environ.get("PI_CODING_AGENT_DIR") or os.path.expanduser("~/.pi/agent")
-mp = os.path.join(os.path.dirname(base) if base.endswith("/agent") else base, "models.json")
-mp = mp if os.path.isfile(mp) else os.path.expanduser("~/.pi/agent/models.json")
+mp = os.path.join(base, "models.json")
 try:
     m = json.load(open(mp))
     for mod in m.get("providers", {}).get("halogen", {}).get("models", []):
@@ -90,7 +94,9 @@ try:
     s = json.load(open(sp))
     comp = s.setdefault("compaction", {})
     # only overwrite launcher-owned values; a /tune compactAt survives a restart
-    if comp.get("reserveTokens") in (None, 60000, 10240):
+    # ...unless it no longer fits this window: a 262k-day /tune value on a 65k day
+    # (e.g. 60144 from /tune reset) left ~5k of room and compacted every turn
+    if comp.get("reserveTokens") in (None, 60000, 10240) or comp["reserveTokens"] >= ctx // 2:
         comp["reserveTokens"] = 60000 if ctx > 65536 else 10240
     json.dump(s, open(sp, "w"), indent=2)
 except Exception: pass
@@ -113,4 +119,4 @@ exec docker run --rm -i \
   --group-add "${RENDER_GID:-44}" --group-add "${VIDEO_GID:-99}" \
   --security-opt seccomp=unconfined --ipc=host --ulimit memlock=-1:-1 \
   -v "$W":/models:ro -p 127.0.0.1:8731:8731 \
-  ghcr.io/peonist-ai/halogen-flash-server:${IMAGE_TAG}
+  "$IMAGE"

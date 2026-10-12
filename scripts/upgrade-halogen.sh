@@ -61,7 +61,8 @@ echo "[2/6] restarting on $TAG"
 OLD_ID=$(docker ps -q --filter publish=8731)
 [ -n "$OLD_ID" ] && docker stop -t 30 "$OLD_ID" >/dev/null
 rm -f "$LOG"
-HALOGEN_IMAGE_TAG="$TAG" setsid nohup bash "$START" > "$LOG" 2>&1 < /dev/null &
+# empty digest: run the freshly pulled tag, not the old pinned digest
+HALOGEN_IMAGE_TAG="$TAG" HALOGEN_IMAGE_DIGEST= setsid nohup bash "$START" > "$LOG" 2>&1 < /dev/null &
 
 for i in $(seq 1 18); do
   sleep 20
@@ -123,6 +124,9 @@ S=$(timeout 120 pi -p --no-skills --no-context-files --provider halogen --model 
 echo "      pi answered, clean exit"
 
 echo "[6/6] updating pin $CUR -> $TAG"
-sed -i "s/HALOGEN_IMAGE_TAG:-$CUR/HALOGEN_IMAGE_TAG:-$TAG/" "$START"
-grep -oE 'HALOGEN_IMAGE_TAG:-[0-9.a-z]+' "$START" | head -1
+DIGEST=$(docker image inspect -f '{{index .RepoDigests 0}}' "$IMG:$TAG" 2>/dev/null | cut -d@ -f2)
+case "$DIGEST" in sha256:*) ;; *) echo "FAIL: no registry digest for $IMG:$TAG - pin unchanged"; exit 1 ;; esac
+sed -i -e "s/HALOGEN_IMAGE_TAG:-$CUR/HALOGEN_IMAGE_TAG:-$TAG/" \
+  -e "s/HALOGEN_IMAGE_DIGEST-sha256:[0-9a-f]*/HALOGEN_IMAGE_DIGEST-$DIGEST/" "$START"
+grep -oE 'HALOGEN_IMAGE_(TAG:-|DIGEST-)[0-9.a-z:]+' "$START"
 echo "OK: validated and pinned to $TAG. commit the start-halogen.sh change to keep the repo in sync."

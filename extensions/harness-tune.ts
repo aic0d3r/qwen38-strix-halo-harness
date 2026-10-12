@@ -13,13 +13,13 @@
  */
 
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 
-const HOME = os.homedir();
-const SETTINGS = path.join(HOME, ".pi/agent/settings.json");
-const MODELS = path.join(HOME, ".pi/agent/models.json");
+const AGENT_DIR = getAgentDir();
+const SETTINGS = path.join(AGENT_DIR, "settings.json");
+const MODELS = path.join(AGENT_DIR, "models.json");
+const UBATCH_FILE = path.join(AGENT_DIR, "harness-ubatch");
 const MAIN_PROVIDER = "halogen";
 const MAIN_MODEL = "halogen-qwen3.8-flash-next";
 
@@ -41,9 +41,8 @@ function current(): Record<string, number> {
 	const m = readJson(MODELS);
 	const entry = m?.providers?.[MAIN_PROVIDER]?.models?.find((x: any) => x?.id === MAIN_MODEL) || {};
 	let ubatch = DEFAULTS.ubatch;
-	const ubFile = path.join(HOME, ".pi/agent/harness-ubatch");
-	if (fs.existsSync(ubFile)) {
-		const v = Number(fs.readFileSync(ubFile, "utf8").trim());
+	if (fs.existsSync(UBATCH_FILE)) {
+		const v = Number(fs.readFileSync(UBATCH_FILE, "utf8").trim());
 		if (Number.isFinite(v)) ubatch = v;
 	}
 	return {
@@ -119,7 +118,7 @@ export default function (pi: ExtensionAPI) {
 			}
 			writeJson(MODELS, m);
 		} else if (key === "ubatch") {
-			fs.writeFileSync(path.join(HOME, ".pi/agent/harness-ubatch"), String(Math.round(num)));
+			fs.writeFileSync(UBATCH_FILE, String(Math.round(num)));
 		}
 	}
 }

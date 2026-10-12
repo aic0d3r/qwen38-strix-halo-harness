@@ -1,8 +1,27 @@
 # Changelog
 
-## Unreleased
+## 1.2.1 - 2026-10-12
 
 ### Fixed
+- Repo audit, 14 fixes:
+  - `setup.sh` no longer overwrites `models.json` / `settings.json` when it cannot parse them
+    (it used to replace a file with a typo by an empty config, on every `./start.sh`).
+  - The launcher resets a `reserveTokens` that no longer fits the window: a `/tune` value from a
+    262k day (e.g. 60144 after `/tune reset`) compacted every turn on a 65k fallback day.
+  - `VISION=0 ./start-halogen.sh` works without the vision file, as its own error message says.
+  - `bench/harness-ab.sh` refuses a dirty repo, stops on a bad path instead of running
+    `git clean` in the wrong directory, restores extensions and the old reserve on Ctrl-C, and
+    kills only its own pi run.
+  - `./start-halogen.sh` is now a link to `server/start-halogen.sh`, so it follows the pin after
+    `upgrade-halogen.sh`; the image is pinned by digest, and the upgrade script writes it.
+  - `progress-tracker` checkpoints this session's own last reply (from the session manager), not
+    the newest transcript in the folder, and a long "Continue ..." prompt keeps the resume note.
+  - `PI_CODING_AGENT_DIR` is honoured by the launcher, `/tune`, the ubatch file and the logs.
+  - Sidecar download says "NOT verified" when no checksum could be fetched.
+  - Chained compaction keeps the capture list together (the previous summary moved below it);
+    the retention canary reads the prompt from the extension and runs thinking-off by default.
+  - `GUFO_CTX` sets the served context; the commit guard no longer blocks `git log -- commit.ts`;
+    `--doctor`'s model ping has a 120 s timeout. `bench/check-fixes.sh` checks [10] and [11] are new.
 - Two leftovers from the retired NPU search. `bench/harness-ab.sh` still asked pi for the
   `codebase_search` tool (deleted in v1.1) and its usage line still said `<repo-with-.rag>`; it
   now runs `mcp__semble__search`. And the upgrade acceptance battery timed a `/v1/rerank` call to
