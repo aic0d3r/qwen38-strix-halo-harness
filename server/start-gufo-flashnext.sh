@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gufo 0.3.0 serving Qwen3.8-Flash-Next UD-IQ4_XS (the headline-comparison arm).
+# gufo 0.12.0 serving Qwen3.8-Flash-Next UD-Q4_K_XL (0.12 dropped UD-IQ4_XS).
 # One big engine at a time: STOP halogen first (docker rm -f the container) or
 # the two engines fight over the same 109GB heap and device-lost follows.
 # Spec decode: native MTP via the -shared- sidecar (the one gufo's docs name).
@@ -17,7 +17,8 @@ if [ "$CTX" != "65536" ] && [ -n "$O9" ] && [ "$O9" -lt 1000 ]; then
   fi
 fi
 ENGINE_DIR=${ENGINE_DIR:-$HOME/LLMBench/models/qwen38-flash-next}
-GUFO_IMAGE=${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime:latest}
+# pinned like halogen: the 0.12.0 image, measured in docs/ENGINES.md
+GUFO_IMAGE=${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime@sha256:25c52218f494f9c35fab96184b813576d4f1e71cbe025631b106360a1d420206}
 PORT=${PORT:-8080}
 RENDER_GID=$(getent group render | cut -d: -f3); VIDEO_GID=$(getent group video | cut -d: -f3)
 exec docker run --rm -i \

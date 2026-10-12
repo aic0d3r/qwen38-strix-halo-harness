@@ -14,7 +14,7 @@ degradation is graceful but real (all measured).
 
 ## What breaks on another engine
 
-| feature | on gufo 0.3.0 / plain llama.cpp |
+| feature | on gufo 0.12.0 / plain llama.cpp |
 |---|---|
 | chat, tools, streaming, reasoning control, structured output | works |
 | semantic search (semble MCP) | works — no NPU involved |
@@ -22,8 +22,14 @@ degradation is graceful but real (all measured).
 | `triage` / `dedup_scan` | dead — no decider or embedder |
 | image input | dead as launched (no `--mmproj` wired) |
 | `/health` verification (cache, vision) | degrades to "unknown" |
-| warm-cache replay | ~2.5x slower on gufo (133-147k vs 336-382k tok/s) |
-| deep context | gufo collapses past ~100k (13 vs 41 t/s at 131k) |
+| decode (gufo, MTP) | ~35% slower than halogen 0.18.1: 40 vs 62 t/s median battery, 29-32 vs 45-50 t/s from 4k to 131k (flat on both) |
+| cold prefill (gufo) | ~15% slower: 131k in 94 s vs 79 s; warm replay is ~0.1 s on both |
+| tool calls (gufo) | valid when complete; a call cut off by `max_tokens` comes back empty, not partial |
+
+Measured 2026-10-12, same session, fabric clock held, UD-Q4_K_XL + shared Q8 MTP (gufo 0.12
+no longer loads UD-IQ4_XS). Raw `gufo bench`: pp4096 1489, pp32768 1400, tg128 26 tok/s. The
+XDNA2 NPU-prefill fork (mikealanni/gufo, claims +7%) is unmerged: upstream rejected its GPU
+kernels and holds the NPU path on quality/stability ([gufo#558](https://github.com/gufo-org/gufo/issues/558)).
 
 `./setup.sh --doctor` tells you when a non-halogen engine is answering on `:8731`.
 
