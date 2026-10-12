@@ -7,6 +7,25 @@
   calls, average latency, tokens taken off the main model, guard flags, triage confidence,
   and failures (which fell back to the main model). The extensions now append one line
   per call to `~/.pi/agent/harness-events.jsonl`, which replaces `npu-retrieval-usage.log`.
+- Commit tool `message` parameter: commits an exact, dictated message without the sidecar
+  (agents used to undo commits and retry "USE VERBATIM" until the sidecar copied it).
+
+### Performance improvements
+- Commit messages for large diffs are 2.5x faster (7.2 s -> 2.9 s on a 30-commit diff). Almost
+  all the time was the sidecar reading the diff (~3,500 tok/s), so the diff it reads is now
+  smaller: the file summary comes first (cutting never hides a file), 1 line of context
+  instead of 3, and a 24k-character limit instead of 60k (18.5k -> 7.1k tokens). The git
+  commands run in parallel and the message is capped at 400 tokens. Small commits stay
+  under 1 s.
+
+### Fixed
+- The commit tool starts `ling-tiny.service` when the sidecar is down (it stays down after a
+  reboot, since nothing starts at boot); a stopped sidecar to a finished commit took 1.4 s. It
+  used to fail with "Unable to connect" until someone started the sidecar.
+- The direct `git commit` block ignores text in quotes and heredocs, so commands that only
+  mention "git commit" (a grep, a prompt string) are no longer blocked.
+- A commit message that comes back as one long line is split into a subject of at most 72
+  characters and a body. `bench/check-fixes.sh` check [7] tests both against the real code.
 
 ## 1.2.1 - 2026-10-12
 
