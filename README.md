@@ -111,6 +111,24 @@ evict the cached prefix; and search runs on CPU against an index built at first 
 the only engine this harness provisions — [what breaks on another engine](docs/ENGINES.md) is
 measured, too.
 
+### Halogen vs gufo (the best open engine)
+
+[gufo](https://github.com/gufo-org/gufo) (MIT) is the open alternative to closed-source halogen.
+Matched A/B on this box, same session and client, fabric clock held:
+
+| | halogen 0.18.1 (default) | gufo 0.12.0 |
+|---|---|---|
+| decode, 20-prompt battery (median) | **62 t/s** | 40 t/s |
+| decode, 4k to 131k context | **45-50 t/s** | 29-32 t/s |
+| cold prefill, 131k prompt | **79 s** | 94 s |
+| warm cache replay | 0.01-0.05 s | ~0.1 s |
+| NPU tools (guard, triage, dedup) | yes | no |
+| license | closed | **MIT** |
+
+Halogen stays the default; gufo is the open fallback. To run it, stop halogen first (they share
+one memory heap), then `server/start-gufo-flashnext.sh` (UD-Q4_K_XL + MTP, `:8080`). Full
+numbers and the NPU-prefill fork status: [ENGINES.md](docs/ENGINES.md#what-breaks-on-another-engine).
+
 ## Evidence
 
 <table>
@@ -290,7 +308,7 @@ container and your checkpoint files.
   results, and every claim in this README with its logged run.
 - **[Local vs cloud model comparison](docs/local-vs-cloud-model-comparison.md)** — seven runs, one
   real debugging task, answers rated against verified ground truth.
-- **[Engines](docs/ENGINES.md)** — the two stacks, what breaks on a non-halogen engine, sidecar
+- **[Engines](docs/ENGINES.md)** — the two stacks, halogen vs gufo 0.12, what breaks on a non-halogen engine, sidecar
   isolation, and running a cloud model with the local NPU tools.
 - **[llama.cpp path](docs/LLAMACPP.md)** — the full-control engine: engine build, GGUFs and
   drafters, GPU-memory boot args, pi wiring.
