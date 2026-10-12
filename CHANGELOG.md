@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3 - 2026-10-12
 
 ### Added
 - `scripts/session-audit.sh --harness`: what the sidecar and NPU models did in one session:
