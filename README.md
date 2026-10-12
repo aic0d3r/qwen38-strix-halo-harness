@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/github/v/tag/aic0d3r/qwen38-strix-halo-harness?label=version)](https://github.com/aic0d3r/qwen38-strix-halo-harness/tags)
+[![Release](https://img.shields.io/github/v/release/aic0d3r/qwen38-strix-halo-harness)](https://github.com/aic0d3r/qwen38-strix-halo-harness/releases/latest)
 [![Hardware](https://img.shields.io/badge/hardware-Strix%20Halo-orange)](#install)
 [![Cloud](https://img.shields.io/badge/cloud-optional-blueviolet)](docs/ENGINES.md#cloud-models-are-a-supported-hybrid)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)

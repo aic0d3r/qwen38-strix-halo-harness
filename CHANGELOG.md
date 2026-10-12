@@ -13,9 +13,10 @@
   troubleshooting).
 - Title no longer claims "zero cloud" — switching to a cloud model mid-session is a supported
   shape, so the intro states the local-by-default + cloud-optional split and links the measured
-  hybrid. Badge fix: the repo has tags but no GitHub *Releases*, so `github/v/release` rendered
-  "no releases or repo not found"; the version badge now uses `github/v/tag` (renders the latest
-  tag) and the misleading `network: zero` badge became `hardware: Strix Halo` + `cloud: optional`.
+  hybrid. Badge fix: the version badge pointed at `github/v/release` while the repo had tags but
+  no GitHub *Release*, so it rendered "no releases or repo not found"; a v1.2 release is now
+  published and the badge resolves, alongside `hardware: Strix Halo` + `cloud: optional` in place
+  of the misleading `network: zero` badge.
 - Stale NPU claims fixed: the decider tool is `triage` (it was never called `decide`), codebase
   search no longer uses the NPU (semble does, on CPU), the reranker is idle since v1.1 and can be
   dropped from `HALOGEN_NPU_MODELS`, NPU dirs are lowercase `npu/`, and the GPU+NPU fabric-clock
