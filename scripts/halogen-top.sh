@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# halogen-top.sh — live prefill/decode throughput for the halogen flash server.
+# halogen-top.sh — live dashboard for the halogen flash server.
 #   ./scripts/halogen-top.sh [interval_s]      (default 1s, Ctrl-C to quit)
 #
-# /metrics is cumulative since server start, and its two *tokens_seconds gauges
-# only mean "since the last scrape" — so we take our own deltas between scrapes
-# and append them to a history CSV that session-audit.sh --perf later diffs.
+# halogen only bumps its token counters when a request *finishes*, so mid-request
+# there is no live t/s to show. Instead we show what is running right now (busy
+# time, in flight, queue, KV pool) and, per finished request, its own prefill and
+# decode rates taken from our deltas between scrapes. Every scrape is also appended
+# to a history CSV that session-audit.sh --perf later diffs (column order is fixed).
+# Not a TTY (piped/logged)? One line per finished request instead of the dashboard.
 exec python3 - "${1:-1}" <<'PY'
-import json, os, sys, time, urllib.request
+import collections, json, os, shutil, sys, time, urllib.request
 
 URL = os.environ.get("HALOGEN_URL", "http://127.0.0.1:8731")
-INTERVAL = float(sys.argv[1])
+INTERVAL = max(0.2, float(sys.argv[1]))
 HIST = os.path.join(os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")),
                     "halogen-top", "history.csv")
+# order is the CSV column order — halogen-perf.py reads it positionally/by name
 KEYS = {
     "prompt_tokens": "llamacpp:prompt_tokens_total",
     "prompt_seconds": "llamacpp:prompt_seconds_total",
@@ -27,104 +31,293 @@ KEYS = {
     "proc": "llamacpp:requests_processing",
     "queued": "halogen:kv_pool_waiting_for_room",
 }
+TTY = sys.stdout.isatty()
+COLOR = TTY and not os.environ.get("NO_COLOR")
 
 
-def scrape(url):
-    txt = urllib.request.urlopen(url + "/metrics", timeout=5).read().decode()
-    want = set(KEYS.values())
-    out = {}
-    for line in txt.splitlines():
-        if line.startswith("#") or not line:
-            continue
-        name, _, val = line.partition(" ")
-        if name in want:
-            out[name] = float(val)
-    try:  # busy/queued live in /health, not /metrics
-        h = json.load(urllib.request.urlopen(url + "/health", timeout=5))
-        out["in_flight"] = float(h.get("in_flight", 0))
-        out["queued"] = h.get("queued", out.get("queued", 0))
-        out["busy_for_s"] = h.get("busy_for_s", 0)
+def c(code, s):
+    return f"\033[{code}m{s}\033[0m" if COLOR else str(s)
+
+
+B, DIM = (lambda s: c("1", s)), (lambda s: c("2", s))
+GRN, YEL, RED, CYN, MAG = (lambda s: c("32", s)), (lambda s: c("33", s)), \
+    (lambda s: c("31", s)), (lambda s: c("36", s)), (lambda s: c("35", s))
+
+
+def get(path, js=True):
+    raw = urllib.request.urlopen(URL + path, timeout=3).read().decode()
+    return json.loads(raw) if js else raw
+
+
+def scrape():
+    m = {}
+    for line in get("/metrics", js=False).splitlines():
+        if line and not line.startswith("#"):
+            name, _, val = line.rpartition(" ")
+            try:
+                m[name] = float(val)
+            except ValueError:
+                pass
+    h, cache = {}, {}
+    try:
+        h = get("/health")
     except Exception:
         pass
-    return out
+    try:
+        cache = get("/cache")
+    except Exception:
+        pass
+    return m, h, cache
 
 
-def g(s, k):
-    return s.get(k, 0.0)
+def human(n):
+    n = float(n)
+    for unit, div in (("G", 1e9), ("M", 1e6), ("k", 1e3)):
+        if abs(n) >= div:
+            return f"{n/div:.1f}{unit}"
+    return f"{n:.0f}"
 
 
-def ratio(s, num, den):
-    return g(s, num) / g(s, den) if g(s, den) else 0.0
+def dur(s):
+    s = int(s)
+    return f"{s//3600}h{s%3600//60:02d}m" if s >= 3600 else f"{s//60}m{s%60:02d}s" if s >= 60 else f"{s}s"
 
 
-try:
-    os.makedirs(os.path.dirname(HIST), exist_ok=True)
-    prev = scrape(URL)
-except Exception as e:
-    sys.exit(f"cannot scrape {URL}/metrics: {e}")
+def bar(frac, width=24):
+    frac = min(max(frac, 0.0), 1.0)
+    fill = int(round(frac * width))
+    col = RED if frac > 0.95 else YEL if frac > 0.8 else GRN
+    return col("█" * fill) + DIM("░" * (width - fill))
 
+
+SPARK = "▁▂▃▄▅▆▇█"
+
+
+def spark(vals):
+    vals = [v for v in vals if v > 0]
+    if not vals:
+        return ""
+    lo, hi = min(vals), max(vals)
+    return "".join(SPARK[int((v - lo) / (hi - lo) * 7) if hi > lo else 3] for v in vals)
+
+
+def rate(tok, sec):
+    return tok / sec if sec > 0 else 0.0
+
+
+# ── history CSV ──────────────────────────────────────────────────────────────
 rows = 0
 try:
-    rows = max(0, len(open(HIST).read().splitlines()) - 1)
-except OSError:
-    try:
+    os.makedirs(os.path.dirname(HIST), exist_ok=True)
+    if os.path.exists(HIST):
+        with open(HIST) as f:
+            rows = max(0, sum(1 for _ in f) - 1)
+    else:
         with open(HIST, "w") as f:  # header: session-audit.sh --perf reads columns by name
             f.write("epoch," + ",".join(KEYS) + "\n")
+except OSError:
+    pass
+
+
+def record(m):
+    global rows
+    try:
+        with open(HIST, "a") as f:
+            f.write(f"{time.time():.3f}," + ",".join(str(round(m.get(v, 0.0), 4))
+                                                     for v in KEYS.values()) + "\n")
+        rows += 1
     except OSError:
         pass
 
-live = {"prefill": 0.0, "decode": 0.0}
+
+# ── state ────────────────────────────────────────────────────────────────────
 t0 = time.time()
+first = None          # metrics at start, for "this session" averages
+prev = None
+recent = collections.deque(maxlen=12)   # finished requests (ours, from deltas)
+dec_hist = collections.deque(maxlen=40)  # decode t/s per finished request, for the sparkline
+last_ok, last_err, tick = None, "", 0
+CACHE_KEYS = ("cache_hits", "cache_misses", "tokens_saved")
+pending = dict.fromkeys(CACHE_KEYS, 0.0)  # cache counters move at request start, not finish
 
 
-def loop(prev):
+def finished(d, now):
+    """A window in which prompt/pred counters moved = one or more requests finished."""
+    if d["prompt_tokens"] <= 0 and d["pred_tokens"] <= 0:
+        return None
+    n = int(max(1, d["requests"]))
+    hits, miss = d["cache_hits"], d["cache_misses"]
+    r = dict(t=now, n=n, ptok=d["prompt_tokens"], psec=d["prompt_seconds"],
+             gtok=d["pred_tokens"], gsec=d["pred_seconds"],
+             pre=rate(d["prompt_tokens"], d["prompt_seconds"]),
+             dec=rate(d["pred_tokens"], d["pred_seconds"]),
+             saved=d["tokens_saved"],
+             mtp=rate(d["draft_acc"], d["draft_rounds"]),
+             cache="hit" if hits and not miss else "miss" if miss and not hits
+             else f"{hits:.0f}/{hits+miss:.0f}" if hits + miss else "—")
+    return r
+
+
+def log_line(r):
+    ts = time.strftime("%H:%M:%S", time.localtime(r["t"]))
+    return (f"{ts}  x{r['n']}  prefill {r['ptok']:>7,.0f} tok {r['pre']:7.1f} t/s"
+            f"  decode {r['gtok']:>6,.0f} tok {r['dec']:6.1f} t/s"
+            f"  mtp {r['mtp']:4.0%}  cache {r['cache']}  saved {human(r['saved'])}")
+
+
+def render(m, h, cache, offline):
+    W = shutil.get_terminal_size((100, 30)).columns
+    L = []
+    up = time.time() - t0
+    model = h.get("model", "halogen")
+    ver = (h.get("version") or {}).get("api", "")
+    status = RED("● OFFLINE") if offline else GRN("● online")
+    L.append(f" {B(model)} {DIM('v' + ver) if ver else ''}  {DIM(URL)}   {status}"
+             f"   {DIM('watching ' + dur(up))}")
+    L.append(DIM("─" * min(W, 100)))
+    if offline:
+        L.append(f" {RED('cannot reach server')}: {last_err}")
+        if last_ok:
+            L.append(DIM(f" last good scrape {dur(time.time() - last_ok)} ago — retrying every {INTERVAL:g}s"))
+        L.append("")
+    if m:
+        inflight = int(h.get("in_flight", m.get("llamacpp:requests_processing", 0)))
+        queued = int(h.get("queued", 0)) + int(m.get("halogen:kv_pool_waiting_for_room", 0))
+        busy_s = float(h.get("busy_for_s", m.get("halogen:busy_for_seconds", 0)))
+        slots = h.get("slots", "?")
+        if inflight:
+            spin = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[tick % 10]
+            now = YEL(f"{spin} working") + f"  {B(inflight)}/{slots} slots busy  ·  busy {B(dur(busy_s))}"
+        else:
+            now = GRN("◦ idle") + f"  0/{slots} slots"
+        if queued:
+            now += "  ·  " + RED(f"{queued} queued")
+        L.append(f" {B('NOW')}       {now}")
+        kv = m.get("llamacpp:kv_cache_usage_ratio", 0.0)
+        pool = cache.get("pool", {})
+        pos = pool.get("positions") or m.get("halogen:kv_pool_positions", 0)
+        used = pool.get("used") or kv * pos
+        L.append(f" {B('KV pool')}   {bar(kv)} {kv*100:5.1f}%  {DIM(f'{human(used)} / {human(pos)} positions')}")
+        if inflight:
+            L.append(DIM("           halogen updates t/s only when a request finishes — rates below are the last finished one"))
+        L.append("")
+
+        # last finished request
+        if recent:
+            r = recent[-1]
+            pre, dec, mtp = r["pre"], r["dec"], r["mtp"]
+            ago = dur(time.time() - r["t"])
+            many = f" ({r['n']} requests)" if r["n"] > 1 else ""
+            L.append(f" {B('LAST FINISHED')}{many}  {DIM(ago + ' ago')}")
+            L.append(f"   prefill  {r['ptok']:>9,.0f} tok  {r['psec']:7.2f}s  {CYN(f'{pre:8.1f} t/s')}"
+                     f"   {DIM('cache ' + r['cache'] + ', ' + human(r['saved']) + ' tok reused')}")
+            L.append(f"   decode   {r['gtok']:>9,.0f} tok  {r['gsec']:7.2f}s  {MAG(f'{dec:8.1f} t/s')}"
+                     f"   {DIM(f'mtp accept {mtp:.0%}')}")
+        else:
+            L.append(f" {B('LAST FINISHED')}  {DIM('none yet since start — waiting for a request to finish')}")
+        L.append("")
+
+        # throughput table
+        def g(k, src=m):
+            return src.get(k, 0.0)
+        lp = rate(g(KEYS["prompt_tokens"]), g(KEYS["prompt_seconds"]))
+        ld = rate(g(KEYS["pred_tokens"]), g(KEYS["pred_seconds"]))
+        sp = rate(g(KEYS["prompt_tokens"]) - g(KEYS["prompt_tokens"], first),
+                  g(KEYS["prompt_seconds"]) - g(KEYS["prompt_seconds"], first))
+        sd = rate(g(KEYS["pred_tokens"]) - g(KEYS["pred_tokens"], first),
+                  g(KEYS["pred_seconds"]) - g(KEYS["pred_seconds"], first))
+        L.append(f" {B('THROUGHPUT')}  {DIM('t/s'):>4}      {'session':>9} {'lifetime':>10}   {DIM('decode per request')}")
+        L.append(f"   prefill            {sp:9.1f} {lp:10.1f}")
+        L.append(f"   decode             {sd:9.1f} {ld:10.1f}   {MAG(spark(dec_hist))}")
+        L.append("")
+
+        # cache + mtp + totals
+        hr = cache.get("hit_rate")
+        thr = cache.get("token_hit_rate")
+        if hr is None:
+            hits, miss = g("halogen:cache_hits_total"), g("halogen:cache_misses_total")
+            hr = hits / (hits + miss) if hits + miss else 0.0
+        ent = cache.get("entries", int(g("halogen:cache_entries")))
+        maxe = cache.get("max_entries", "?")
+        cb = cache.get("bytes", g("halogen:cache_bytes"))
+        L.append(f" {B('PROMPT CACHE')}  hit {GRN(f'{hr:.1%}')} of requests"
+                 + (f", {GRN(f'{thr:.1%}')} of tokens" if thr is not None else "")
+                 + f"  ·  {human(g('halogen:prompt_tokens_cached_total'))} tok saved")
+        L.append(f"   {ent}/{maxe} entries  {cb/1e9:.2f} GB  ·  {int(cache.get('evicted', g('halogen:cache_evicted_total')))} evicted"
+                 f"  ·  restore {cache.get('restore_ms_total', 0)/max(1, cache.get('hits', 1)):.0f} ms avg")
+        acc = rate(g("halogen:draft_tokens_accepted_total"), g("halogen:draft_tokens_total"))
+        L.append(f" {B('MTP DRAFT')}     accept {GRN(f'{acc:.1%}')}  "
+                 f"{DIM(human(g('halogen:draft_tokens_accepted_total')) + ' / ' + human(g('halogen:draft_tokens_total')) + ' drafted')}")
+        L.append(f" {B('TOTALS')}        {g('halogen:requests_total'):.0f} requests  ·  "
+                 f"{human(g(KEYS['prompt_tokens']))} prompt tok  ·  {human(g(KEYS['pred_tokens']))} generated")
+        L.append("")
+
+        # recent requests
+        L.append(f" {B('RECENT')}  {DIM('time        n   prompt tok  prefill t/s   gen tok  decode t/s   mtp  cache')}")
+        if not recent:
+            L.append(DIM("   —"))
+        for r in reversed(recent):
+            ts = time.strftime("%H:%M:%S", time.localtime(r["t"]))
+            pre, dec = r["pre"], r["dec"]
+            L.append(f"         {ts}  {r['n']:>2}  {r['ptok']:>10,.0f}  {CYN(f'{pre:11.1f}')}"
+                     f"  {r['gtok']:>8,.0f}  {MAG(f'{dec:10.1f}')}"
+                     f"  {r['mtp']:4.0%}  {r['cache']}")
+    L.append("")
+    L.append(DIM(f" every {INTERVAL:g}s  ·  history {HIST} ({rows} rows)  ·  Ctrl-C quits"))
+    H = shutil.get_terminal_size((100, 30)).lines
+    out = "\033[H" + "\n".join(line + "\033[K" for line in L[:H - 1]) + "\033[J"
+    sys.stdout.write(out)
+    sys.stdout.flush()
+
+
+def main():
+    global first, prev, last_ok, last_err, tick
+    m = h = cache = {}
     while True:
-        time.sleep(INTERVAL)
+        offline = False
         try:
-            cur = scrape(URL)
+            m, h, cache = scrape()
+            last_ok = time.time()
         except Exception as e:
-            print(f"scrape failed: {e}", flush=True)
-            continue
-        global rows
-        # shortcut: a scrape under load can omit a counter; treat it as no change that window
-        d = {k: cur.get(v, prev.get(v, 0.0)) - prev.get(v, 0.0) for k, v in KEYS.items()}
-        # window rates: tokens over the seconds actually spent in each phase
-        pre = max(0.0, d["prompt_tokens"] / d["prompt_seconds"]) if d["prompt_seconds"] > 0 else 0.0
-        dec = max(0.0, d["pred_tokens"] / d["pred_seconds"]) if d["pred_seconds"] > 0 else 0.0
-        live.update(prefill=pre or live["prefill"], decode=dec or live["decode"])
-        hit = d["cache_hits"] / (d["cache_hits"] + d["cache_misses"]) * 100 \
-            if d["cache_hits"] + d["cache_misses"] else 0.0
-        # lifetime = cumulative counters, window = this scrape
-        lp = ratio(cur, "llamacpp:prompt_tokens_total", "llamacpp:prompt_seconds_total")
-        ld = ratio(cur, "llamacpp:tokens_predicted_total", "llamacpp:tokens_predicted_seconds_total")
-        accept = ratio(cur, "halogen:draft_tokens_accepted_total", "halogen:draft_tokens_total")
-        up = int(time.time() - t0)
-        print(f"\033[H\033[Jhalogen {URL}   watching {up//60}m{up%60:02d}s   Ctrl-C to quit")
-        print(f"  prefill   {d['prompt_tokens']:>9,.0f} tok in {d['prompt_seconds']:6.2f}s"
-              f" = {pre:7.1f} t/s   (lifetime {lp:7.1f})")
-        print(f"  decode    {d['pred_tokens']:>9,.0f} tok in {d['pred_seconds']:6.2f}s"
-              f" = {dec:7.1f} t/s   (lifetime {ld:7.1f})")
-        print(f"  cache     {hit:5.1f}% of reqs this window"
-              f"   {g(cur,'halogen:prompt_tokens_cached_total')/1e6:6.2f}M prompt tok saved")
-        print(f"  mtp       {accept:4.1%} of draft tokens accepted"
-              f"   kv {g(cur,'llamacpp:kv_cache_usage_ratio')*100:5.1f}% used")
-        print(f"  state     processing {g(cur,'llamacpp:requests_processing'):.0f}"
-              f"  in_flight {g(cur,'in_flight'):.0f}  queued {g(cur,'queued'):.0f}"
-              f"  busy {g(cur,'busy_for_s'):.0f}s  reqs {g(cur,'halogen:requests_total'):.0f}")
-        print(f"  last busy prefill {live['prefill']:7.1f} t/s   decode {live['decode']:6.1f} t/s")
-        print(f"  history   {HIST}  ({rows+1} rows)", flush=True)
-        try:
-            with open(HIST, "a") as f:
-                f.write(f"{time.time():.3f}," + ",".join(str(round(cur.get(v, 0.0), 4))
-                                                         for v in KEYS.values()) + "\n")
-            rows += 1
-        except OSError:
-            pass
-        prev = cur
+            offline, last_err = True, str(getattr(e, "reason", e))
+        if not offline:
+            if first is None:
+                first = m
+            if prev is not None:
+                # shortcut: a scrape can omit a counter; treat it as no change that window
+                d = {k: m.get(v, prev.get(v, 0.0)) - prev.get(v, 0.0) for k, v in KEYS.items()}
+                if any(d[k] < 0 for k in ("prompt_tokens", "pred_tokens")):
+                    first = m  # server restarted: counters reset
+                else:
+                    for k in CACHE_KEYS:
+                        pending[k] += d[k]
+                        d[k] = pending[k]
+                    r = finished(d, time.time())
+                    if r:
+                        pending.update(dict.fromkeys(CACHE_KEYS, 0.0))
+                        recent.append(r)
+                        if r["dec"]:
+                            dec_hist.append(r["dec"])
+                        if not TTY:
+                            print(log_line(r), flush=True)
+            prev = m
+            record(m)
+        elif not TTY:
+            print(f"{time.strftime('%H:%M:%S')}  offline: {last_err}", flush=True)
+        if TTY:
+            render(m if first is not None else {}, h, cache, offline)
+        tick += 1
+        time.sleep(INTERVAL)
 
 
+if TTY:
+    sys.stdout.write("\033[?1049h\033[?25l")  # alt screen, hide cursor
 try:
-    loop(prev)
+    main()
 except KeyboardInterrupt:
-    print(f"\nstopped after {int(time.time() - t0)}s — history in {HIST}")
+    pass
+finally:
+    if TTY:
+        sys.stdout.write("\033[?25h\033[?1049l")
+    print(f"halogen-top: watched {dur(time.time() - t0)}, {len(recent)} finished requests shown — history in {HIST}")
 PY

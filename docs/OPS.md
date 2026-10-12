@@ -32,7 +32,7 @@ Three official surfaces, no built-in web UI in the image (`/`, `/gui`, `/dashboa
 Two tools ship for it:
 
 ```sh
-./scripts/halogen-top.sh              # live dashboard: window + lifetime t/s, Ctrl-C quits
+./scripts/halogen-top.sh              # live dashboard: busy state, KV, per-request t/s, cache; piped = log lines
 ./scripts/session-audit.sh --perf     # prefill/decode for one session's own time window
 ```
 
