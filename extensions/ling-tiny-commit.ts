@@ -28,20 +28,23 @@ export default function (pi: ExtensionAPI) {
 		if (repoCode !== 0) return notify("Not a git repository. Run: git init && git add -A && git commit -m init", "warning");
 
 		notify("Collecting diff...", "info");
-		const { stdout: diff } = await pi.exec("git", ["diff", "HEAD"]);
-		const { stdout: staged } = await pi.exec("git", ["diff", "--cached", "--stat"]);
-		const { stdout: untracked } = await pi.exec("git", ["ls-files", "--others", "--exclude-standard"]);
+		// prefill dominates sidecar latency (~3.5k tok/s): stat first so truncation never hides a file,
+		// -U1 trims context lines, 24k cap. Measured 10-12: worst case 7.2s -> 2.9s.
+		const [{ stdout: stat }, { stdout: diff }, { stdout: untracked }] = await Promise.all([
+			pi.exec("git", ["diff", "HEAD", "--stat"]),
+			pi.exec("git", ["diff", "-U1", "HEAD"]),
+			pi.exec("git", ["ls-files", "--others", "--exclude-standard"]),
+		]);
 
 		let untrackedBlock = "";
 		if (untracked.trim()) {
-			const heads: string[] = [];
-			for (const f of untracked.split("\n").filter(Boolean).slice(0, 10)) {
-				const { stdout: h } = await pi.exec("head", ["-c", "800", "--", f]);
-				if (h.trim()) heads.push(`--- NEW FILE ${f} (head) ---\n${h}`);
-			}
+			const files = untracked.split("\n").filter(Boolean).slice(0, 10);
+			const heads = (await Promise.all(files.map((f) => pi.exec("head", ["-c", "800", "--", f]))))
+				.map(({ stdout: h }, i) => (h.trim() ? `--- NEW FILE ${files[i]} (head) ---\n${h}` : ""))
+				.filter(Boolean);
 			untrackedBlock = `\n--- untracked ---\n${untracked}\n${heads.join("\n")}`;
 		}
-		const fullDiff = [diff, staged ? `\n--- staged stat ---\n${staged}` : "", untrackedBlock].join("\n").slice(0, 60000);
+		const fullDiff = [stat, untrackedBlock, diff].join("\n").slice(0, 24000);
 		if (!fullDiff.trim()) return notify("Nothing to commit: no diff, staged changes, or untracked files.", "warning");
 
 		notify(`Generating commit message with ${TINY_MODEL}...`, "info");
@@ -60,7 +63,7 @@ ${fullDiff}
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					model: TINY_MODEL,
-					max_tokens: 1536,
+					max_tokens: 400,
 					temperature: 0.2,
 					// ling3.0-tiny thinks by default; the think pass ate budget and
 					// 8.6x'd latency (measured 10-06: 3.10s+empty content vs 0.36s
