@@ -3,13 +3,18 @@
 ## Unreleased
 
 ### Docs
-- README rewritten in the house format (badges, dot-separated nav, `> [!TIP]`/`[!NOTE]`/`[!WARNING]`
-  callouts, em-dash bullets) and reorganised so the first two sections answer "what does this
-  do and what runs where". Stale NPU claims fixed: the decider tool is `triage` (it was never
-  called `decide`), codebase search no longer uses the NPU (semble does, on CPU), the reranker is
-  idle since v1.1 and can be dropped from `HALOGEN_NPU_MODELS`, NPU dirs are lowercase `npu/`, and
-  the GPU+NPU fabric-clock requirement, the `/health` npu probe and a triage/dedup troubleshooting
-  row are now written down.
+- README is now a landing page in the house format (badges, dot-separated nav,
+  `> [!TIP]`/`[!NOTE]`/`[!WARNING]` callouts, em-dash bullets, a chart table in place of
+  screenshots): intro, What you get, The stack (+ how the pieces hand off), Evidence, Install,
+  Model files, Quick Start, The NPU, Crash recovery, Upgrading, Uninstall, Documentation, Posts,
+  License. The depth moved to docs pages instead of living in the README: [docs/ENGINES.md](docs/ENGINES.md)
+  (engine comparison, sidecar isolation, cloud hybrid), [docs/LLAMACPP.md](docs/LLAMACPP.md)
+  (the full-control path) and [docs/OPS.md](docs/OPS.md) (context/fragmentation, speed surfaces,
+  troubleshooting).
+- Stale NPU claims fixed: the decider tool is `triage` (it was never called `decide`), codebase
+  search no longer uses the NPU (semble does, on CPU), the reranker is idle since v1.1 and can be
+  dropped from `HALOGEN_NPU_MODELS`, NPU dirs are lowercase `npu/`, and the GPU+NPU fabric-clock
+  requirement, the `/health` npu probe and a triage/dedup troubleshooting row are now written down.
 - `docs/BENCHMARKS.md`: labels the retrieval eval as superseded by semble, marks the rerank
   number idle, notes the pin moved to 0.18.0, and states that multi-option `triage` accuracy is
   unmeasured for the constrained-enum implementation (the 40 % figure was the dropped variant).
