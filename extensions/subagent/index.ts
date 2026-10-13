@@ -35,6 +35,32 @@ const MAX_CONCURRENCY = 4;
 const COLLAPSED_ITEM_COUNT = 10;
 const PER_TASK_OUTPUT_CAP = 50 * 1024;
 
+/**
+ * Resolve a frontmatter `skills:` entry to a path pi can load: absolute or ~/ paths
+ * pass through, a bare name is looked up under <agentDir>/skills.
+ */
+function resolveSkill(entry: string): string {
+	if (entry.startsWith("/")) return entry;
+	if (entry.startsWith("~/")) return path.join(process.env.HOME ?? "", entry.slice(2));
+	return path.join(getAgentDir(), "skills", entry);
+}
+
+/** SKILL.md body (frontmatter stripped) for a skills: entry; null when it is missing. */
+function readSkillBody(entry: string): string | null {
+	try {
+		const target = resolveSkill(entry);
+		const file = fs.statSync(target).isDirectory() ? path.join(target, "SKILL.md") : target;
+		const body = fs
+			.readFileSync(file, "utf-8")
+			.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "")
+			.trim();
+		return body || null;
+	} catch {
+		// A declared skill that is not installed must not block the dispatch.
+		return null;
+	}
+}
+
 function formatTokens(count: number): string {
 	if (count < 1000) return count.toString();
 	if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
@@ -299,8 +325,9 @@ async function runSingleAgent(
 
 	// --no-skills: skills are main-session concerns; a subagent paying ~1.4s of
 	// skill scanning + description prefill per dispatch was measured pure loss
-	// (0 skill loads across 225 recorded sessions). Force-load with /skill: in
-	// the main session if a task ever needs one.
+	// (0 skill loads across 225 recorded sessions). An agent that genuinely needs
+	// one declares it in frontmatter (`skills:`) and gets it by explicit --skill
+	// path, which loads the body without the discovery scan.
 	const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-skills"];
 	const inheritsDispatchConfig = !agent.model;
 	const model = agent.model ?? dispatchDefaults.model;
@@ -309,6 +336,19 @@ async function runSingleAgent(
 		args.push("--thinking", dispatchDefaults.thinkingLevel);
 	}
 	if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
+	for (const s of agent.skills ?? []) args.push("--skill", resolveSkill(s));
+
+	// Skill bodies go into the system prompt, not just --skill: pi's --skill only
+	// registers the skill in <available_skills> (name + description + path), so the
+	// subagent would have to decide to read it. Inlining is deterministic and costs
+	// tokens only for agents that declare a skill.
+	const skillDocs = (agent.skills ?? [])
+		.map(readSkillBody)
+		.filter((body): body is string => !!body)
+		.join("\n\n");
+	const promptText = [agent.systemPrompt.trim(), skillDocs && `## Loaded skills\n\n${skillDocs}`]
+		.filter(Boolean)
+		.join("\n\n");
 
 	let tmpPromptDir: string | null = null;
 	let tmpPromptPath: string | null = null;
@@ -335,8 +375,8 @@ async function runSingleAgent(
 	};
 
 	try {
-		if (agent.systemPrompt.trim()) {
-			const tmp = await writePromptToTempFile(agent.name, agent.systemPrompt);
+		if (promptText) {
+			const tmp = await writePromptToTempFile(agent.name, promptText);
 			tmpPromptDir = tmp.dir;
 			tmpPromptPath = tmp.filePath;
 			args.push("--append-system-prompt", tmpPromptPath);

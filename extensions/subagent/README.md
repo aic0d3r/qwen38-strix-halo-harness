@@ -132,12 +132,23 @@ name: my-agent
 description: What this agent does
 tools: read, grep, find, ls
 model: claude-haiku-4-5
+skills: ui-ux-work
 ---
 
 System prompt for the agent goes here.
 ```
 
 When `model` is omitted, the subagent inherits the dispatching session's active model and thinking level.
+
+`skills` is opt-in per agent and accepts a skill name (resolved under `<agentDir>/skills`), a
+`~/` or absolute path, or a comma-separated list. Subagents still run with `--no-skills`, so
+discovery never costs anything. For each declared skill the dispatcher appends the SKILL.md
+body to the subagent's system prompt *and* passes `--skill <path>`: pi's `--skill` alone only
+registers the skill in `<available_skills>` (name, description, path) and leaves the body to be
+read, which needs the subagent to cooperate. Inlining makes it unconditional; the registration
+stays so relative paths inside the skill (`reference/...`) resolve. A missing skill is skipped,
+not fatal. Leave `skills` off unless the agent's job needs it — that is what the
+1.4s-per-dispatch scan measurement was about.
 
 **Locations:**
 - `~/.pi/agent/agents/*.md` - User-level (always loaded)

@@ -13,6 +13,8 @@ export interface AgentConfig {
 	description: string;
 	tools?: string[];
 	model?: string;
+	/** Skill names (under <agentDir>/skills) or paths, force-loaded for this agent only. */
+	skills?: string[];
 	systemPrompt: string;
 	source: "user" | "project";
 	filePath: string;
@@ -36,6 +38,7 @@ type AgentFrontmatter = {
 	description?: unknown;
 	tools?: unknown;
 	model?: unknown;
+	skills?: unknown;
 };
 
 /**
@@ -96,6 +99,7 @@ function loadAgentsFromDir(dir: string, source: "user" | "project"): AgentConfig
 			description: frontmatter.description,
 			tools: parseToolList(frontmatter.tools),
 			model: typeof frontmatter.model === "string" ? frontmatter.model : undefined,
+			skills: parseToolList(frontmatter.skills),
 			systemPrompt: body,
 			source,
 			filePath,
