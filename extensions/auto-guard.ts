@@ -19,7 +19,7 @@ const BASE = process.env.PI_NPU_BASE || "http://127.0.0.1:8731";
 // one JSON line per sidecar/NPU call; summarized by scripts/session-audit.sh --harness
 const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
 
-async function moderate(text: string): Promise<{ flagged: boolean; ok?: boolean; label?: string; scores?: any }> {
+async function moderate(text: string): Promise<{ flagged: boolean; ok?: boolean; label?: string; scores?: any; why?: string }> {
 	try {
 		const res = await fetch(BASE + "/v1/moderations", {
 			method: "POST",
@@ -30,12 +30,14 @@ async function moderate(text: string): Promise<{ flagged: boolean; ok?: boolean;
 			signal: AbortSignal.timeout(15_000),
 			body: JSON.stringify({ model: "qwen3guard-gen-0.6b", input: text.slice(0, 12000) }),
 		});
-		if (!res.ok) return { flagged: false };
+		if (!res.ok) return { flagged: false, why: `HTTP ${res.status}` };
 		const r = await res.json();
 		const m = (r.results && r.results[0]) || r;
 		return { flagged: !!m.flagged, ok: true, label: m.label, scores: m.label_scores };
-	} catch {
-		return { flagged: false }; // fail open — don't block on NPU errors
+	} catch (e) {
+		// fail open - don't block on NPU errors. log why: 33/132 fast-fails (13-20ms) had
+		// no reason recorded, so "halogen was down" vs "endpoint broke" was unprovable.
+		return { flagged: false, why: String((e as Error)?.cause?.code || (e as Error)?.message || e).slice(0, 80) };
 	}
 }
 
@@ -52,7 +54,7 @@ export default function (pi: ExtensionAPI) {
 		screenCount++;
 		const t0 = Date.now();
 		const result = await moderate(text);
-		ev({ c: "guard", ok: !!result.ok, ms: Date.now() - t0, flagged: result.flagged });
+		ev({ c: "guard", ok: !!result.ok, ms: Date.now() - t0, flagged: result.flagged, why: result.why });
 
 		if (result.flagged) {
 			flaggedCount++;

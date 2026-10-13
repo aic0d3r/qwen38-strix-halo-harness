@@ -100,7 +100,7 @@ One box, four model servers (five with voice), three pieces of silicon:
 - **halogen** (`:8731`, iGPU) — Qwen3.8 Flash-Next 125B from a local checkpoint: the agent's main
   model, 262,144 ctx x 4 slots, prompt cache on.
 - **NPU sidecars** (`:8731`, NPU) — four 0.6-0.8B models on the same server: guard, decider,
-  embedder (and one idle reranker). Detailed in [The NPU](#the-npu).
+  embedder (the reranker is no longer launched). Detailed in [The NPU](#the-npu).
 - **ling3.0-tiny** (`:8090`, iGPU, llama.cpp) — the sidecar for commit messages, compaction
   summaries and repo maps.
 - **semble** (child process, CPU) — semantic code search over `uvx`; no model server.
@@ -186,10 +186,10 @@ plus four separate NPU repos:
 | `qwen38-flash-next-ngram.hgn` | 51.2 GB | **required** — the checkpoint's weight lookup table (read through the page cache; not an n-gram drafter despite the name) |
 | `qwen38-flash-next-vision.hgn` | 0.9 GB | vision tower — image input is enabled by default |
 | `tokenizer/` | small | chat template the engine loads |
-| `npu/decider-0.8b/` | 2.3 GB | `triage` — constrained decisions (~120 ms) |
+| `npu/decider-0.8b/` | 2.3 GB | `triage` — constrained decisions (55 ms warm, ~1.6 s to wake) |
 | `npu/qwen3-embedding-0.6b/` | 848 MB | `dedup_scan` embeddings |
 | `npu/qwen3guard-gen-0.6b/` | 787 MB | injection screening (`auto-guard`) |
-| `npu/qwen3-reranker-0.6b/` | 821 MB | **unused since v1.1** — loaded only because it is in the default `HALOGEN_NPU_MODELS`; drop it (see [The NPU](#the-npu)) |
+| `npu/qwen3-reranker-0.6b/` | 821 MB | **optional file now** — dropped from the default `HALOGEN_NPU_MODELS` (v1.2): nothing calls `/v1/rerank`; keep it only if you re-add reranking yourself |
 
 One directory (e.g. `~/models/halogen-qwen3.8-flash-next/`), NPU models in a lowercase `npu/`
 subdirectory; the launcher mounts it read-only at `/models` inside the container, so the engine
@@ -250,10 +250,10 @@ prompt cache. halogen exposes them on the same `:8731` server.
 
 | model | how it is called | used by | what it does | measured |
 |---|---|---|---|---|
-| `decider-0.8b` | `/v1/chat/completions` with a `json_schema` enum + logprobs | `triage` | picks one of 2-5 options, returns per-option probabilities | ~120 ms, 78 % on 18 binary prompts |
-| `qwen3-embedding-0.6b` | `/v1/embeddings` | `dedup_scan` | embeds files for near-duplicate detection | 70 ms/query, 38 files in 8.4 s |
-| `qwen3guard-gen-0.6b` | `/v1/moderations` | `auto-guard`, every prompt | flags prompt injection | 70-130 ms, 42 % recall / 0 % fp |
-| `qwen3-reranker-0.6b` | `/v1/rerank` | **nothing since v1.1** | ranked the retired NPU search | 130 ms, idle |
+| `decider-0.8b` | `/v1/chat/completions` with a `json_schema` enum + logprobs | `triage` | picks one of 2-5 options, returns per-option probabilities | **55 ms warm, ~1.6 s cold** (first call after idle, measured 10-14), 78 % on 18 binary prompts |
+| `qwen3-embedding-0.6b` | `/v1/embeddings` | `dedup_scan` | embeds files for near-duplicate detection | 70 ms/query, 38 files in 8.4 s; low traffic (2 runs logged) and loads on first use, so it costs nothing resident |
+| `qwen3guard-gen-0.6b` | `/v1/moderations` | `auto-guard`, every prompt | flags prompt injection | 207 ms p50 / 285 p95, **42 % recall, 0 % fp — re-verified 10-14** by `bench/guard-canary.py` |
+| ~~`qwen3-reranker-0.6b`~~ | `/v1/rerank` | **nothing since v1.1** | ranked the retired NPU search | out of the default launch as of 10-14: 0 calls in the event log |
 
 > [!NOTE]
 > The NPU does **not** do codebase search. It used to — an embedding + rerank RAG pipeline — and
@@ -269,8 +269,8 @@ working — search, commit messages and compaction never needed the NPU.
 # which NPU models the server has configured vs actually loaded (they load on first use)
 curl -s localhost:8731/health | python3 -c "import json,sys;print(json.load(sys.stdin)['npu'])"
 
-# trim the loaded set — the reranker is dead weight unless you re-add reranking yourself
-HALOGEN_NPU_MODELS=decider-0.8b,qwen3-embedding-0.6b,qwen3guard-gen-0.6b ./start-halogen.sh
+# the default set is already trimmed (reranker out); override to go smaller still
+HALOGEN_NPU_MODELS=decider-0.8b,qwen3guard-gen-0.6b ./start-halogen.sh
 ```
 
 > [!WARNING]
