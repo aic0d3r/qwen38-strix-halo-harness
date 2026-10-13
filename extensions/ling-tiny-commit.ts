@@ -7,6 +7,7 @@
  */
 
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 
@@ -81,28 +82,31 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	// returns the outcome so the tool caller (the model) sees failures, not just the UI
-	const runCommit = async (extra: string, ctx: any, message = ""): Promise<string> => {
+	const runCommit = async (extra: string, ctx: any, message = "", dir = ""): Promise<string> => {
+		// interlinked sibling repos: commit somewhere other than the session cwd
+		const cwd = dir ? path.resolve(dir.replace(/^~(?=\/|$)/, os.homedir())) : undefined;
+		const git = (args: string[]) => pi.exec("git", args, { cwd });
 		const notify = (msg: string, level?: string) => {
 			try { ctx?.ui?.notify?.(msg, level); } catch { console.log(`[commit] ${msg}`); }
 			return msg;
 		};
 
-		const { code: repoCode } = await pi.exec("git", ["rev-parse", "--is-inside-work-tree"]);
-		if (repoCode !== 0) return notify("Not a git repository. Run: git init && git add -A && git commit -m init", "warning");
+		const { code: repoCode } = await git(["rev-parse", "--is-inside-work-tree"]);
+		if (repoCode !== 0) return notify(`Not a git repository${cwd ? `: ${cwd}` : ""}. Run: git init && git add -A && git commit -m init`, "warning");
 
 		notify("Collecting diff...", "info");
 		// prefill dominates sidecar latency (~3.5k tok/s): stat first so truncation never hides a file,
 		// -U1 trims context lines, 24k cap. Measured 10-12: worst case 7.2s -> 2.9s.
 		const [{ stdout: stat }, { stdout: diff }, { stdout: untracked }] = await Promise.all([
-			pi.exec("git", ["diff", "HEAD", "--stat"]),
-			pi.exec("git", ["diff", "-U1", "HEAD"]),
-			pi.exec("git", ["ls-files", "--others", "--exclude-standard"]),
+			git(["diff", "HEAD", "--stat"]),
+			git(["diff", "-U1", "HEAD"]),
+			git(["ls-files", "--others", "--exclude-standard"]),
 		]);
 
 		let untrackedBlock = "";
 		if (untracked.trim()) {
 			const files = untracked.split("\n").filter(Boolean).slice(0, 10);
-			const heads = (await Promise.all(files.map((f) => pi.exec("head", ["-c", "800", "--", f]))))
+			const heads = (await Promise.all(files.map((f) => pi.exec("head", ["-c", "800", "--", f], { cwd }))))
 				.map(({ stdout: h }, i) => (h.trim() ? `--- NEW FILE ${files[i]} (head) ---\n${h}` : ""))
 				.filter(Boolean);
 			untrackedBlock = `\n--- untracked ---\n${untracked}\n${heads.join("\n")}`;
@@ -127,14 +131,14 @@ ${fullDiff}
 			// exclude pathspecs that name a gitignored path make `git add` exit 1, so only exclude un-ignored ones
 			const excludes: string[] = [];
 			for (const p of [PROGRESS, ".progress-log"]) {
-				const { code } = await pi.exec("git", ["check-ignore", "-q", p]);
+				const { code } = await git(["check-ignore", "-q", p]);
 				if (code !== 0) excludes.push(`:(exclude)${p}`);
 			}
-			const { code: aCode, stderr: aErr } = await pi.exec("git", ["add", "-A", "--", ".", ...excludes]);
+			const { code: aCode, stderr: aErr } = await git(["add", "-A", "--", ".", ...excludes]);
 			if (aCode !== 0) return notify(`git add failed: ${aErr}`, "error");
-			const { code: cCode, stdout: cOut, stderr: cErr } = await pi.exec("git", ["commit", "-m", commitMessage]);
+			const { code: cCode, stdout: cOut, stderr: cErr } = await git(["commit", "-m", commitMessage]);
 			if (cCode !== 0) return notify(`git commit failed: ${cErr || cOut}`, "error");
-			return notify(`Committed: ${commitMessage.split("\n")[0]}`, "info");
+			return notify(`Committed${cwd ? ` in ${cwd}` : ""}: ${commitMessage.split("\n")[0]}`, "info");
 		} catch (error) {
 			const why = error instanceof Error ? error.message : String(error);
 			ev({ c: "commit", ok: false, ms: Date.now() - t0, why: why.slice(0, 120) });
@@ -152,7 +156,7 @@ ${fullDiff}
 	// goes through pi.exec, which tool_call hooks never see.
 	pi.on("tool_call", async (event: any) => {
 		if (event?.toolName !== "bash" || !isDirectCommit(String(event?.input?.command ?? ""))) return;
-		return { block: true, reason: "Commits go through the commit tool (ling-tiny writes the message). Call the commit tool (or /commit) instead of git commit; pass `message` to use an exact message." };
+		return { block: true, reason: "Commits go through the commit tool (ling-tiny writes the message). Call the commit tool (or /commit) instead of git commit; pass `message` to use an exact message and `cwd` to commit another repo." };
 	});
 
 	// agent-invocable tool: agents reach for tools, not slash commands (3 /commit misses measured)
@@ -165,10 +169,11 @@ ${fullDiff}
 			properties: {
 				extra: { type: "string", description: "Optional extra instructions for the commit message" },
 				message: { type: "string", description: "Exact commit message to use verbatim (skips the sidecar). Only when the user dictated the message." },
+				cwd: { type: "string", description: "Repo directory to commit in (default: session cwd). Use for sibling repos instead of git -C." },
 			},
 		},
-		execute: async (_callId: string, args: { extra?: string; message?: string }, ctx: any) => {
-			const outcome = await runCommit((args?.extra ?? "").trim(), ctx, args?.message ?? "");
+		execute: async (_callId: string, args: { extra?: string; message?: string; cwd?: string }, ctx: any) => {
+			const outcome = await runCommit((args?.extra ?? "").trim(), ctx, args?.message ?? "", (args?.cwd ?? "").trim());
 			return { content: [{ type: "text", text: outcome }] };
 		},
 	});
