@@ -87,7 +87,10 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70
 - **Also shipped** — `harness-tune` (`/tune` live knobs), `turn-timer`, `subagent/`
   (worker/scout/reviewer/planner, session-model inheritance), `/gauntlet` and `/speedtest`
   prompt templates, and opt-in voice (`./setup.sh --voice`: [privateer-speak](https://npm.im/privateer-speak)
-  on a local Lemonade server — whisper STT 0.43 s, kokoro TTS 0.3 s, both on CPU). Measured
+  on a local Lemonade server — whisper STT 0.43 s, kokoro TTS 0.3 s, both on CPU). Two pi packages
+  are installed by `setup.sh` when missing — [ponytail](https://github.com/DietrichGebert/ponytail)
+  and [rpiv-ask-user-question](https://npm.im/@juicesharp/rpiv-ask-user-question) (the structured
+  `ask_user_question` tool) — they live in `~/.pi/agent/settings.json`, not in this repo. Measured
   no-ops were deleted; receipts in [`extensions/README.md`](extensions/README.md).
 
 ## The stack

@@ -241,7 +241,7 @@ ok "prompt templates current ($T updated, $(ls "$PROMPTS" 2>/dev/null | wc -l) t
 # codebase search is the semble MCP server (mcp.json): verify its runtime is available
 if command -v uvx >/dev/null; then ok "uvx found (semble MCP runnable)"; else warn "uvx not found - semantic search (semble) unavailable; install uv (https://docs.astral.sh/uv)"; fi
 
-echo "== 2a. skills + ponytail =="
+echo "== 2a. skills + pi packages =="
 SKILL_DIR="$PI_HOME/agent/skills"; mkdir -p "$SKILL_DIR"
 mkdir -p "$PI_HOME/agent/themes"
 if [ -f "$REPO/config/themes/opencode.json" ] && [ ! -f "$PI_HOME/agent/themes/opencode.json" ]; then
@@ -260,6 +260,11 @@ if command -v pi >/dev/null; then
   if ! python3 -c "import json,sys; sys.exit(0 if any('ponytail' in p for p in json.load(open('$PI_HOME/agent/settings.json')).get('packages',[])) else 1)" 2>/dev/null; then
     pi install git:github.com/DietrichGebert/ponytail >/dev/null 2>&1 && ok "ponytail installed (pi package)" || warn "ponytail install failed - run: pi install git:github.com/DietrichGebert/ponytail"
   else ok "ponytail package present"; fi
+  # the structured ask_user_question tool is a package, not a local extension: without it the
+  # agent can only ask prose questions, so ambiguous runs silently guess
+  if ! python3 -c "import json,sys; sys.exit(0 if any('ask-user-question' in p for p in json.load(open('$PI_HOME/agent/settings.json')).get('packages',[])) else 1)" 2>/dev/null; then
+    pi install npm:@juicesharp/rpiv-ask-user-question >/dev/null 2>&1 && ok "ask-user-question installed (pi package)" || warn "ask-user-question install failed - run: pi install npm:@juicesharp/rpiv-ask-user-question"
+  else ok "ask-user-question package present"; fi
 fi
 [ "$S" = 0 ] && ok "skills current ($(ls "$SKILL_DIR" | wc -l) dirs)" || ok "installed/updated $S skills"
 
