@@ -158,3 +158,23 @@ save context/time unconditionally. Install: copy to `~/.pi/agent/extensions/`.
 These fire automatically on pi lifecycle events - the agent doesn't know they exist.
 The context saving compounds: every summarized output saves ~2k tokens × remaining
 turns in re-prefill cost (break-even at ~3 remaining turns).
+
+## ui-ux-guard.ts (deterministic UI gate, no model)
+
+Runs the impeccable design detector after every `edit`/`write` on a UI file
+(`.css .scss .sass .less .html .vue .svelte .astro .tsx .jsx`) and appends any
+new finding to that tool result, so the agent has to fix it or dismiss it with a
+stated reason. Impeccable ships hook manifests for Claude Code, Codex, Cursor,
+Copilot and Gemini - not for pi - so this is the pi wiring for the same check.
+
+- Cost: one subprocess, ~25 ms per UI edit, no model call. Non-UI tools and
+  errored edits return immediately.
+- Detector exit codes are the lint convention: 0 clean, 1 scanner error,
+  **2 = findings reported** (only >2 stays silent).
+- Deduped per file+rule+line for the life of the process, so the same finding
+  does not re-nag on every later edit.
+- **Inert by design if the detector is missing.** This harness ships no skills
+  (see the 1.0.1 drop of vendored design skills), so the extension no-ops unless
+  `~/.pi/agent/skills/impeccable/scripts/impeccable` exists; set
+  `IMPECCABLE_BIN` to point it somewhere else. One-shot disable:
+  `IMPECCABLE_HOOK_DISABLED=1`.

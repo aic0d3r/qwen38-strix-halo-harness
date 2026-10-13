@@ -54,7 +54,8 @@ fi
 
 echo "[3/8] extensions provisioned by the harness"
 for f in progress-tracker.ts npu-retrieval.ts ling-tiny-compaction.ts ling-tiny-commit.ts \
-         ling-tiny-branch-summary.ts ling-tiny-repomap.ts harness-tune.ts auto-guard.ts turn-timer.ts; do
+         ling-tiny-branch-summary.ts ling-tiny-repomap.ts harness-tune.ts auto-guard.ts turn-timer.ts \
+         ui-ux-guard.ts; do
   [ -f "$AG/extensions/$f" ] && rm -f "$AG/extensions/$f"
 done
 [ -d "$AG/extensions/subagent" ] && rm -rf "$AG/extensions/subagent"
