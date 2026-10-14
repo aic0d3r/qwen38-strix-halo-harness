@@ -88,7 +88,7 @@ try:
     for mod in m.get("providers", {}).get("halogen", {}).get("models", []):
         if mod.get("id") == "halogen-qwen3.8-flash-next":
             mod["contextWindow"] = ctx
-            json.dump(m, open(mp, "w"), indent=1)
+            json.dump(m, open(mp + ".tmp", "w"), indent=1); os.replace(mp + ".tmp", mp)
             print(f"models.json: halogen contextWindow -> {ctx}")
     sp = os.path.join(os.path.dirname(mp), "settings.json")
     s = json.load(open(sp))
@@ -98,11 +98,13 @@ try:
     # (e.g. 60144 from /tune reset) left ~5k of room and compacted every turn
     if comp.get("reserveTokens") in (None, 60000, 10240) or comp["reserveTokens"] >= ctx // 2:
         comp["reserveTokens"] = 60000 if ctx > 65536 else 10240
-    json.dump(s, open(sp, "w"), indent=2)
+    json.dump(s, open(sp + ".tmp", "w"), indent=2); os.replace(sp + ".tmp", sp)
 except Exception: pass
 PY
 
 RENDER_GID=$(getent group render | cut -d: -f3); VIDEO_GID=$(getent group video | cut -d: -f3)
+# reranker dropped from the default NPU set (v1.2): nothing calls /v1/rerank since search moved
+# to semble (0 calls in harness-events.jsonl) and it is never loaded on demand either - 821 MB
 exec docker run --rm -i \
   --device /dev/accel/accel0 --device /dev/kfd --device /dev/dri \
   -v /sys:/host/sys \
@@ -113,8 +115,6 @@ exec docker run --rm -i \
   -v /usr/lib/libxrt_core.so.2:/usr/lib/libxrt_core.so.2:ro \
   -v /usr/lib/libxrt_driver_xdna.so.2:/usr/lib/libxrt_driver_xdna.so.2:ro \
   -e HALOGEN_CTX=$CTX -e HALOGEN_KV_SLOTS=$SLOTS \
-  # reranker dropped from the default set (v1.2): nothing calls /v1/rerank since search moved to
-  # semble (0 calls in harness-events.jsonl) and it is never loaded on demand either - 821 MB
   -e HALOGEN_NPU_MODELS=${HALOGEN_NPU_MODELS:-decider-0.8b,qwen3-embedding-0.6b,qwen3guard-gen-0.6b} \
   -e HALOGEN_VISION_TOWER=$VISION \
   -e HALOGEN_CHECKPOINT=/models/$(basename "$CKPT") \
