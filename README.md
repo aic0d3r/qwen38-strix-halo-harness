@@ -31,6 +31,11 @@ decisions, embedding dedup) and a llama.cpp sidecar writing commits and compacti
 One-command setup, crash recovery that survives a killed server, and the **262k ctx** window the
 engine is capable of.
 
+Built and measured on Strix Halo, but not locked to it: the pi extensions (commit, compaction,
+crash recovery, semantic search) work against any OpenAI-compatible engine, so NVIDIA or Apple
+users can swap in their own — see [engines](#halogen-vs-gufo-the-best-engines-for-strix-halo).
+The NPU tools and `setup.sh --halogen` are Strix Halo only.
+
 It runs with **no API key and no outbound calls** by default, and switching to a cloud model mid
 session is a supported shape rather than a fallback: the NPU tools and the whole sidecar suite
 stay on-device either way, so screening, search and compaction never follow your code off the box
