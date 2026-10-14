@@ -7,6 +7,7 @@ D="${1:-$PWD}"
 [ -d "$D" ] || { echo "not a directory: $D" >&2; exit 1; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
 bash "$HERE/setup.sh" --halogen auto || exit 1
+bash "$HERE/scripts/check-halogen-update.sh"
 cd "$D"
 # ponytail rules stay active; hide the redundant footer indicator (/ponytail status still works)
 export PONYTAIL_HIDE_STATUS=1
