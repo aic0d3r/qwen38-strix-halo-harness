@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # halogen-top.sh — live dashboard for the halogen flash server.
 #   ./scripts/halogen-top.sh [interval_s]      (default 1s, Ctrl-C to quit)
+#   ./scripts/halogen-top.sh --strata [url] [interval_s]   Strata (llama.cpp server, default
+#       http://127.0.0.1:8080): same dashboard minus the halogen-only prompt-cache panel
+#       (Strata's vLLM-style /metrics is mapped onto the same counters).
+#       HALOGEN_URL overrides the url for either engine.
 #
 # halogen only bumps its token counters when a request *finishes*, so mid-request
 # there is no live t/s to show. Instead we show what is running right now (busy
@@ -8,11 +12,16 @@
 # decode rates taken from our deltas between scrapes. Every scrape is also appended
 # to a history CSV that session-audit.sh --perf later diffs (column order is fixed).
 # Not a TTY (piped/logged)? One line per finished request instead of the dashboard.
-exec python3 - "${1:-1}" <<'PY'
+exec python3 - "$@" <<'PY'
 import collections, json, os, shutil, sys, time, urllib.request
 
-URL = os.environ.get("HALOGEN_URL", "http://127.0.0.1:8731")
-INTERVAL = max(0.2, float(sys.argv[1]))
+_a = sys.argv[1:]
+STRATA = "--strata" in _a
+_a = [x for x in _a if x != "--strata"]
+_url = next((x for x in _a if x.startswith("http")), None)
+URL = (_url or os.environ.get("HALOGEN_URL") or
+       ("http://127.0.0.1:8080" if STRATA else "http://127.0.0.1:8731")).rstrip("/")
+INTERVAL = max(0.2, float(next((x for x in _a if not x.startswith("http")), 1)))
 HIST = os.path.join(os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")),
                     "halogen-top", "history.csv")
 # order is the CSV column order — halogen-perf.py reads it positionally/by name
@@ -49,15 +58,40 @@ def get(path, js=True):
     return json.loads(raw) if js else raw
 
 
+# Strata (vLLM-style names, tokens reused instead of cache hit/miss counts) -> our KEYS names
+STRATA_MAP = {
+    "llamacpp:prompt_tokens_total": "vllm:prompt_tokens_total",
+    "llamacpp:prompt_seconds_total": "strata:totals_prompt_seconds_total",
+    "llamacpp:tokens_predicted_total": "vllm:generation_tokens_total",
+    "llamacpp:tokens_predicted_seconds_total": "strata:totals_decode_seconds_total",
+    "halogen:requests_total": "vllm:request_success_total",
+    "halogen:prompt_tokens_cached_total": "vllm:prefix_cache_hits_total",
+    "halogen:draft_tokens_accepted_total": "vllm:spec_decode_num_accepted_tokens_total",
+    "halogen:draft_tokens_total": "vllm:spec_decode_num_draft_tokens_total",
+    "llamacpp:kv_cache_usage_ratio": "vllm:kv_cache_usage_perc",
+    "llamacpp:requests_processing": "vllm:num_requests_running",
+    "halogen:kv_pool_waiting_for_room": "vllm:num_requests_waiting",
+    "halogen:kv_pool_positions": "strata:engine_max_context",
+}
+
+
 def scrape():
     m = {}
-    for line in get("/metrics", js=False).splitlines():
+    for line in get("/metrics?format=prometheus" if STRATA else "/metrics", js=False).splitlines():
         if line and not line.startswith("#"):
             name, _, val = line.rpartition(" ")
+            if STRATA and name.endswith("}") and "," not in name:
+                name = name.split("{")[0]  # keep only label-free families (drops histograms/per-gpu)
             try:
                 m[name] = float(val)
             except ValueError:
                 pass
+    if STRATA:
+        m.update({k: m[v] for k, v in STRATA_MAP.items() if v in m})
+        # Strata's prompt total includes tokens reused from its cache, but prompt_seconds only
+        # covers tokens actually read: subtract them or prefill t/s is wildly inflated.
+        if "llamacpp:prompt_tokens_total" in m:
+            m["llamacpp:prompt_tokens_total"] -= m.get("vllm:prefix_cache_hits_total", 0.0)
     h, cache = {}, {}
     try:
         h = get("/health")
@@ -169,7 +203,8 @@ def render(m, h, cache, offline):
     W = shutil.get_terminal_size((100, 30)).columns
     L = []
     up = time.time() - t0
-    model = h.get("model", "halogen")
+    hal = not STRATA  # halogen-only: hit/miss cache panel
+    model = h.get("model", "strata" if STRATA else "halogen")
     ver = (h.get("version") or {}).get("api", "")
     status = RED("● OFFLINE") if offline else GRN("● online")
     L.append(f" {B(model)} {DIM('v' + ver) if ver else ''}  {DIM(URL)}   {status}"
@@ -199,7 +234,7 @@ def render(m, h, cache, offline):
         used = pool.get("used") or kv * pos
         L.append(f" {B('KV pool')}   {bar(kv)} {kv*100:5.1f}%  {DIM(f'{human(used)} / {human(pos)} positions')}")
         if inflight:
-            L.append(DIM("           halogen updates t/s only when a request finishes — rates below are the last finished one"))
+            L.append(DIM("           t/s updates only when a request finishes — rates below are the last finished one"))
         L.append("")
 
         # last finished request
@@ -210,7 +245,7 @@ def render(m, h, cache, offline):
             many = f" ({r['n']} requests)" if r["n"] > 1 else ""
             L.append(f" {B('LAST FINISHED')}{many}  {DIM(ago + ' ago')}")
             L.append(f"   prefill  {r['ptok']:>9,.0f} tok  {r['psec']:7.2f}s  {CYN(f'{pre:8.1f} t/s')}"
-                     f"   {DIM('cache ' + r['cache'] + ', ' + human(r['saved']) + ' tok reused')}")
+                     f"   {DIM(('cache ' + r['cache'] + ', ' if hal else '') + human(r['saved']) + ' tok reused')}")
             L.append(f"   decode   {r['gtok']:>9,.0f} tok  {r['gsec']:7.2f}s  {MAG(f'{dec:8.1f} t/s')}"
                      f"   {DIM(f'mtp accept {mtp:.0%}')}")
         else:
@@ -232,28 +267,30 @@ def render(m, h, cache, offline):
         L.append("")
 
         # cache + mtp + totals
-        hr = cache.get("hit_rate")
-        thr = cache.get("token_hit_rate")
-        if hr is None:
-            hits, miss = g("halogen:cache_hits_total"), g("halogen:cache_misses_total")
-            hr = hits / (hits + miss) if hits + miss else 0.0
-        ent = cache.get("entries", int(g("halogen:cache_entries")))
-        maxe = cache.get("max_entries", "?")
-        cb = cache.get("bytes", g("halogen:cache_bytes"))
-        L.append(f" {B('PROMPT CACHE')}  hit {GRN(f'{hr:.1%}')} of requests"
-                 + (f", {GRN(f'{thr:.1%}')} of tokens" if thr is not None else "")
-                 + f"  ·  {human(g('halogen:prompt_tokens_cached_total'))} tok saved")
-        L.append(f"   {ent}/{maxe} entries  {cb/1e9:.2f} GB  ·  {int(cache.get('evicted', g('halogen:cache_evicted_total')))} evicted"
-                 f"  ·  restore {cache.get('restore_ms_total', 0)/max(1, cache.get('hits', 1)):.0f} ms avg")
+        if hal:
+            hr = cache.get("hit_rate")
+            thr = cache.get("token_hit_rate")
+            if hr is None:
+                hits, miss = g("halogen:cache_hits_total"), g("halogen:cache_misses_total")
+                hr = hits / (hits + miss) if hits + miss else 0.0
+            ent = cache.get("entries", int(g("halogen:cache_entries")))
+            maxe = cache.get("max_entries", "?")
+            cb = cache.get("bytes", g("halogen:cache_bytes"))
+            L.append(f" {B('PROMPT CACHE')}  hit {GRN(f'{hr:.1%}')} of requests"
+                     + (f", {GRN(f'{thr:.1%}')} of tokens" if thr is not None else "")
+                     + f"  ·  {human(g('halogen:prompt_tokens_cached_total'))} tok saved")
+            L.append(f"   {ent}/{maxe} entries  {cb/1e9:.2f} GB  ·  {int(cache.get('evicted', g('halogen:cache_evicted_total')))} evicted"
+                     f"  ·  restore {cache.get('restore_ms_total', 0)/max(1, cache.get('hits', 1)):.0f} ms avg")
         acc = rate(g("halogen:draft_tokens_accepted_total"), g("halogen:draft_tokens_total"))
         L.append(f" {B('MTP DRAFT')}     accept {GRN(f'{acc:.1%}')}  "
                  f"{DIM(human(g('halogen:draft_tokens_accepted_total')) + ' / ' + human(g('halogen:draft_tokens_total')) + ' drafted')}")
-        L.append(f" {B('TOTALS')}        {g('halogen:requests_total'):.0f} requests  ·  "
+        L.append(f" {B('TOTALS')}        "
+                 f"{g('halogen:requests_total'):.0f} requests  ·  "
                  f"{human(g(KEYS['prompt_tokens']))} prompt tok  ·  {human(g(KEYS['pred_tokens']))} generated")
         L.append("")
 
         # recent requests
-        L.append(f" {B('RECENT')}  {DIM('time        n   prompt tok  prefill t/s   gen tok  decode t/s   mtp  cache')}")
+        L.append(f" {B('RECENT')}  {DIM('time        n   prompt tok  prefill t/s   gen tok  decode t/s' + ('   mtp  cache'))}")
         if not recent:
             L.append(DIM("   —"))
         for r in reversed(recent):
