@@ -1,6 +1,7 @@
 /**
  * Ling-3.0-tiny repo-map extension
  *
+ * Auto-injects only on a fresh session with the local halogen model (not on resume or cloud models).
  * /repomap: builds a compact repo map with tiny (git ls-files + key file heads),
  * inserts it as a user message so the main model starts oriented without
  * spending its first turns on exploratory reads.
@@ -90,6 +91,12 @@ export default function (pi: ExtensionAPI) {
 	pi.on("before_agent_start", async (event, ctx) => {
 		if (autoFired) return;
 		autoFired = true;
+		// local halogen only: cloud models explore cheaply and the map would just bloat their
+		// system prompt; a resumed session (prior messages) already holds what the map would say.
+		// /repomap still works on demand.
+		if ((ctx as any).model?.provider !== "halogen") return;
+		const prior: any[] = (ctx as any).sessionManager?.getBranch?.() ?? [];
+		if (prior.some((e) => e?.type === "message" && e.message?.role === "assistant")) return;
 		const fs = await import("node:fs/promises");
 		try {
 			// freshness cache: reuse the map while the tracked file set is unchanged
