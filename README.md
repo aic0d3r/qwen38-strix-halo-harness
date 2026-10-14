@@ -203,7 +203,7 @@ plus four separate NPU repos:
 | `npu/decider-0.8b/` | 2.3 GB | `triage` — constrained decisions (55 ms warm, ~1.6 s to wake) |
 | `npu/qwen3-embedding-0.6b/` | 848 MB | `dedup_scan` embeddings |
 | `npu/qwen3guard-gen-0.6b/` | 787 MB | injection screening (`auto-guard`) |
-| `npu/qwen3-reranker-0.6b/` | 821 MB | **optional file now** — dropped from the default `HALOGEN_NPU_MODELS` (v1.2): nothing calls `/v1/rerank`; keep it only if you re-add reranking yourself |
+| `npu/qwen3-reranker-0.6b/` | 821 MB | **optional file now** — dropped from the default `HALOGEN_NPU_MODELS` (v1.4): nothing calls `/v1/rerank`; keep it only if you re-add reranking yourself |
 
 One directory (e.g. `~/models/halogen-qwen3.8-flash-next/`), NPU models in a lowercase `npu/`
 subdirectory; the launcher mounts it read-only at `/models` inside the container, so the engine

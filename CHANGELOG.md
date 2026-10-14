@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.4 - 2026-10-14
+
+### Added
+- `extensions/ui-ux-guard.ts`: the impeccable UI detector runs mechanically after every
+  edit/write on a UI-relevant file, appending new findings to the tool result. In pi the
+  detector previously ran only if the agent remembered to (impeccable ships hook manifests
+  for Claude Code / Codex / Cursor / Copilot / Gemini — not pi).
+- Subagent agents take an opt-in `skills:` frontmatter list (name, path, or comma-separated).
+  The SKILL.md body is inlined into the subagent's system prompt and passed via `--skill`,
+  so the body is read without the discovery scan — subagents still run `--no-skills`.
+  A missing skill is skipped, not fatal.
+- The commit tool accepts a `cwd`, for commits in interlinked sibling repos.
+- `setup.sh` provisions the pi packages the harness assumes (`ponytail`,
+  `@juicesharp/rpiv-ask-user-question`) instead of relying on a hand-installed agent dir.
+
+### Changed
+- `qwen3-reranker-0.6b` is out of the default `HALOGEN_NPU_MODELS`: nothing has called
+  `/v1/rerank` since v1.1 moved search to semble. 821 MB back at the next engine restart;
+  override `HALOGEN_NPU_MODELS` to re-add it.
+- `auto-guard` records `why` a screen failed in `harness-events.jsonl`. The 33 reason-less
+  fast-fails (13-20 ms) were `Unable to connect` — the engine was down, not the guard.
+
+### Docs
+- NPU numbers re-measured on halogen 0.18.1: `triage` 55 ms warm / ~1.6 s cold (README said
+  ~120 ms), guard 207 ms p50 / 285 p95, canary re-verified 42 % recall / 0 % fp.
+
 ## 1.3 - 2026-10-12
 
 ### Added
