@@ -33,6 +33,7 @@ Two tools ship for it:
 
 ```sh
 ./scripts/halogen-top.sh              # live dashboard: busy state, KV, per-request t/s, cache; piped = log lines
+./scripts/halogen-top.sh --strata     # same against Strata (:8080 or --strata <url>); no cache panel
 ./scripts/session-audit.sh --perf     # prefill/decode for one session's own time window
 ./scripts/session-audit.sh --harness  # sidecar/NPU calls, latency, tokens offloaded, fallbacks
 ```

@@ -55,7 +55,7 @@ Default setup config vs the tuned one below (own A/B script, greedy, thinking of
 0.5 s. Depth sweep, prompt tokens as Strata counts them: 2.3k 717 t/s prefill / 34 t/s decode; 9.7k
 942 / 36; 19.5k 915 / 33; 39.3k 1,015 / 32; 118.9k 990 / 32 (cold prefill 120 s). Raw rows:
 `battery|depth|depth131k-strata-iq4xs.jsonl` in `LLMBench/results/halogen-cmp/`. Decode here is
-below the live-session range below because the battery is long prose at greedy.
+below the live-session range in the next paragraph because the battery is long prose at greedy.
 
 Live agent session (2026-10-14, `scripts/halogen-top.sh --strata`, 100k+ contexts): cold prefill
 900-1,000 t/s on 7k-25k tokens read, decode 53-60 t/s early and 37-45 t/s past 100k, MTP accept

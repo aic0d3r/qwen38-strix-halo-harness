@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `scripts/halogen-top.sh --strata [url]`: the dashboard now reads Strata (default
+  `:8080`). Its vLLM-style `/metrics?format=prometheus` is mapped onto the same counters;
+  the halogen-only prompt-cache panel is hidden. Prefill t/s counts only tokens Strata
+  actually read (its prompt counter includes cache-reused tokens).
+
+### Docs
+- Engine-by-hardware table in the README, and Strata measured with the same battery and depth
+  prompts as halogen vs gufo (decode 43 t/s battery median, 32-36 t/s at 2k-119k, cold prefill
+  ~990 t/s): halogen stays first on Strix Halo, Strata/gufo are the open options.
+
 ## 1.4 - 2026-10-14
 
 ### Added

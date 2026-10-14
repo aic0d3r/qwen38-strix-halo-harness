@@ -253,6 +253,7 @@ command. Context knobs, the `vm-compact.timer` and the small-context opt-out are
 ```sh
 # live dashboard in a second terminal: busy state, queue, KV pool, per-request prefill/decode t/s, cache
 ./scripts/halogen-top.sh          # optional refresh interval in seconds (default 1); piped = one log line per request
+./scripts/halogen-top.sh --strata # same for a Strata server on :8080 (or --strata http://host:port)
 
 # after a session: halogen version vs pin, sidecar rejections, cache-broken prefills, errors
 ./scripts/session-audit.sh        # newest session by default; add --perf for its prefill/decode throughput, --harness for sidecar/NPU work
