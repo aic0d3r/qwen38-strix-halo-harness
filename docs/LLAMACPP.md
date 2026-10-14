@@ -1,4 +1,4 @@
-# Setup: the llama.cpp path (full control)
+# llama.cpp (Vulkan) Setup for Qwen3.8 on Strix Halo
 
 The alternative engine: Nathan's Vulkan llama.cpp builds instead of the halogen container.
 Full control over flags, drafter and GGUF quant, **256k ctx** max, and the way to go for the

@@ -1,4 +1,4 @@
-# Subagent Example
+# Subagent extension for pi (worker, scout, reviewer, planner)
 
 Delegate tasks to specialized subagents with isolated context windows.
 

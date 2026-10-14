@@ -1,4 +1,4 @@
-# Local AI Coding Agent for AMD Strix Halo (Ryzen AI Max+ 395)
+# Local AI Coding Agent Harness for AMD Strix Halo (Ryzen AI Max+ 395)
 
 **Qwen3.8 125B on the Radeon 8060S iGPU, four small models on the NPU, cloud optional** — a
 self-hosted [pi](https://github.com/earendil-works/pi) coding-agent harness built on llama.cpp.
@@ -54,7 +54,7 @@ debugging task rated against verified ground truth.
 > [model files](#model-files) (~124 GB, local). Everything else is optional, and
 > `./setup.sh --doctor` tells you what is live.
 
-![Flash-Next vs GLM 5.3 tiers: time to first token and decode rate](docs/charts/local-vs-cloud.png)
+![Local Qwen3.8 Flash-Next 125B vs GLM 5.3 cloud tiers on Strix Halo: time to first token and decode tokens per second](docs/charts/local-vs-cloud.png)
 
 Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70 W sustained.
 
@@ -151,10 +151,10 @@ numbers and the NPU-prefill fork status: [ENGINES.md](docs/ENGINES.md#what-break
 <table>
   <tr>
     <td align="center"><strong>Local vs cloud: TTFT and decode by tier</strong><br><img src="docs/charts/local-vs-cloud.png" alt="Flash-Next vs GLM 5.3 tiers"></td>
-    <td align="center"><strong>Wall-clock per run, seven runs</strong><br><img src="docs/charts/wallclock-by-run.png" alt="Wall clock by run"></td>
+    <td align="center"><strong>Wall-clock per run, seven runs</strong><br><img src="docs/charts/wallclock-by-run.png" alt="Wall-clock time per run across seven local vs cloud coding-agent runs"></td>
   </tr>
   <tr>
-    <td align="center"><strong>halogen 0.16.2 to 0.17.1: NPU latency 4000ms to 130ms, decode 44 to 64 tok/s</strong><br><img src="docs/charts/halogen-0171-upgrade.png" alt="halogen upgrade delta"></td>
+    <td align="center"><strong>halogen 0.16.2 to 0.17.1: NPU latency 4000ms to 130ms, decode 44 to 64 tok/s</strong><br><img src="docs/charts/halogen-0171-upgrade.png" alt="halogen 0.16.2 to 0.17.1 upgrade: NPU latency and decode tokens per second before and after"></td>
     <td align="center"><strong>Every number in this README</strong><br>logged in <a href="docs/BENCHMARKS.md">docs/BENCHMARKS.md</a></td>
   </tr>
 </table>

@@ -1,4 +1,4 @@
-# Engines, degradation and the cloud hybrid
+# Inference Engines: Halogen vs gufo vs llama.cpp (NVIDIA, Apple, Strix Halo)
 
 Any OpenAI-compatible server works with pi, so on other hardware (NVIDIA, Apple Silicon) use
 whatever engine fits: llama.cpp CUDA/Metal, vLLM, Ollama, LM Studio, MLX, or gufo where it
