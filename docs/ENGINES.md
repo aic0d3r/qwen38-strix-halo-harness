@@ -1,9 +1,12 @@
 # Engines, degradation and the cloud hybrid
 
-Halogen is the only engine this harness provisions and verifies — by design: the extensions that
-make it worth running ride on halogen's NPU sidecars, and no other engine exposes them. You can
-point `models.json` at any OpenAI-compatible server yourself; pi keeps working and the
-degradation is graceful but real (all measured).
+Any OpenAI-compatible server works with pi, so on other hardware (NVIDIA, Apple Silicon) use
+whatever engine fits: llama.cpp CUDA/Metal, vLLM, Ollama, LM Studio, MLX, or gufo where it
+supports your GPU. Only Strix Halo was measured here. On Strix Halo, **halogen and gufo are the
+best options**. Halogen is the only engine this harness provisions and verifies — by design: the
+extensions that make it worth running ride on halogen's NPU sidecars, and no other engine exposes
+them. Point `models.json` at your engine yourself; pi keeps working and the degradation is
+graceful but real (all measured on gufo / llama.cpp).
 
 ## Two first-class stacks
 

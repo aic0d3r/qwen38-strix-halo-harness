@@ -111,10 +111,19 @@ generates on the iGPU with its prompt cache warm; side jobs that need a judgemen
 milliseconds (is this injection, which of these three is it, which files are near-duplicates) go
 to the NPU instead of the 125B model; sidecars read diffs and transcripts directly so they never
 evict the cached prefix; and search runs on CPU against an index built at first query. Halogen is
-the only engine this harness provisions — [what breaks on another engine](docs/ENGINES.md) is
+the only engine `setup.sh` provisions — [what breaks on another engine](docs/ENGINES.md) is
 measured, too.
 
-### Halogen vs gufo (the best open engine)
+### Halogen vs gufo (the best engines for Strix Halo)
+
+**The engine is swappable.** The harness is a pi setup plus extensions that talk to an
+OpenAI-compatible endpoint, so on other hardware (NVIDIA, Apple Silicon, plain CPU) use any
+server that fits it: llama.cpp (CUDA/Metal builds), vLLM, Ollama, LM Studio, MLX, or gufo where
+it supports your GPU. Point `models.json` at it ([example](config/models.json.example)) and skip
+`--halogen`. Only the Strix Halo numbers below are measured here; nothing on NVIDIA or Apple was
+tested. What you lose off halogen is the NPU tooling ([list](docs/ENGINES.md#what-breaks-on-another-engine)).
+On Strix Halo, **halogen and gufo are the two best options**:
+
 
 [gufo](https://github.com/gufo-org/gufo) (MIT) is the open alternative to closed-source halogen.
 Matched A/B on this box, same session and client, fabric clock held:
@@ -128,7 +137,7 @@ Matched A/B on this box, same session and client, fabric clock held:
 | NPU tools (guard, triage, dedup) | yes | no |
 | license | closed | **MIT** |
 
-Halogen stays the default; gufo is the open fallback. To run it, stop halogen first (they share
+Halogen stays the default (fastest, NPU tools); gufo is the open (MIT) pick. To run it, stop halogen first (they share
 one memory heap), then `server/start-gufo-flashnext.sh` (UD-Q4_K_XL + MTP, `:8080`). Full
 numbers and the NPU-prefill fork status: [ENGINES.md](docs/ENGINES.md#what-breaks-on-another-engine).
 
@@ -158,7 +167,7 @@ numbers and the NPU-prefill fork status: [ENGINES.md](docs/ENGINES.md#what-break
 ./setup.sh --doctor
 ```
 
-`--halogen auto` finds `*.hgn` in `.`, `/models`, `~/models`, `~/Downloads`, or take a path
+`--halogen auto` finds `*.hgn` in `.`, `/models`, `~/models`, `~/Downloads`, or pass a path
 explicitly; restart later with `./start-halogen.sh` (written on first launch); `--no-halogen`
 installs pi without container management (laptop pi against your own providers, or against a
 remote Strix Halo appliance via `baseUrl` + `PI_NPU_BASE`). Other flags: `--voice`,
@@ -236,7 +245,7 @@ command. Context knobs, the `vm-compact.timer` and the small-context opt-out are
 ./scripts/session-audit.sh        # newest session by default; add --perf for its prefill/decode throughput, --harness for sidecar/NPU work
 ```
 
-halogen only updates its counters when a request finishes, so the dashboard shows per-request
+Halogen only updates its counters when a request finishes, so the dashboard shows per-request
 rates, not a mid-stream ticker. Leave `halogen-top.sh` running if you want `--perf` to diff
 `/metrics` over a session — it records every scrape to `~/.local/state/halogen-top/history.csv`.
 Point it at a remote box with `HALOGEN_URL=http://host:8731`. Details in

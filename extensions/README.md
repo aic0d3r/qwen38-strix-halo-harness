@@ -6,11 +6,11 @@ Extensions that make pi genuinely better for daily agentic coding on Strix Halo.
 
 You need: a Strix Halo (or any gfx1151/UMA box) running pi, a halogen 0.16.2+
 server with the NPU models (`decider-0.8b` for `triage`, `qwen3-embedding-0.6b`
-for `dedup_scan`, `qwen3guard-gen-0.6b` for `auto-guard`; the reranker is loaded
-but unused since search moved to semble), and a Ling-3.0-tiny sidecar on :8090.
+for `dedup_scan`, `qwen3guard-gen-0.6b` for `auto-guard`; the reranker is no
+longer launched by default), and a Ling-3.0-tiny sidecar on :8090.
 ~70 GB free RAM for flash-next, ~4 GB for the sidecar.
 
-0. Automated setup (does steps 1-2, starts the sidecar if it can, checks the
+1. Automated setup (does steps 2-4, starts the sidecar if it can, checks the
    rest and prints exact fixes):
 
        git clone https://github.com/aic0d3r/qwen38-strix-halo-harness
@@ -74,7 +74,7 @@ Optional / situational:
 - `context-prune.ts`, `NPU-triage.ts`, `ling-tiny-triage.ts` - deleted
   (last in commit `5bc375f` under `extensions/optional/`; 0.0k saved / 0 firings across all in-session A/Bs;
   setup.sh removes stale copies on upgrade). `triage` + `dedup_scan` still
-  ship inside NPU-retrieval.ts (search moved to the semble MCP server) - agents never
+  ship inside npu-retrieval.ts (search moved to the semble MCP server) - agents never
   call them unprompted, and the tables below are component-level numbers,
   not in-session results.
 
@@ -83,43 +83,30 @@ makes continuation prefill nearly free. Sidecar jobs go to tiny - they are new
 content (no cache inheritance) and decode-bound, where tiny is 2.2x faster and
 never blocks the agent.
 
-## The ling-tiny suite (sidecar economics, corrected) - tables below are COMPONENT-level measurements, not in-session results
+## The ling-tiny suite (sidecar economics) - COMPONENT-level measurements, not in-session results
 
-All of these route decode-shaped busywork to a small local model (Ling-3.0-tiny,
-~4 GB GGUF) instead of the main model. The old "8x prefill" framing was wrong
-twice over: halogen prefills at ~1,360 t/s uncached and its prompt cache makes
-continuations nearly free - but sidecar jobs never inherit that cache, and the
-real win is decode offload + never blocking the agent.
+These route decode-shaped busywork to a small local model (Ling-3.0-tiny, ~4 GB GGUF) instead of
+the main model. Halogen's prompt cache makes continuations nearly free, but sidecar jobs never
+inherit that cache, so the win is decode offload and never blocking the agent.
 
-Prerequisites: a llama.cpp server serving `ling3.0-tiny` on `127.0.0.1:8090`
-(runs with `--jinja`; the commit tool talks to it over plain HTTP), and a pi
-`models.json` entry with provider `llamacpp-tiny`, model id `ling3.0-tiny`.
+Prerequisites: a llama.cpp server serving `ling3.0-tiny` on `127.0.0.1:8090` (with `--jinja`),
+and a pi `models.json` entry with provider `llamacpp-tiny`, model id `ling3.0-tiny`.
 
+| extension | what it does |
+|---|---|
+| `ling-tiny-compaction.ts` | routes /compact (manual + auto) summarization to tiny |
+| `ling-tiny-commit.ts` | `commit` tool + /commit: message from the diff via sidecar |
+| `ling-tiny-branch-summary.ts` | /tree branch navigation summarizes abandoned entries with tiny |
+| `ling-tiny-repomap.ts` | /repomap: compact repo map inserted before the first turn |
 
-All of these route prefill-shaped busywork to a small local model (Ling-3.0-tiny, ~4 GB GGUF)
-instead of your main model. On this hardware the tiny runs ~2,100 tok/s where a 27B main model
-prefills at ~250 tok/s - an 8x difference on exactly the jobs that are pure prefill.
+## npu-retrieval.ts (halogen NPU)
 
-Prerequisites: a llama.cpp server serving `ling3.0-tiny` on `127.0.0.1:8090`, and a pi
-`models.json` entry with provider `llamacpp-tiny`, model id `ling3.0-tiny`.
-
-| extension | what it does | saving |
-|---|---|---|
-| `ling-tiny-compaction.ts` | routes /compact (manual + auto) summarization to tiny | 8x faster compaction |
-| `ling-tiny-triage.ts` | compresses oversized bash tool results BEFORE they enter history | smaller context every turn |
-| `ling-tiny-commit.ts` | `commit` tool + /commit: message from the diff via sidecar | seconds instead of main-model turns |
-| `ling-tiny-branch-summary.ts` | /tree branch navigation summarizes abandoned entries with tiny | free branch history |
-| `ling-tiny-repomap.ts` | /repomap: compact repo map inserted before the first turn | main model starts oriented |
-
-## NPU-retrieval.ts (halogen 0.16 NPU)
-
-Three tools + one command, each measured and earned:
+Two tools, each measured:
 
 | tool | what it does | measured |
 |---|---|---|
 | `dedup_scan(dirs[], threshold?)` | find near-duplicate files across directories | 45 pairs found across 4 repos in 8.4s, catches renames |
 | `triage(text, question, options[])` | fast routing decision (0.8B classifier, ~120ms) | 78% on binary decisions; use for guardrail hints and issue classification, NOT as a security boundary |
-
 
 ## harness-tune.ts
 
@@ -129,35 +116,6 @@ llama.cpp-side ubatch. Reads and writes the real config files with validation.
 (Tool-result triage threshold was removed 10-06: it pointed at
 `ling-tiny-triage.ts`, which was never installed or loaded, so
 the knob was a silent no-op.)
-
-## Why this suite
-
-The ling-tiny extensions handle the *prefill-shaped* half of session overhead (compaction,
-commits, repo maps, tool-result bloat) at 8x the main model's throughput. The NPU extensions
-handle the *semantic* half (finding code, detecting duplicates, routing decisions) at ~100ms
-per call without touching the iGPU. Together they cover both axes of agent-session cost.
-
-## Context management extensions (new 10-03, from learn-harness-engineering)
-
-| extension | what it does | saving |
-|---|---|---|
-| `context-prune.ts` | deduplicates identical tool outputs + strips status noise before compaction | 10-30% less context to compact; every dedup saves a re-prefill on all subsequent turns |
-| `stop-verify.ts` | runs bash -n / node --check / py_compile on modified files when the agent tries to stop | prevents broken builds from shipping (deterministic, no model) |
-| `progress-tracker.ts` | auto-writes PROGRESS.md every 5 turns; injects it on session resume | eliminates 5-10 min of re-exploration on session restart |
-
-These are pure TypeScript with zero model calls - they cost nothing to run and
-save context/time unconditionally. Install: copy to `~/.pi/agent/extensions/`.
-
-## Passive NPU extensions (new 10-03, zero adoption needed)
-
-| extension | what it does | measured |
-|---|---|---|
-| `auto-guard.ts` | screens every user message via qwen3guard on NPU (~85ms), injects caution if flagged | 80% accuracy on agent-relevant messages |
-| `NPU-triage.ts` | summarizes oversized tool results via qwen3.5-2b on NPU before they enter context | 1.6x faster than main model (9.6s vs 15.5s), 98% context reduction |
-
-These fire automatically on pi lifecycle events - the agent doesn't know they exist.
-The context saving compounds: every summarized output saves ~2k tokens × remaining
-turns in re-prefill cost (break-even at ~3 remaining turns).
 
 ## ui-ux-guard.ts (deterministic UI gate, no model)
 
