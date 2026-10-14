@@ -50,6 +50,19 @@ Default setup config vs the tuned one below (own A/B script, greedy, thinking of
 | Strata `bench.sh`: agent follow-up turn, first token (median) | 5.65 s | 3.97 s |
 | two conversations alternating, 10k tokens each | 11 s re-read per turn | 0.4-0.9 s |
 
+**Same A/B as halogen vs gufo (2026-10-14, `halogen-cmp.py`, greedy, thinking off, nonce-tagged).**
+10-prompt battery: decode median 43 t/s (range 38-59; 55-59 on short code, 38-41 on prose), ttft about
+0.5 s. Depth sweep, prompt tokens as Strata counts them: 2.3k 717 t/s prefill / 34 t/s decode; 9.7k
+942 / 36; 19.5k 915 / 33; 39.3k 1,015 / 32; 118.9k 990 / 32 (cold prefill 120 s). Raw rows:
+`battery|depth|depth131k-strata-iq4xs.jsonl` in `LLMBench/results/halogen-cmp/`. Decode here is
+below the live-session range below because the battery is long prose at greedy.
+
+Live agent session (2026-10-14, `scripts/halogen-top.sh --strata`, 100k+ contexts): cold prefill
+900-1,000 t/s on 7k-25k tokens read, decode 53-60 t/s early and 37-45 t/s past 100k, MTP accept
+52-75%. Prompts that were mostly cached read only a few hundred tokens, so their prefill t/s is
+noisy and low (110-800), not a slowdown. Strata's `/metrics` prompt counter includes cache-reused
+tokens; the script subtracts them.
+
 Halogen is still ahead on this chip (62 t/s decode battery median, 131k cold in 79 s, about
 1,660 t/s), so here Strata is the open-source/GGUF alternative, not the upgrade. Its pitch is
 NVIDIA/AMD desktop GPUs. Needle test on the tuned config: 5/5 at 28-30k tokens.

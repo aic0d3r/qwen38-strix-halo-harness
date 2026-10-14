@@ -127,24 +127,32 @@ server that fits it: [Strata](docs/ENGINES.md#strata-the-pick-for-nvidia-and-amd
 it supports your GPU. Point `models.json` at it ([example](config/models.json.example)) and skip
 `--halogen`. Only the Strix Halo numbers below are measured here; nothing on NVIDIA or Apple was
 tested. What you lose off halogen is the NPU tooling ([list](docs/ENGINES.md#what-breaks-on-another-engine)).
-On Strix Halo, **halogen and gufo are the two best options**:
+Which engine for which hardware:
 
-
-[gufo](https://github.com/gufo-org/gufo) (MIT) is the open alternative to closed-source halogen.
-Matched A/B on this box, same session and client, fabric clock held:
-
-| | halogen 0.18.1 (default) | gufo 0.12.0 |
+| your hardware | engine | why |
 |---|---|---|
-| decode, 20-prompt battery (median) | **62 t/s** | 40 t/s |
-| decode, 4k to 131k context | **45-50 t/s** | 29-32 t/s |
-| cold prefill, 131k prompt | **79 s** | 94 s |
-| warm cache replay | 0.01-0.05 s | ~0.1 s |
-| NPU tools (guard, triage, dedup) | yes | no |
-| license | closed | **MIT** |
+| **Strix Halo** (Ryzen AI Max, 128 GB unified) | **halogen** | fastest measured, plus the NPU tools (guard, triage, dedup) |
+| Strix Halo, want open source | gufo, or Strata | both open, both lose the NPU tools; Strata decodes faster, gufo prefills faster (table below) |
+| **NVIDIA RTX 20-50 / AMD RX 7000-9000, 12 GB+ VRAM** | **[Strata](docs/ENGINES.md#strata-the-pick-for-nvidia-and-amd-desktop-gpus)** | built for it; not measured here, see Strata's own benchmarks |
+| Apple Silicon, anything else | llama.cpp / MLX / Ollama / LM Studio | not measured here |
 
-Halogen stays the default (fastest, NPU tools); gufo is the open (MIT) pick. To run it, stop halogen first (they share
-one memory heap), then `server/start-gufo-flashnext.sh` (UD-Q4_K_XL + MTP, `:8080`). Full
-numbers and the NPU-prefill fork status: [ENGINES.md](docs/ENGINES.md#what-breaks-on-another-engine).
+On Strix Halo, matched measurements on this box (halogen and gufo A/B in one session, fabric clock
+held; Strata re-run 2026-10-14 with the same `halogen-cmp.py` battery and depth prompts, greedy,
+thinking off, nonce-tagged so nothing is cached; UD-IQ4_XS, 256k ctx):
+
+| | halogen 0.18.1 (default) | Strata 0.1.44.1 (tuned) | gufo 0.12.0 |
+|---|---|---|---|
+| decode, 10-prompt battery (median) | **62 t/s** | 43 t/s | 40 t/s |
+| decode, 2k to 119k context | **45-50 t/s** | 32-36 t/s | 29-32 t/s |
+| cold prefill | **~1,660 t/s** (131k in 79 s) | ~990 t/s (119k in 120 s) | ~1,390 t/s (131k in 94 s) |
+| warm cache replay | 0.01-0.05 s | 0.4-0.9 s (earlier session) | ~0.1 s |
+| NPU tools (guard, triage, dedup) | yes | no | no |
+| license | closed | open | **MIT** |
+
+Halogen stays the default on Strix Halo (fastest, NPU tools). Strata and gufo are the open
+alternatives; on this chip Strata is not the upgrade (its pitch is NVIDIA/AMD desktop GPUs). To run
+gufo, stop halogen first (they share one memory heap), then `server/start-gufo-flashnext.sh`
+(UD-Q4_K_XL + MTP, `:8080`). Full numbers: [ENGINES.md](docs/ENGINES.md#what-breaks-on-another-engine).
 
 ## Evidence
 
