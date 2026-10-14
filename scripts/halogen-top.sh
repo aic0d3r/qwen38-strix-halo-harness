@@ -13,7 +13,7 @@
 # to a history CSV that session-audit.sh --perf later diffs (column order is fixed).
 # Not a TTY (piped/logged)? One line per finished request instead of the dashboard.
 exec python3 - "$@" <<'PY'
-import collections, json, os, shutil, sys, time, urllib.request
+import collections, datetime, json, os, shutil, sys, time, urllib.request
 
 _a = sys.argv[1:]
 STRATA = "--strata" in _a
@@ -102,6 +102,47 @@ def scrape():
     except Exception:
         pass
     return m, h, cache
+
+
+EVENTS = os.path.expanduser("~/.pi/agent/harness-events.jsonl")
+NPU_STATE = "/sys/class/accel/accel0/device/power_state"
+
+
+def npu_line():
+    """NPU: host power state (D0 = running something, D3hot = asleep), plus this harness's own
+    NPU calls (guard/triage/dedup) since the dashboard started, from harness-events.jsonl."""
+    try:
+        st = open(NPU_STATE).read().strip()
+    except OSError:
+        return None  # no NPU on this host
+    out = GRN("● active") if st == "D0" else DIM(f"◦ asleep ({st})")
+    agg = {}
+    try:
+        with open(EVENTS, "rb") as f:
+            f.seek(0, 2); f.seek(max(0, f.tell() - 400_000))
+            for ln in f.read().decode("utf-8", "ignore").splitlines()[1:]:
+                try:
+                    e = json.loads(ln)
+                except ValueError:
+                    continue
+                if e.get("c") not in ("guard", "triage", "dedup_scan", "embed"):
+                    continue
+                ts = e.get("t", "")
+                try:
+                    if datetime.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp() < t0:
+                        continue
+                except ValueError:
+                    continue
+                a = agg.setdefault(e["c"], [0, 0, 0.0, 0])  # n, failed, ms, flagged
+                a[0] += 1; a[1] += 0 if e.get("ok", True) else 1
+                a[2] += e.get("ms", 0); a[3] += 1 if e.get("flagged") else 0
+    except OSError:
+        pass
+    for k, (n, bad, ms, fl) in agg.items():
+        out += f"  ·  {k} {n}" + (f" ({fl} flagged)" if fl else "") + f" {ms/n:.0f}ms avg" + (RED(f" {bad} failed") if bad else "")
+    if not agg:
+        out += DIM("  ·  no harness NPU calls this session")
+    return out
 
 
 def human(n):
@@ -226,7 +267,8 @@ def render(m, h, cache, offline):
         else:
             now = GRN("◦ idle") + f"  0/{slots} slots"
         if queued:
-            now += "  ·  " + RED(f"{queued} queued")
+            lw = float(h.get("longest_wait_s", 0) or 0)  # halogen 0.18.3+
+            now += "  ·  " + RED(f"{queued} queued" + (f" (oldest {dur(lw)})" if lw >= 1 else ""))
         L.append(f" {B('NOW')}       {now}")
         kv = m.get("llamacpp:kv_cache_usage_ratio", 0.0)
         pool = cache.get("pool", {})
@@ -287,6 +329,14 @@ def render(m, h, cache, offline):
         L.append(f" {B('TOTALS')}        "
                  f"{g('halogen:requests_total'):.0f} requests  ·  "
                  f"{human(g(KEYS['prompt_tokens']))} prompt tok  ·  {human(g(KEYS['pred_tokens']))} generated")
+        if not STRATA:
+            nl = npu_line()
+            if nl:
+                L.append(f" {B('NPU')}           {nl}")
+        qw = g("halogen:queue_waited_total")  # halogen 0.18.3+; absent on older/Strata
+        if qw:
+            L.append(f" {B('QUEUE')}         {qw:.0f} waited >30s  ·  {dur(g('halogen:queue_wait_seconds_total'))} total"
+                     f"  ·  {g('halogen:queue_gave_up_total'):.0f} gave up")
         L.append("")
 
         # recent requests

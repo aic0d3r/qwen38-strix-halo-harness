@@ -57,3 +57,7 @@ the dashboards are yours to build; these two scripts exist because they cost no 
 | semantic search unavailable | `uvx` missing (install uv) or `mcp.json` lacks the semble entry — rerun `./setup.sh` and check `pi mcp list` |
 | stale task on resume | checkpoint from a previous task — `rm PROGRESS.md`, restart |
 | want zero-touch sidecar after reboot | `systemctl --user enable ling-tiny` (off by default on purpose) |
+
+## Stopping the servers
+
+`scripts/stop-all.sh` stops halogen (docker) and the ling-tiny sidecar, then pops a desktop notification (it warns if GPU memory stays held, which needs a reboot). `scripts/stop-all.sh --install` adds a "Stop LLM servers" entry to the app menu and ~/Desktop. pi and other engines are untouched.
