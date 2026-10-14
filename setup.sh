@@ -9,12 +9,16 @@
 #                               extensions and all container management (for boxes that
 #                               run pi without a local halogen, e.g. a laptop against a
 #                               remote Strix Halo appliance)
+#   ./setup.sh --strata [url]   pi-only install + a provider for Strata (github.com/Niko1221/Strata,
+#                               NVIDIA/AMD desktop GPUs; default http://127.0.0.1:8080). Install
+#                               and start Strata itself first, per its README.
 set -u
-HALOGEN_CKPT=""; DOCTOR=0; VOICE=0; NO_HALOGEN=0
+HALOGEN_CKPT=""; DOCTOR=0; VOICE=0; NO_HALOGEN=0; STRATA=0; STRATA_URL=http://127.0.0.1:8080
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-halogen)  NO_HALOGEN=1; shift ;;
     --halogen) HALOGEN_CKPT="${2:-auto}"; shift 2 2>/dev/null || shift ;;
+    --strata)  STRATA=1; NO_HALOGEN=1; case "${2:-}" in http*) STRATA_URL="${2%/}"; shift 2 ;; *) shift ;; esac ;;
     --doctor)  DOCTOR=1; shift ;;
     --voice)   VOICE=1; shift ;;
     --halogen-upgrade) HALOGEN_UPGRADE="${2:-latest}"; shift 2>/dev/null || shift ;;
@@ -35,6 +39,7 @@ warn(){ printf '  \033[33m!\033[0m %s\n' "$1"; }
 fail(){ printf '  \033[31m✗\033[0m %s\n' "$1"; }
 tiny_up(){ curl -sf -m 3 "localhost:$TINY_PORT/health" >/dev/null 2>&1; }
 hal_up(){  curl -sf -m 3 "localhost:$HAL_PORT/health"  >/dev/null 2>&1; }
+strata_up(){ curl -sf -m 3 "$STRATA_URL/v1/models" >/dev/null 2>&1; }
 lem_up(){  curl -sf -m 3 "localhost:13305/api/v1/models" >/dev/null 2>&1 || curl -sf -m 3 "localhost:13305/health" >/dev/null 2>&1; }
 # fabric clock held? GPU+NPU together on Strix Halo are only safe with it held
 # (halogen NPU docs). The container holds it while it runs via /sys, but any NPU
@@ -113,6 +118,9 @@ if [ "$DOCTOR" = 1 ]; then
     warn "  supported main engine: halogen only (see README 'Using another engine')."
   fi
   [ -f "$REPO/start-halogen.sh" ]   && ok "start-halogen.sh ready" || warn "no start-halogen.sh yet (written on first --halogen launch)"
+  if python3 -c "import json;json.load(open('$MODELS_JSON'))['providers']['strata']" 2>/dev/null; then
+    strata_up && ok "strata up ($STRATA_URL)" || fail "strata down - start it from its folder (START-HERE.bat / ./setup.sh), or pass its url: ./setup.sh --doctor --strata <url>"
+  fi
   host_checks
   if [ -f "$EXT_DIR/npu-retrieval.ts" ]; then
     R=$(timeout 120 pi -p --no-skills --no-context-files --provider halogen --model halogen-qwen3.8-flash-next --thinking low "Reply with exactly: OK" 2>/dev/null | grep -c 'OK')
@@ -149,6 +157,37 @@ echo "== 2. pi providers (models.json) =="
 if [ "$NO_HALOGEN" = 1 ]; then
   ok "pi-only install: halogen provider, NPU extensions and container management skipped"
   ok "point pi at your own provider, or at a remote halogen appliance by setting its baseUrl in models.json"
+  if [ "$STRATA" = 1 ]; then
+    python3 - "$MODELS_JSON" "$STRATA_URL" <<'PY' && ok "strata provider configured in $MODELS_JSON" || fail "could not update $MODELS_JSON (left untouched)"
+import json, sys, os, urllib.request
+path, url = sys.argv[1], sys.argv[2]
+os.makedirs(os.path.dirname(path), exist_ok=True)
+try: m = json.load(open(path))
+except FileNotFoundError: m = {}
+# ask the running server for its model id, context and input types; fall back to a text-only guess
+mid, ctx, inp = "qwen3.8-flash-next", 131072, ["text"]
+try:
+    d = json.load(urllib.request.urlopen(url + "/v1/models", timeout=3))["data"][0]
+    mid, ctx = d["id"], d.get("meta", {}).get("n_ctx", ctx)
+    inp = d.get("architecture", {}).get("input_modalities", inp)
+except Exception: print("  strata not answering - using defaults; re-run once it is up to pick up the real values")
+P = m.setdefault("providers", {})
+if "strata" in P: print("  strata provider exists - left untouched")
+else:
+    P["strata"] = {"baseUrl": url + "/v1", "api": "openai-completions", "apiKey": "dummy",  # set the key here if Strata runs with API_KEY
+        "models": [{"id": mid, "name": "Strata (local)", "reasoning": True, "input": inp,
+                    "contextWindow": ctx, "maxTokens": 8192}]}
+    print("  added provider: strata")
+json.dump(m, open(path, "w"), indent=1)
+sp = os.path.join(os.path.dirname(path), "settings.json")
+try: st = json.load(open(sp))
+except FileNotFoundError: st = {}
+for k, v in (("defaultProvider", "strata"), ("defaultModel", mid)):
+    st.setdefault(k, v)
+json.dump(st, open(sp, "w"), indent=2)
+PY
+    strata_up && ok "strata up ($STRATA_URL)" || warn "strata not answering at $STRATA_URL - start it before using pi"
+  fi
 else
 if ! command -v python3 >/dev/null; then fail "python3 required for models.json merge — install python3 and re-run"; else
 if python3 - "$MODELS_JSON" <<'PY'
@@ -516,6 +555,9 @@ host_checks
 
 echo
 echo "done. doctor check any time:  ./setup.sh --doctor"
+if [ "$STRATA" = 1 ]; then
+  echo "use it:  pi --provider strata   (no NPU tools on Strata, see docs/ENGINES.md)"; exit 0
+fi
 echo "smoke test:"
 echo "  pi -p --no-skills --no-context-files --provider halogen \\"
 echo "    --model halogen-qwen3.8-flash-next --thinking medium \\"

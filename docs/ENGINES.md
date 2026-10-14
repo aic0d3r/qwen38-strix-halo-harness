@@ -15,6 +15,78 @@ graceful but real (all measured on gufo / llama.cpp).
 | **halogen** (recommended) | NPU+GPU engine, Qwen3.8 Flash-Next (125B) from a local checkpoint, zero network | just works, **262k ctx** x 4 slots |
 | **llama.cpp (Vulkan)** | Nathan's builds, full control, DFlash2/MTP spec decode, vision, local GGUFs, zero network, **256k ctx** max | tuning and the **27B** runs — see [the llama.cpp path](LLAMACPP.md) |
 
+## Strata: the pick for NVIDIA and AMD desktop GPUs
+
+[Strata](https://github.com/Niko1221/Strata) (free, open source) runs the same Qwen3.8-Flash-Next
+family on gaming PCs: NVIDIA RTX 20-50 or AMD RX 7000/9000 with 12 GB+ VRAM, 32 GB+ RAM, Windows or
+Linux (Apple Silicon and Strix Halo are listed as experimental). It serves an OpenAI-compatible API
+on `http://127.0.0.1:8080`, so it plugs into pi like any other engine.
+
+```bash
+# 1. install + start Strata itself (START-HERE.bat or ./setup.sh in its folder)
+# 2. then, in this repo:
+./setup.sh --strata                      # or: ./setup.sh --strata http://host:port
+./setup.sh --doctor                      # checks Strata is answering
+pi --provider strata
+```
+
+`--strata` is a pi-only install (it implies `--no-halogen`): it installs the extensions and adds a
+`strata` provider to `~/.pi/agent/models.json`, with model id, context and input types read from
+`/v1/models` (text-only unless Strata runs with images). It does not change your default provider.
+An existing `strata` provider is left untouched. If Strata runs with `API_KEY`, put it in that
+provider's `apiKey`. Same limits as any non-halogen engine (table below): no NPU
+guard/triage/dedup.
+
+**Measured on this box (Strix Halo, Strata 0.1.44.1, UD-IQ4_XS, 256k ctx, nothing else running).**
+Default setup config vs the tuned one below (own A/B script, greedy, thinking off, fresh prompts):
+
+| | default | tuned |
+|---|---|---|
+| cold prefill, 8k / 32k tokens | 683 / 669 t/s | 1,013 / 1,015 t/s |
+| cold prefill, 94k tokens | n/a | 1,012 t/s |
+| decode, short code replies | 53 t/s | 56-60 t/s |
+| decode with 32k / 94k of context | 40 t/s / n/a | 42-46 t/s / 43-44 t/s |
+| Strata `bench.sh`: 4k / 16k prompt | 671 / 722 t/s | 891 / 1,091 t/s |
+| Strata `bench.sh`: agent follow-up turn, first token (median) | 5.65 s | 3.97 s |
+| two conversations alternating, 10k tokens each | 11 s re-read per turn | 0.4-0.9 s |
+
+Halogen is still ahead on this chip (62 t/s decode battery median, 131k cold in 79 s, about
+1,660 t/s), so here Strata is the open-source/GGUF alternative, not the upgrade. Its pitch is
+NVIDIA/AMD desktop GPUs. Needle test on the tuned config: 5/5 at 28-30k tokens.
+
+Tuned config (`docs/STRIX_HALO.md` section 5 of Strata, plus three flags), in
+`strata-<model>.json`:
+
+```
+"env": { "STRATA_PF_FUSED": "1", "STRATA_PF_GEMM": "1", "STRATA_HC_UPMIX": "1", "STRATA_PA_FAST": "1",
+         "STRATA_HIP_WMMA": "1", "STRATA_SELECT_WMMA": "1", "STRATA_HC_Q8": "1",
+         "STRATA_PF_SWITCH_MIN_T": "4096", "STRATA_PREFILL_STREAM_MIN": "128" }
+args: --spec 5 --lookup-chain 3 --mtp-q4 all --conversation-cache-mib 8192 --conversation-cache-slots 4
+```
+
+The env switches change rounding (Strata gates them by KL; replies can differ slightly from the
+default). Setup keeps added `env` keys when re-run but drops hand-added `args`. Tried and not
+kept: `--prefill auto:32768` and `16384` (no gain, and the engine warns it lends cache slots to
+the prompt path) and `--mtp-window 8192` (no gain at 94k). Not tried: holding the GPU fabric clock
+(needs root; see the doctor warning).
+
+Strix Halo install notes (never run it beside halogen, see the warning below):
+
+```bash
+cd Strata && ROCM_PATH=/nonexistent ./setup.sh --yes --family unsloth --model UD-IQ4_XS \
+    --context 262144 --no-start
+```
+
+- `ROCM_PATH=/nonexistent` makes setup use its own ROCm wheels. A TheRock-layout system ROCm in
+  `/opt/rocm` (CachyOS `rocm-gfx1151-bin`) is picked up and then fails at configure
+  (`/opt/rocm/llvm/bin/clang++` missing; the compiler is in `lib/llvm`).
+- `--yes` picked a 32k context here; pass `--context` for more.
+- The 94 GB download can come from an existing copy: put the three `UD-IQ4_XS-0000N-of-00003.gguf`
+  shards in `Strata-data/models/unsloth-UD-IQ4_XS/` (a hardlink works) before step 5 and setup
+  verifies them by size and SHA-256.
+- `--no-start` leaves the server down. Start it without opening a browser:
+  `.venv/bin/python serve/server.py --engine strata --config strata-<model>.json --port 8080`.
+
 ## What breaks on another engine
 
 | feature | on gufo 0.12.0 / plain llama.cpp |

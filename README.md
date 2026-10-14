@@ -123,7 +123,7 @@ measured, too.
 
 **The engine is swappable.** The harness is a pi setup plus extensions that talk to an
 OpenAI-compatible endpoint, so on other hardware (NVIDIA, Apple Silicon, plain CPU) use any
-server that fits it: llama.cpp (CUDA/Metal builds), vLLM, Ollama, LM Studio, MLX, or gufo where
+server that fits it: [Strata](docs/ENGINES.md#strata-the-pick-for-nvidia-and-amd-desktop-gpus) (NVIDIA/AMD desktop GPUs), llama.cpp (CUDA/Metal builds), vLLM, Ollama, LM Studio, MLX, or gufo where
 it supports your GPU. Point `models.json` at it ([example](config/models.json.example)) and skip
 `--halogen`. Only the Strix Halo numbers below are measured here; nothing on NVIDIA or Apple was
 tested. What you lose off halogen is the NPU tooling ([list](docs/ENGINES.md#what-breaks-on-another-engine)).
