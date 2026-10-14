@@ -132,7 +132,7 @@ fi
 # first run: ask once whether start.sh should check for a newer halogen image (answer saved; env overrides)
 UPD_PREF="${PI_CODING_AGENT_DIR:-$PI_HOME/agent}/harness-update-check"
 if [ "$NO_HALOGEN" = 0 ] && [ ! -f "$UPD_PREF" ] && [ -t 0 ]; then
-  read -r -p "Check for halogen updates each time start.sh runs? (one short network call, never auto-installs) [y/N] " A
+  read -r -p "Check for halogen updates each time start.sh runs? (one short network call; you are asked before anything installs) [y/N] " A
   mkdir -p "$(dirname "$UPD_PREF")"; case "$A" in [yY]*) echo 1 ;; *) echo 0 ;; esac > "$UPD_PREF"
 fi
 

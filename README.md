@@ -318,7 +318,7 @@ this harness was last validated on). One command does it safely:
 
 `setup.sh` asks once whether `start.sh` should print a one-line notice when a newer image exists
 (`HALOGEN_CHECK_UPDATES=1|0` overrides; answer stored in `~/.pi/agent/harness-update-check`).
-It never installs anything.
+It only upgrades if you answer y.
 
 It pulls the image, refreshes the NPU model files (new images can need new NPU device files — 0.18
 added the embedding `u10.elf`), restarts, then runs the acceptance battery: health + version
