@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.1 - 2026-10-15
+
+### Changed
+- `setup.sh`: serena now starts with `--project-from-cwd` (new installs, and added to an existing mcp.json), so the project is active at startup. It also records the repo path in `~/.pi/agent/harness-repo` so `/usage` works from any install location.
+- `work-guard`: source edits inside the project are blocked until `mcp__serena__activate_project` was called (only when serena is configured and its activate tool is exposed to the session).
+
 ## 1.5 - 2026-10-15
 
 ### Added

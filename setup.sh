@@ -139,6 +139,7 @@ fi
 echo "== 1. pi + extensions =="
 if command -v pi >/dev/null; then ok "pi found"; else fail "pi coding agent not found on PATH - install it first, then re-run"; fi
 mkdir -p "$EXT_DIR"
+printf '%s\n' "$REPO" > "$PI_HOME/agent/harness-repo"  # lets harness-status find scripts/usage-stats.py
 N=0
 for f in "$REPO"/extensions/*.ts; do
   b=$(basename "$f")
@@ -317,14 +318,24 @@ fi
 echo "== 2b. MCP servers (mcp.json) =="
 MCP_JSON="$PI_HOME/agent/mcp.json"
 if [ -f "$MCP_JSON" ]; then
-  ok "mcp.json exists (left untouched)"
+  # existing file: only add --project-from-cwd so serena activates the cwd project at startup
+  python3 - "$MCP_JSON" <<'PYF' || warn "could not update serena args in $MCP_JSON"
+import json, sys
+p = sys.argv[1]; m = json.load(open(p))
+s = m.get("mcpServers", {}).get("serena")
+if s is not None and "--project-from-cwd" not in s.get("args", []):
+    s["args"] = s.get("args", []) + ["--project-from-cwd"]
+    json.dump(m, open(p, "w"), indent=2)
+    print("  serena: added --project-from-cwd (auto-activates the cwd project)")
+PYF
+  ok "mcp.json exists (otherwise left untouched)"
 elif command -v pi >/dev/null; then
   python3 - "$MCP_JSON" <<'PYM'
 import json, os, sys
 path = sys.argv[1]
 servers = {
     "serena": {
-        "command": "~/.local/bin/serena", "args": ["start-mcp-server"],
+        "command": "~/.local/bin/serena", "args": ["start-mcp-server", "--project-from-cwd"],
         "exposure": "hidden",
         "toolExposure": {"activate_project": "direct", "find_symbol": "direct",
             "get_symbols_overview": "direct", "find_referencing_symbols": "direct",

@@ -1,11 +1,14 @@
 // harness-status: /usage runs scripts/usage-stats.py inside pi; a footer status shows halogen load.
 //   /usage [--all] [--top N]     (HARNESS_REPO overrides the repo path)
 // Footer: "halogen kv 14% · 1 run · 0 wait · 62 t/s" polled from :8731/metrics every 5s; hidden when unreachable.
+import * as fs from "node:fs";
 import * as path from "node:path";
-import { type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 
 const BASE = process.env.HALOGEN_URL || "http://127.0.0.1:8731";
-const REPO = process.env.HARNESS_REPO || path.join(process.env.HOME ?? "", "coding/qwen38-strix-halo-harness");
+// setup.sh writes the repo path to <agent dir>/harness-repo
+const recorded = (() => { try { return fs.readFileSync(path.join(getAgentDir(), "harness-repo"), "utf8").trim(); } catch { return ""; } })();
+const REPO = process.env.HARNESS_REPO || recorded || path.join(process.env.HOME ?? "", "coding/qwen38-strix-halo-harness");
 const metric = (txt: string, k: string) => { const m = txt.match(new RegExp(`^${k.replace(":", ":")}\\s+([0-9.eE+-]+)`, "m")); return m ? Number(m[1]) : undefined; };
 
 export default function harnessStatus(pi: ExtensionAPI) {
