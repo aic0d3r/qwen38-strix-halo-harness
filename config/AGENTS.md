@@ -4,7 +4,8 @@
 
 Semble (MCP `search` / `find_related`, or CLI `semble search "<query>" <path>`) is the default for
 "where/how is X done" questions and unfamiliar code: describe behavior or name an identifier, then
-jump to the returned file:line instead of grep+read. Use `--content docs|config|all` for non-code.
+jump to the returned file:line instead of grep+read. Both tools require `repo`: always pass the
+absolute project root (the cwd), never a file path. Use `--content docs|config|all` for non-code.
 
 ## Serena — symbol-level work
 

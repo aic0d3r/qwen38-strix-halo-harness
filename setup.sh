@@ -352,6 +352,13 @@ if s is not None and "--project-from-cwd" not in s.get("args", []):
     s["args"] = s.get("args", []) + ["--project-from-cwd"]
     json.dump(m, open(p, "w"), indent=2)
     print("  serena: added --project-from-cwd (auto-activates the cwd project)")
+if "semble" not in m.get("mcpServers", {}):
+    m.setdefault("mcpServers", {})["semble"] = {
+        "command": "uvx", "args": ["--from", "semble[mcp]==0.6.2", "semble"], "exposure": "hidden",
+        "toolExposure": {"search": "direct", "find_related": "direct", "*": "hidden"},
+        "description": "Semble instant semantic code search (local or remote git repos)"}
+    json.dump(m, open(p, "w"), indent=2)
+    print("  semble: added to existing mcp.json")
 PYF
   ok "mcp.json exists (otherwise left untouched)"
 elif command -v pi >/dev/null; then
