@@ -1,0 +1,3 @@
+[hooks]
+# Never rewrite these: the agent needs their exact output.
+exclude_commands = ["^git diff", "^git show", "^cat ", "^head ", "^tail "]

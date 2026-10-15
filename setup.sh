@@ -317,6 +317,25 @@ if command -v pi >/dev/null; then
   if ! python3 -c "import json,sys; sys.exit(0 if any('ask-user-question' in p for p in json.load(open('$PI_HOME/agent/settings.json')).get('packages',[])) else 1)" 2>/dev/null; then
     pi install npm:@juicesharp/rpiv-ask-user-question >/dev/null 2>&1 && ok "ask-user-question installed (pi package)" || warn "ask-user-question install failed - run: pi install npm:@juicesharp/rpiv-ask-user-question"
   else ok "ask-user-question package present"; fi
+  # rtk: the pi package rewrites bash commands through the rtk binary (installed separately)
+  if ! python3 -c "import json,sys; sys.exit(0 if any('pi-rtk-optimizer' in p for p in json.load(open('$PI_HOME/agent/settings.json')).get('packages',[])) else 1)" 2>/dev/null; then
+    pi install npm:@estebanforge/pi-rtk-optimizer >/dev/null 2>&1 && ok "pi-rtk-optimizer installed (pi package)" || warn "pi-rtk-optimizer install failed - run: pi install npm:@estebanforge/pi-rtk-optimizer"
+  else ok "pi-rtk-optimizer package present"; fi
+  mkdir -p "$HOME/.config/rtk" "$EXT_DIR/pi-rtk-optimizer"
+  [ -f "$HOME/.config/rtk/config.toml" ] || cp "$REPO/config/rtk/config.toml" "$HOME/.config/rtk/config.toml"
+  [ -f "$EXT_DIR/pi-rtk-optimizer/config.json" ] || cp "$REPO/config/rtk/pi-rtk-optimizer.json" "$EXT_DIR/pi-rtk-optimizer/config.json"
+  # rtk < 1.0.1 mangles single-file grep output (reads the line number as a filename)
+  RTKV=$(rtk --version 2>/dev/null | awk '{print $2}')
+  if [ -n "$RTKV" ] && [ "$(printf '%s\n1.0.1\n' "$RTKV" | sort -V | head -1)" = 1.0.1 ]; then ok "rtk $RTKV"
+  else
+    case "$(uname -m)" in x86_64) RTKT=x86_64-unknown-linux-musl;; aarch64) RTKT=aarch64-unknown-linux-gnu;; *) RTKT=;; esac
+    RTKTMP=$(mktemp -d)
+    if [ -n "$RTKT" ] && curl -fsSL "https://github.com/rtk-ai/rtk/releases/download/v1.0.1/rtk-$RTKT.tar.gz" | tar xz -C "$RTKTMP" 2>/dev/null \
+       && mkdir -p "$HOME/.local/bin" && install -m755 "$RTKTMP/rtk" "$HOME/.local/bin/rtk"; then
+      ok "rtk 1.0.1 installed to ~/.local/bin (was: ${RTKV:-none}); make sure ~/.local/bin is on PATH"
+    else warn "rtk 1.0.1 download failed - install it from https://github.com/rtk-ai/rtk/releases"; fi
+    rm -rf "$RTKTMP"
+  fi
 fi
 [ "$S" = 0 ] && ok "skills current ($(ls "$SKILL_DIR" | wc -l) dirs)" || ok "installed/updated $S skills"
 

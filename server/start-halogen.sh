@@ -11,10 +11,10 @@ SLOTS="${HALOGEN_KV_SLOTS:-4}"
 # PINNED image tag: upgrades are deliberate - change the pin, restart, run the
 # post-upgrade checks (see README "Upgrading halogen"). Floating :latest runs
 # untested behavior against a harness validated on specific versions.
-IMAGE_TAG="${HALOGEN_IMAGE_TAG:-0.18.4}"
+IMAGE_TAG="${HALOGEN_IMAGE_TAG:-0.18.5}"
 # tags can be re-pushed; the digest is the real pin. HALOGEN_IMAGE_DIGEST= (empty) runs the bare tag
 # (upgrade-halogen.sh does that to test a new tag, then rewrites both lines)
-IMAGE_DIGEST="${HALOGEN_IMAGE_DIGEST-sha256:1a458cd6decdd3a2c27f96196cc3a0bc853cbb3905320c3461d29137072faa78}"
+IMAGE_DIGEST="${HALOGEN_IMAGE_DIGEST-sha256:94c9d76b6b938459e00805c61978808957703745fe573ca2d7f01e9157446b3d}"
 IMAGE="ghcr.io/peonist-ai/halogen-flash-server:${IMAGE_TAG}${IMAGE_DIGEST:+@$IMAGE_DIGEST}"
 [ "${1:-}" = --print-image ] && { echo "$IMAGE"; exit 0; }
 
