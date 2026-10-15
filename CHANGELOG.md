@@ -6,6 +6,7 @@
 - `extensions/work-guard.ts`: scratch work was blocked when the session's cwd was the project and the command moved into the temp dir itself (`cd /tmp; python3 - <<'PY' … open('p.py','w')`). The temp-dir exemption now also looks inside the command. The rule is exported as `blocksBashEdit` and covered by `tests/work-guard.test.ts`.
 
 ### Added
+- `setup.sh --gufo [url]`: pi-only install plus a `gufo` provider (default `http://127.0.0.1:8080`, what `server/start-gufo-flashnext.sh` serves), same flow as `--strata`. `--doctor` now checks either provider.
 - `scripts/halogen-top.sh`: aggregate prefill and decode speed (since server start and since this dashboard started) in the THROUGHPUT panel, plus in the piped one-line mode; prefill trend sparkline.
 
 ### Changed

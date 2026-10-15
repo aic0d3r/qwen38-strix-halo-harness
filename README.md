@@ -152,7 +152,7 @@ thinking off, nonce-tagged so nothing is cached; UD-IQ4_XS, 256k ctx):
 Halogen stays the default on Strix Halo (fastest, NPU tools). Strata and gufo are the open
 alternatives; on this chip Strata is not the upgrade (its pitch is NVIDIA/AMD desktop GPUs). To run
 gufo, stop halogen first (they share one memory heap), then `server/start-gufo-flashnext.sh`
-(UD-Q4_K_XL + MTP, `:8080`). Full numbers: [ENGINES.md](docs/ENGINES.md#what-breaks-on-another-engine).
+(UD-Q4_K_XL + MTP, `:8080`) and `./setup.sh --gufo` to wire pi to it. Full numbers: [ENGINES.md](docs/ENGINES.md#what-breaks-on-another-engine).
 
 ## Evidence
 
