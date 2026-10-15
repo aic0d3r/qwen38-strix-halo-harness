@@ -53,11 +53,12 @@ for f in files:
             if n.lower() == "read" and p.endswith("SKILL.md"): skills[os.path.basename(os.path.dirname(p))] += 1
 
 hooks = collections.Counter()
+trim_saved = 0  # chars tool-trim kept out of context
 try:
-    for line in open(f"{A}/harness-events.jsonl"):
+    for line in open(os.environ.get("HARNESS_EVENTS") or f"{A}/harness-events.jsonl"):
         try: e = json.loads(line)
         except ValueError: continue
-        if allm or (first[:19] <= e.get("t", "") <= last[:19] + "~"): hooks[e.get("c", "?") + (":" + e["k"] if e.get("k") else "")] += 1
+        if allm or (first[:19] <= e.get("t", "") <= last[:19] + "~"): hooks[e.get("c", "?") + (":" + e["k"] if e.get("k") else "")] += 1; trim_saved += e.get("saved", 0) if e.get("c") == "tool-trim" else 0
 except OSError: pass
 
 # installed inventory, for the "never used" lines
@@ -76,8 +77,9 @@ if json_out:
 
 # extensions with no logged trace: stem tokens vs hook/tool names. shortcut: heuristic, extensions that never log (npu-retrieval, turn-timer...) show up here even when active.
 seen = " ".join(list(hooks) + list(ext)).lower()
-silent = sorted(os.path.basename(f)[:-3] for f in glob.glob(f"{A}/extensions/*.ts")
-                if not any(t in seen for t in os.path.basename(f)[:-3].split("-") if len(t) > 3 and t not in ("tiny", "ling")))
+names = [os.path.basename(f)[:-3] for f in glob.glob(f"{A}/extensions/*.ts")] + \
+        [os.path.basename(os.path.dirname(f)) for f in glob.glob(f"{A}/extensions/*/index.ts")]
+silent = sorted(n for n in names if not any(t in seen for t in n.split("-") if len(t) > 3 and t not in ("tiny", "ling")))
 import datetime
 today = datetime.date.today()
 days = [(today - datetime.timedelta(d)).isoformat() for d in range(13, -1, -1)]
@@ -105,4 +107,5 @@ show("Skills read", skills, installed_skills - set(skills))
 show("Extension tools", ext)
 show("Extension hooks", hooks, silent, "no logged activity")
 show("Built-ins", builtin)
+if trim_saved: print(f"\n{bold('tool-trim saved')} {trim_saved:,} chars (~{trim_saved // 4:,} tokens) of tool output")
 if allm: print(f"\n{bold('Tool calls, last 14 days')} {spark} {dim(f'peak {max(vals)}/day')}")

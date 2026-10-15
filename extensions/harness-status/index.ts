@@ -19,6 +19,7 @@ export default function harnessStatus(pi: ExtensionAPI) {
 	pi.registerCommand("usage", {
 		description: "MCP / skill / extension usage report (scripts/usage-stats.py); pass --all for lifetime",
 		handler: async (args: string, ctx: any) => {
+			try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), c: "harness-status", k: "usage" }) + "\n"); } catch {}
 			const r = await pi.exec("python3", [path.join(REPO, "scripts/usage-stats.py"), ...(args ?? "").split(/\s+/).filter(Boolean)], { cwd: REPO, timeout: 30_000 });
 			ctx.ui.notify((r.stdout || r.stderr || "no output").trim(), r.code === 0 ? "info" : "error");
 		},

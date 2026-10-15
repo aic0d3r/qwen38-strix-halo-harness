@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.2 - 2026-10-15
+
+### Changed
+- `usage-stats.py` counts directory extensions, shows tool-trim token savings, and honours HARNESS_EVENTS. `/usage` runs are logged; the serena guard message says a failed activation still lifts the block.
+
 ## 1.5.1 - 2026-10-15
 
 ### Changed

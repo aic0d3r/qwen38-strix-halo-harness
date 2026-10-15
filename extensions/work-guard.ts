@@ -50,7 +50,7 @@ export default function workGuard(pi: ExtensionAPI) {
 		// source edits inside the project need the Serena project active first (symbol tools, diagnostics)
 		if ((toolName === "edit" || toolName === "write") && serenaConfigured && !serenaActive && pi.getActiveTools().includes("mcp__serena__activate_project") && SRC_FILE.test(p) && path.resolve(ctx.cwd, p).startsWith(ctx.cwd + path.sep)) {
 			ev({ c: "work-guard", k: "serena-first" });
-			return { block: true, reason: "Activate the Serena project before editing source: call mcp__serena__activate_project (cwd), then retry. Prefer Serena symbol tools for symbol edits." };
+			return { block: true, reason: "Activate the Serena project before editing source: call mcp__serena__activate_project (cwd), then retry. If Serena is down or the call errors, the attempt still lifts this block: retry the edit. Prefer Serena symbol tools for symbol edits." };
 		}
 		if ((toolName === "edit" || toolName === "write") && UI_PATH.test(p)) {
 			if (!skillRead) {
