@@ -23,6 +23,10 @@ const UI_PATH = /\.(css|scss|sass|less|html|vue|svelte|astro|tsx|jsx)$|(^|\/)(gu
 const SKILL = /ui-ux-work\/SKILL\.md$/;
 const IMAGE = /\.(png|jpe?g|webp|gif)$/i;
 
+const TMPDIR = process.env.TMPDIR || "/tmp";
+// heredoc bodies are data, not commands the agent is about to run
+const stripHeredocs = (cmd: string) => cmd.replace(/<<-?['"]?(\w+)['"]?[\s\S]*?\n\1\b/g, "<<heredoc");
+
 export default function workGuard(pi: ExtensionAPI) {
 	let skillRead = false;
 	let serenaActive = false;
@@ -41,7 +45,12 @@ export default function workGuard(pi: ExtensionAPI) {
 			return;
 		}
 		if (toolName === "bash" && typeof input?.command === "string") {
-			if (BASH_EDIT.some((r) => r.test(input.command))) {
+			if (ctx.cwd?.startsWith(TMPDIR)) return; // scratch dir: not project source
+			const cmd = input.command;
+			const runsPython = /^\s*python3?\b/.test(cmd) || /(^|\||&&|;)\s*python3?\s/.test(cmd);
+			// text quoted in a sed pattern is data, not an edit: only python actually being run may match the python rule
+			const probe = runsPython ? cmd : stripHeredocs(cmd);
+			if (BASH_EDIT.some((r, i) => (i === 2 ? runsPython : true) && r.test(probe))) {
 				ev({ c: "work-guard", k: "bash-edit" });
 				return { block: true, reason: "Don't edit source via bash (python/sed/redirect). Use the edit tool, or Serena (replace_symbol_body, insert_after_symbol, rename_symbol) for symbol work. Bash is for build/test/run. If this wasn't a source edit, rephrase the command." };
 			}

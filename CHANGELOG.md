@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.5 - 2026-10-15
+
+### Changed
+- `work-guard`: fewer false positives on bash. Scratch work under `$TMPDIR` is no longer inspected, and text inside heredoc bodies or sed patterns no longer counts as an edit (the python rule only fires when python is actually being run).
+
 ## 1.5.4 - 2026-10-15
 
 ### Changed
