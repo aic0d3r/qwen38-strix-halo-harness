@@ -14,3 +14,11 @@ Call `mcp__serena__activate_project` once per project, then prefer Serena for sy
 (callers/impact), `replace_symbol_body` / `insert_after_symbol` (edits), `rename_symbol`
 (project-wide rename), `get_diagnostics_for_file` (type/syntax errors). Use grep only for
 exact-string sweeps, and native read/edit for docs and config files.
+
+## Web search — jina
+
+If an answer depends on knowledge likely newer than your training (recent packages/tools,
+releases, maintenance status, current docs, "best X" questions) and Jina is enabled, search with
+it first (`tools.mcp__jina__*` via codemode), then answer. Check `~/.pi/agent/mcp.json`
+(`enabled: false` = off) or just try the call before telling the user a tool is unavailable.
+Jina ships disabled in the example config: enable it with `/mcp`.
