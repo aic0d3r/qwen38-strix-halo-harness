@@ -104,7 +104,7 @@ One box, four model servers (five with voice), three pieces of silicon:
 
 - **halogen** (`:8731`, iGPU) — Qwen3.8 Flash-Next 125B from a local checkpoint: the agent's main
   model, 262,144 ctx x 4 slots, prompt cache on.
-- **NPU sidecars** (`:8731`, NPU) — four 0.6-0.8B models on the same server: guard, decider,
+- **NPU sidecars** (`:8731`, NPU) — three 0.6-0.8B models on the same server: guard, decider,
   embedder (the reranker is no longer launched). Detailed in [The NPU](#the-npu).
 - **ling3.0-tiny** (`:8090`, iGPU, llama.cpp) — the sidecar for commit messages, compaction
   summaries and repo maps.
@@ -231,6 +231,7 @@ Skip the rest (`w4b.hgn`, `ht43.hgn`, `MTP.hgn`, `w4b.overlay*.hgn`, `qwen3.5-2b
 checkpoint carries its own draft head. Upstream also ships an optional smaller/faster `ht43.hgn`
 checkpoint; the default stays `v2` — pass its path explicitly to use it. First cold boot pins the
 47.7 GiB lookup table from disk, so a few minutes of startup is normal.
+
 ## Quick Start
 
 ```sh

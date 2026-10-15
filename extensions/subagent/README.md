@@ -36,18 +36,18 @@ From the repository root, symlink the files:
 ```bash
 # Symlink the extension (must be in a subdirectory with index.ts)
 mkdir -p ~/.pi/agent/extensions/subagent
-ln -sf "$(pwd)/packages/coding-agent/examples/extensions/subagent/index.ts" ~/.pi/agent/extensions/subagent/index.ts
-ln -sf "$(pwd)/packages/coding-agent/examples/extensions/subagent/agents.ts" ~/.pi/agent/extensions/subagent/agents.ts
+ln -sf "$(pwd)/extensions/subagent/index.ts" ~/.pi/agent/extensions/subagent/index.ts
+ln -sf "$(pwd)/extensions/subagent/agents.ts" ~/.pi/agent/extensions/subagent/agents.ts
 
 # Symlink agents
 mkdir -p ~/.pi/agent/agents
-for f in packages/coding-agent/examples/extensions/subagent/agents/*.md; do
+for f in extensions/subagent/agents/*.md; do
   ln -sf "$(pwd)/$f" ~/.pi/agent/agents/$(basename "$f")
 done
 
 # Symlink workflow prompts
 mkdir -p ~/.pi/agent/prompts
-for f in packages/coding-agent/examples/extensions/subagent/prompts/*.md; do
+for f in extensions/subagent/prompts/*.md; do
   ln -sf "$(pwd)/$f" ~/.pi/agent/prompts/$(basename "$f")
 done
 ```
@@ -160,10 +160,10 @@ Project agents override user agents with the same name when `agentScope: "both"`
 
 | Agent | Purpose | Model | Tools |
 |-------|---------|-------|-------|
-| `scout` | Fast codebase recon | Haiku | read, grep, find, ls, bash |
-| `planner` | Implementation plans | Sonnet | read, grep, find, ls |
-| `reviewer` | Code review | Sonnet | read, grep, find, ls, bash |
-| `worker` | General-purpose | Sonnet | (all default) |
+| `scout` | Fast codebase recon | (inherits) | read, grep, find, ls, bash, mcp__semble__search |
+| `planner` | Implementation plans | (inherits) | read, grep, find, ls |
+| `reviewer` | Code review | (inherits) | read, grep, find, ls, bash, mcp__semble__search |
+| `worker` | General-purpose | (inherits) | (all default) |
 
 ## Workflow Prompts
 
