@@ -117,7 +117,11 @@ export default function (pi: ExtensionAPI) {
 			return notify("commit failed: ling-tiny sidecar is down and could not be started (journalctl --user -u ling-tiny). Retry with the `message` parameter to commit with your own message.", "error");
 
 		if (!message) notify(`Generating commit message with ${TINY_MODEL}...`, "info");
-		const prompt = `Write a git commit message for the working-tree changes below. Rules: a single subject line under 72 chars in the imperative mood ("Add X", "Fix Y"), then a blank line, then a short body (2-5 lines) explaining what and why if the change is non-trivial. Plain text, no markdown, no signature. ${extra ? `Extra instructions from the user: ${extra}` : ""}
+		const prompt = `Write a git commit message for the working-tree changes below.
+Subject: one verb then the component then the effect, under 72 chars, no filler words (never "the", "component", "code"). The first word must be one of the verbs below.
+Verbs: Add (new behaviour, field, flag, file) | Fix (only if you can name what was broken) | Prevent | Stop | Drop | Remove | Rename | Use (switched approach) | Document.
+Extra instructions, when present, state the change; the subject must say that.
+Body: only if non-trivial, 2-4 plain lines, what and why, no markdown, no signature. ${extra ? `Extra instructions from the user: ${extra}` : ""}
 
 <changes>
 ${fullDiff}
