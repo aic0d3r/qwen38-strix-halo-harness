@@ -336,6 +336,7 @@ if command -v pi >/dev/null; then
     else warn "rtk 1.0.1 download failed - install it from https://github.com/rtk-ai/rtk/releases"; fi
     rm -rf "$RTKTMP"
   fi
+  command -v rtk >/dev/null || warn "rtk not on PATH - add ~/.local/bin to PATH in your shell profile, or pi-rtk-optimizer warns 'rtk binary unavailable'"
 fi
 [ "$S" = 0 ] && ok "skills current ($(ls "$SKILL_DIR" | wc -l) dirs)" || ok "installed/updated $S skills"
 

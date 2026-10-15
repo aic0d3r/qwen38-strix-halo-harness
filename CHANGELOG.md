@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Removed
+- `work-guard`: the serena-first rule. Native `edit`/`write` on source files no longer wait for `mcp__serena__activate_project` (it blocked config/shell/one-line edits and cost a retry). The bash-edit block stays.
+
 ### Fixed
 - `extensions/work-guard.ts`: scratch work was blocked when the session's cwd was the project and the command moved into the temp dir itself (`cd /tmp; python3 - <<'PY' … open('p.py','w')`). The temp-dir exemption now also looks inside the command. The rule is exported as `blocksBashEdit` and covered by `tests/work-guard.test.ts`.
 
