@@ -29,12 +29,16 @@ export default function harnessStatus(pi: ExtensionAPI) {
 		try {
 			const txt = await (await fetch(`${BASE}/metrics`, { signal: AbortSignal.timeout(2000) })).text();
 			const kv = metric(txt, "llamacpp:kv_cache_usage_ratio"), run = metric(txt, "llamacpp:requests_processing"), wait = metric(txt, "halogen:kv_pool_waiting_for_room");
+			const ptok = metric(txt, "llamacpp:prompt_tokens_total"), psec = metric(txt, "llamacpp:prompt_seconds_total");
 			const tok = metric(txt, "llamacpp:tokens_predicted_total"), sec = metric(txt, "llamacpp:tokens_predicted_seconds_total");
 			if (tok !== undefined && sec !== undefined) {
 				if (prev && sec > prev.sec) rate = (tok - prev.tok) / (sec - prev.sec); // last decode rate, kept while idle
 				prev = { tok, sec };
 			}
-			const parts = [kv !== undefined ? `kv ${Math.round(kv * 100)}%` : "", run !== undefined ? `${run} run` : "", wait ? `${wait} wait` : "", rate ? `${Math.round(rate)} t/s` : ""].filter(Boolean);
+			// prefill is bursty, so a poll delta is useless: show the since-start average, the number ubatch/batch tuning moves
+			const pf = ptok && psec ? ptok / psec : undefined;
+			const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n)));
+			const parts = [kv !== undefined ? `kv ${Math.round(kv * 100)}%` : "", run ? `${run} run` : "", wait ? `${wait} wait` : "", pf ? `pf ${k(pf)}/s` : "", rate ? `${k(rate)} t/s` : ""].filter(Boolean);
 			ctx.ui.setStatus("halogen", parts.length ? `halogen ${parts.join(" · ")}` : undefined);
 		} catch {
 			ctx.ui.setStatus("halogen", undefined); // server down or not halogen: show nothing rather than stale numbers

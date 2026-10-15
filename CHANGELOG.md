@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.4 - 2026-10-15
+
+### Changed
+- `harness-status` footer: adds prefill speed (since-start average, e.g. `pf 1.4k/s` — halogen only updates counters at request end, so a poll delta would be meaningless) and drops `0 run` when idle. Example: `halogen kv 59% · 1 run · pf 1.4k/s · 71 t/s`.
+
 ## 1.5.3 - 2026-10-15
 
 ### Changed
