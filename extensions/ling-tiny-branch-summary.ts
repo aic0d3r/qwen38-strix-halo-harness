@@ -20,6 +20,8 @@ const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "ha
 
 export default function (pi: ExtensionAPI) {
 	pi.on("session_before_tree", async (event, ctx) => {
+		// local halogen only: the sidecar offload is pointless for cloud models
+		if ((ctx as any).model?.provider !== "halogen") return;
 		const { preparation, signal } = event;
 		const { entriesToSummarize, oldLeafId, targetId } = preparation;
 

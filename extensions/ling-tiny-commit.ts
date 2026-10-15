@@ -154,7 +154,9 @@ ${fullDiff}
 	// enforce "tiny always writes the message": block direct git commits from tool
 	// calls so the message can only come from runCommit. runCommit's own git call
 	// goes through pi.exec, which tool_call hooks never see.
-	pi.on("tool_call", async (event: any) => {
+	pi.on("tool_call", async (event: any, ctx: any) => {
+		// local halogen only: the sidecar offload is pointless for cloud models
+		if ((ctx as any).model?.provider !== "halogen") return;
 		if (event?.toolName !== "bash" || !isDirectCommit(String(event?.input?.command ?? ""))) return;
 		return { block: true, reason: "Commits go through the commit tool (ling-tiny writes the message). Call the commit tool (or /commit) instead of git commit; pass `message` to use an exact message and `cwd` to commit another repo." };
 	});
