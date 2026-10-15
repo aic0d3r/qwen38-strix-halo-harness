@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.3 - 2026-10-15
+
+### Changed
+- `harness-status`: the halogen footer and its /metrics polling run only while a halogen model is selected (follows `model_select`); other providers get no footer.
+
 ## 1.5.2 - 2026-10-15
 
 ### Changed

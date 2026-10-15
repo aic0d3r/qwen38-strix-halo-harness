@@ -41,11 +41,16 @@ export default function harnessStatus(pi: ExtensionAPI) {
 		}
 	};
 
-	pi.on("session_start", async (_e: any, ctx: any) => {
-		clearInterval(timer);
+	// footer + polling only while a halogen model is selected; other providers get nothing
+	const stop = (ctx: any) => { clearInterval(timer); timer = undefined; prev = rate = undefined; ctx.ui.setStatus("halogen", undefined); };
+	const sync = (provider: string | undefined, ctx: any) => {
+		stop(ctx);
+		if (provider !== "halogen") return;
 		void poll(ctx);
 		timer = setInterval(() => void poll(ctx), 5000);
 		timer.unref?.();
-	});
-	pi.on("session_shutdown", async (_e: any, ctx: any) => { clearInterval(timer); ctx.ui.setStatus("halogen", undefined); });
+	};
+	pi.on("session_start", async (_e: any, ctx: any) => sync(ctx.model?.provider, ctx));
+	pi.on("model_select", async (e: any, ctx: any) => sync(e.model?.provider, ctx));
+	pi.on("session_shutdown", async (_e: any, ctx: any) => stop(ctx));
 }
