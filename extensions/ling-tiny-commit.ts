@@ -124,7 +124,7 @@ export default function (pi: ExtensionAPI) {
 		if (!message) notify(`Generating commit message with ${TINY_MODEL}...`, "info");
 		const prompt = `Write a git commit message for the working-tree changes below.
 Subject: one verb then the component then the effect, a complete clause that fits in 72 chars (cut detail into the body, never mid-sentence), no filler words (never "the", "component", "code"). The first word must be one of the verbs below.
-Verbs: Add (new behaviour, field, flag, file) | Fix (only if you can name what was broken) | Update (version pin, benchmark numbers, data) | Prevent | Stop (only when the commit makes something stop running; never "Stop" plus a gerund, deleted code is "Remove X") | Drop | Remove | Rename | Use (switched approach) | Document.
+Verbs: Add (new behaviour, field, flag, file) | Fix (only if you can name what was broken) | Update (version pin, benchmark numbers, data) | Prevent | Stop (only when the commit makes something stop running) | Drop | Remove (deleted code, rule or feature) | Rename | Use (switched approach) | Document.
 If the changes cover several unrelated things, the subject names the biggest one and the body lists the others; never invent a change the diff does not show.
 Extra instructions, when present, state the change; the subject must say that.
 Body: only if non-trivial, 2-4 plain lines, what and why, no markdown, no signature. ${extra ? `Extra instructions from the user: ${extra}` : ""}
