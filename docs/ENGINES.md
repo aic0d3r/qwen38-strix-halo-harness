@@ -63,8 +63,8 @@ Live agent session (2026-10-14, `scripts/halogen-top.sh --strata`, 100k+ context
 noisy and low (110-800), not a slowdown. Strata's `/metrics` prompt counter includes cache-reused
 tokens; the script subtracts them.
 
-Halogen is still ahead on this chip (65 t/s decode battery median on 0.18.5, 119k cold in 78 s, about
-1,530 t/s), so here Strata is the open-source/GGUF alternative, not the upgrade. Its pitch is
+Halogen is still ahead on this chip (65 t/s decode battery median on 0.18.5, 131k cold in 86 s, 119k in 78 s,
+about 1,520 t/s), so here Strata is the open-source/GGUF alternative, not the upgrade. Its pitch is
 NVIDIA/AMD desktop GPUs. Needle test on the tuned config: 5/5 at 28-30k tokens.
 
 Tuned config (`docs/STRIX_HALO.md` section 5 of Strata, plus three flags), in
@@ -111,7 +111,7 @@ cd Strata && ROCM_PATH=/nonexistent ./setup.sh --yes --family unsloth --model UD
 | image input | dead as launched (no `--mmproj` wired) |
 | `/health` verification (cache, vision) | degrades to "unknown" |
 | decode (gufo, MTP) | ~38% slower than halogen 0.18.5: 40 vs 65 t/s median battery, 29-32 vs 47-50 t/s from 4k to 131k (flat on both) |
-| cold prefill (gufo) | ~15% slower: 131k in 94 s vs 79 s; warm replay is ~0.1 s on both |
+| cold prefill (gufo) | ~17% slower: 119k in 94 s vs 78 s (halogen 131k: 86 s; the "131k" label on earlier runs was this 119k-token prompt); warm replay is ~0.1 s on both |
 | tool calls (gufo) | valid when complete; a call cut off by `max_tokens` comes back empty, not partial |
 
 Measured 2026-10-12, same session, fabric clock held, UD-Q4_K_XL + shared Q8 MTP (gufo 0.12

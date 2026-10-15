@@ -144,7 +144,7 @@ thinking off, nonce-tagged so nothing is cached; UD-IQ4_XS, 256k ctx):
 |---|---|---|---|
 | decode, 10-prompt battery (median) | **65 t/s** | 43 t/s | 40 t/s |
 | decode, 2k to 119k context | **47-50 t/s** | 32-36 t/s | 29-32 t/s |
-| cold prefill | **~1,530 t/s** (119k in 78 s) | ~990 t/s (119k in 120 s) | ~1,390 t/s (131k in 94 s) |
+| cold prefill | **~1,520 t/s** (131k in 86 s; 119k in 78 s) | ~990 t/s (119k in 120 s) | ~1,270 t/s (119k in 94 s) |
 | warm cache replay | 0.01-0.05 s | 0.4-0.9 s (earlier session) | ~0.1 s |
 | NPU tools (guard, triage, dedup) | yes | no | no |
 | license | closed | open | **MIT** |
