@@ -33,8 +33,13 @@ export const tidyMessage = (msg: string): string => {
 	const [first, ...rest] = msg.trim().split("\n");
 	let subject = first.trim(), body = rest.join("\n").trim();
 	if (subject.length > 72) {
-		// first sentence if it fits, else the last word break before 72
-		const cut = subject.slice(0, 73).search(/[.!?]\s/) + 1 || subject.lastIndexOf(" ", 72);
+		// first sentence if it fits, else the last clause boundary (tiny writes "X, and Y, not Z"
+		// run-ons; cutting at a space mid-clause leaves a subject that reads unfinished), else word break
+		const head = subject.slice(0, 73);
+		const cut =
+			head.search(/[.!?]\s/) + 1 ||
+			[Math.max(head.lastIndexOf(", and "), head.lastIndexOf(" and "), head.lastIndexOf(", not "), head.lastIndexOf("; ")) + 1] ||
+			subject.lastIndexOf(" ", 72);
 		if (cut > 0) {
 			body = [subject.slice(cut).trim(), body].filter(Boolean).join("\n\n");
 			subject = subject.slice(0, cut).trim();
@@ -118,7 +123,7 @@ export default function (pi: ExtensionAPI) {
 
 		if (!message) notify(`Generating commit message with ${TINY_MODEL}...`, "info");
 		const prompt = `Write a git commit message for the working-tree changes below.
-Subject: one verb then the component then the effect, under 72 chars, no filler words (never "the", "component", "code"). The first word must be one of the verbs below.
+Subject: one verb then the component then the effect, a complete clause that fits in 72 chars (cut detail into the body, never mid-sentence), no filler words (never "the", "component", "code"). The first word must be one of the verbs below.
 Verbs: Add (new behaviour, field, flag, file) | Fix (only if you can name what was broken) | Prevent | Stop | Drop | Remove | Rename | Use (switched approach) | Document.
 Extra instructions, when present, state the change; the subject must say that.
 Body: only if non-trivial, 2-4 plain lines, what and why, no markdown, no signature. ${extra ? `Extra instructions from the user: ${extra}` : ""}

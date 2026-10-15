@@ -18,3 +18,8 @@ test("tidyMessage splits long subject", () => {
 	const m = tidyMessage("Fix thing. " + "word ".repeat(30));
 	expect(m.split("\n")[0].length).toBeLessThanOrEqual(72);
 });
+
+test("tidyMessage cuts at a clause boundary, not mid-phrase", () => {
+	const m = tidyMessage("Add prefill speed to harness-status footer and drop the idle zero run text");
+	expect(m.split("\n")[0]).toBe("Add prefill speed to harness-status footer");
+});
