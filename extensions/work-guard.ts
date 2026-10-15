@@ -32,6 +32,15 @@ export default function workGuard(pi: ExtensionAPI) {
 	let serenaActive = false;
 	const serenaConfigured = (() => { try { return "serena" in JSON.parse(fs.readFileSync(path.join(getAgentDir(), "mcp.json"), "utf8")).mcpServers; } catch { return false; } })();
 	let uiDirty = false;
+	let sawImage = false; // any render viewed this session, from any tool
+
+	// pi attaches the image itself to the result, so codemode image(), playwright screenshots and
+	// any other image-returning tool count as a render too, not just read on a *.png path.
+	// One-shot per commit: warn once per UI-edit burst, otherwise refinement loops nag on every commit.
+	pi.on("tool_result", async (event: any) => {
+		if (process.env.WORK_GUARD_DISABLED) return;
+		if ((event.content ?? []).some((b: any) => b?.type === "image")) { sawImage = true; uiDirty = false; }
+	});
 
 	pi.on("tool_call", async (event: any, ctx: any) => {
 		if (process.env.WORK_GUARD_DISABLED) return;
@@ -41,7 +50,7 @@ export default function workGuard(pi: ExtensionAPI) {
 		if (toolName === "mcp__serena__activate_project" || (toolName === "codemode" && /activate_project/.test(String(input?.code)))) serenaActive = true;
 		if (toolName === "read") {
 			if (SKILL.test(p)) skillRead = true;
-			if (IMAGE.test(p) && !p.includes("/.pi/")) { uiDirty = false; }
+			if (IMAGE.test(p)) { uiDirty = false; sawImage = true; }
 			return;
 		}
 		if (toolName === "bash" && typeof input?.command === "string") {
@@ -68,9 +77,9 @@ export default function workGuard(pi: ExtensionAPI) {
 			}
 			uiDirty = true;
 		}
-		if (toolName === "commit" && uiDirty) {
+		if (toolName === "commit" && uiDirty && !sawImage) {
 			ev({ c: "work-guard", k: "no-render" });
-			ctx.ui?.notify("UI files changed and no screenshot was viewed since: committing without a render.", "warning");
+			ctx.ui?.notify("UI files changed this session and no render was viewed: committing unseen. If a render is impossible, say so.", "warning");
 		}
 	});
 }

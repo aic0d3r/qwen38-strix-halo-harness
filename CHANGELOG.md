@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.6 - 2026-10-15
+
+### Fixed
+- `work-guard`: the no-render warning fired even when a screenshot had been viewed. It now counts any image returned by any tool (codemode `image()`, MCP screenshot tools, reads under `~/.pi`) as a render, and warns at most once per UI-edit burst, so refinement loops after a viewed render stay quiet.
+
 ## 1.5.5 - 2026-10-15
 
 ### Changed
