@@ -180,6 +180,33 @@ def rate(tok, sec):
     return tok / sec if sec > 0 else 0.0
 
 
+# panel labels padded to one width so values start in a single column; IND aligns sub-rows under them
+LBL = 15
+IND = " " * (LBL + 2)
+
+
+def row(label, text=""):
+    # pad before colouring: escape sequences count toward str formatting and would shift columns
+    return f" {c('1', f'{label:<{LBL}}')} {text}"
+
+
+def pad(s, w):
+    s = str(s)
+    return " " * (w - len(s)) + s
+
+
+def rrate(v):
+    """rate with a thousands separator: prefill runs in the thousands, decode does not"""
+    return f"{v/1000:.2f}k" if v >= 10000 else f"{v:,.1f}"
+
+
+def prefmt(r, w, unit=False):
+    """a fully prompt-cached request reads 0 new tokens: "0.0 t/s" would read as a stall"""
+    if r["ptok"] <= 0:
+        return DIM(pad("cached", w))
+    return CYN(pad(rrate(r["pre"]), w) + (" t/s" if unit else ""))
+
+
 # ── history CSV ──────────────────────────────────────────────────────────────
 rows = 0
 try:
@@ -211,6 +238,7 @@ first = None          # metrics at start, for "this session" averages
 prev = None
 recent = collections.deque(maxlen=12)   # finished requests (ours, from deltas)
 dec_hist = collections.deque(maxlen=40)  # decode t/s per finished request, for the sparkline
+pre_hist = collections.deque(maxlen=40)  # prefill t/s per finished request, for the sparkline
 last_ok, last_err, tick = None, "", 0
 CACHE_KEYS = ("cache_hits", "cache_misses", "tokens_saved")
 pending = dict.fromkeys(CACHE_KEYS, 0.0)  # cache counters move at request start, not finish
@@ -233,11 +261,15 @@ def finished(d, now):
     return r
 
 
-def log_line(r):
+def log_line(r, m):
     ts = time.strftime("%H:%M:%S", time.localtime(r["t"]))
-    return (f"{ts}  x{r['n']}  prefill {r['ptok']:>7,.0f} tok {r['pre']:7.1f} t/s"
+    # aggregate since server start: the only rates that mean anything during a quiet stretch,
+    # when the between-scrape deltas are flat
+    agg = (f"  |  since start  prefill {rrate(rate(m.get(KEYS['prompt_tokens'], 0), m.get(KEYS['prompt_seconds'], 0)))} t/s"
+           f"  decode {rrate(rate(m.get(KEYS['pred_tokens'], 0), m.get(KEYS['pred_seconds'], 0)))} t/s")
+    return (f"{ts}  x{r['n']}  prefill {r['ptok']:>7,.0f} tok {'cached' if r['ptok'] <= 0 else f'{r["pre"]:7.1f} t/s'}"
             f"  decode {r['gtok']:>6,.0f} tok {r['dec']:6.1f} t/s"
-            f"  mtp {r['mtp']:4.0%}  cache {r['cache']}  saved {human(r['saved'])}")
+            f"  mtp {r['mtp']:4.0%}  cache {r['cache']}  saved {human(r['saved'])}" + agg)
 
 
 def render(m, h, cache, offline):
@@ -269,14 +301,14 @@ def render(m, h, cache, offline):
         if queued:
             lw = float(h.get("longest_wait_s", 0) or 0)  # halogen 0.18.3+
             now += "  ·  " + RED(f"{queued} queued" + (f" (oldest {dur(lw)})" if lw >= 1 else ""))
-        L.append(f" {B('NOW')}       {now}")
+        L.append(row("NOW", now))
         kv = m.get("llamacpp:kv_cache_usage_ratio", 0.0)
         pool = cache.get("pool", {})
         pos = pool.get("positions") or m.get("halogen:kv_pool_positions", 0)
         used = pool.get("used") or kv * pos
-        L.append(f" {B('KV pool')}   {bar(kv)} {kv*100:5.1f}%  {DIM(f'{human(used)} / {human(pos)} positions')}")
+        L.append(row("KV pool", f"{bar(kv)} {kv*100:5.1f}%  {DIM(f'{human(used)} / {human(pos)} positions')}"))
         if inflight:
-            L.append(DIM("           t/s updates only when a request finishes — rates below are the last finished one"))
+            L.append(f"{IND}{DIM('t/s only updates when a request finishes; LAST FINISHED is the newest one')}")
         L.append("")
 
         # last finished request
@@ -285,16 +317,18 @@ def render(m, h, cache, offline):
             pre, dec, mtp = r["pre"], r["dec"], r["mtp"]
             ago = dur(time.time() - r["t"])
             many = f" ({r['n']} requests)" if r["n"] > 1 else ""
-            L.append(f" {B('LAST FINISHED')}{many}  {DIM(ago + ' ago')}")
-            L.append(f"   prefill  {r['ptok']:>9,.0f} tok  {r['psec']:7.2f}s  {CYN(f'{pre:8.1f} t/s')}"
+            L.append(row("LAST FINISHED", f"{many}{DIM('  ' + ago + ' ago')}"))
+            pre_cell = (DIM(pad("all prompt tokens from cache", 24)) if r["ptok"] <= 0 else
+                        f"{pad(f'{r["ptok"]:,.0f}',9)} tok  {pad(f'{r["psec"]:.2f}',6)}s  {prefmt(r, 7, True)}")
+            L.append(f"{IND}{CYN('prefill')}  {pre_cell}"
                      f"   {DIM(('cache ' + r['cache'] + ', ' if hal else '') + human(r['saved']) + ' tok reused')}")
-            L.append(f"   decode   {r['gtok']:>9,.0f} tok  {r['gsec']:7.2f}s  {MAG(f'{dec:8.1f} t/s')}"
+            L.append(f"{IND}{MAG('decode')}    {pad(f'{r["gtok"]:,.0f}',9)} tok  {pad(f'{r["gsec"]:.2f}',7)}s  {MAG(pad(rrate(dec), 7))} t/s"
                      f"   {DIM(f'mtp accept {mtp:.0%}')}")
         else:
-            L.append(f" {B('LAST FINISHED')}  {DIM('none yet since start — waiting for a request to finish')}")
+            L.append(row("LAST FINISHED", DIM("none yet since start — waiting for a request to finish")))
         L.append("")
 
-        # throughput table
+        # aggregate throughput: lifetime = since the server started, watch = since this dashboard did
         def g(k, src=m):
             return src.get(k, 0.0)
         lp = rate(g(KEYS["prompt_tokens"]), g(KEYS["prompt_seconds"]))
@@ -303,9 +337,12 @@ def render(m, h, cache, offline):
                   g(KEYS["prompt_seconds"]) - g(KEYS["prompt_seconds"], first))
         sd = rate(g(KEYS["pred_tokens"]) - g(KEYS["pred_tokens"], first),
                   g(KEYS["pred_seconds"]) - g(KEYS["pred_seconds"], first))
-        L.append(f" {B('THROUGHPUT')}  {DIM('t/s'):>4}      {'session':>9} {'lifetime':>10}   {DIM('decode per request')}")
-        L.append(f"   prefill            {sp:9.1f} {lp:10.1f}")
-        L.append(f"   decode             {sd:9.1f} {ld:10.1f}   {MAG(spark(dec_hist))}")
+        L.append(row("THROUGHPUT", f"{DIM(pad('t/s', 8))} {pad('since start', 12)} {pad('this watch', 11)}   {DIM('per request, newest right')}"))
+        # a watch with only cache hits reads 0 new prompt tokens: "0.0" would read as a stall
+        wt = g(KEYS["prompt_tokens"]) - g(KEYS["prompt_tokens"], first)
+        swatch = DIM(pad("cached" if wt <= 0 and g(KEYS["tokens_saved"]) - g(KEYS["tokens_saved"], first) > 0 else "—", 11))
+        L.append(f"{IND}{CYN(pad('prefill', 8))} {CYN(pad(rrate(lp), 12))} {(swatch if sp <= 0 else CYN(pad(rrate(sp), 11)))}   {CYN(spark(pre_hist))}")
+        L.append(f"{IND}{MAG(pad('decode', 8))} {MAG(pad(rrate(ld), 12))} {MAG(pad(rrate(sd), 11))}   {MAG(spark(dec_hist))}")
         L.append("")
 
         # cache + mtp + totals
@@ -318,37 +355,37 @@ def render(m, h, cache, offline):
             ent = cache.get("entries", int(g("halogen:cache_entries")))
             maxe = cache.get("max_entries", "?")
             cb = cache.get("bytes", g("halogen:cache_bytes"))
-            L.append(f" {B('PROMPT CACHE')}  hit {GRN(f'{hr:.1%}')} of requests"
+            L.append(row("PROMPT CACHE", f"hit {GRN(f'{hr:.1%}')} of requests"
                      + (f", {GRN(f'{thr:.1%}')} of tokens" if thr is not None else "")
-                     + f"  ·  {human(g('halogen:prompt_tokens_cached_total'))} tok saved")
-            L.append(f"   {ent}/{maxe} entries  {cb/1e9:.2f} GB  ·  {int(cache.get('evicted', g('halogen:cache_evicted_total')))} evicted"
+                     + f"  ·  {human(g('halogen:prompt_tokens_cached_total'))} tok saved"))
+            L.append(f"{IND}{ent}/{maxe} entries  {cb/1e9:.2f} GB  ·  {int(cache.get('evicted', g('halogen:cache_evicted_total')))} evicted"
                      f"  ·  restore {cache.get('restore_ms_total', 0)/max(1, cache.get('hits', 1)):.0f} ms avg")
         acc = rate(g("halogen:draft_tokens_accepted_total"), g("halogen:draft_tokens_total"))
-        L.append(f" {B('MTP DRAFT')}     accept {GRN(f'{acc:.1%}')}  "
-                 f"{DIM(human(g('halogen:draft_tokens_accepted_total')) + ' / ' + human(g('halogen:draft_tokens_total')) + ' drafted')}")
-        L.append(f" {B('TOTALS')}        "
-                 f"{g('halogen:requests_total'):.0f} requests  ·  "
-                 f"{human(g(KEYS['prompt_tokens']))} prompt tok  ·  {human(g(KEYS['pred_tokens']))} generated")
+        L.append(row("MTP DRAFT", f"accept {GRN(f'{acc:.1%}')}  "
+                     f"{DIM(human(g('halogen:draft_tokens_accepted_total')) + ' / ' + human(g('halogen:draft_tokens_total')) + ' drafted')}"))
+        L.append(row("TOTALS",
+                     f"{g('halogen:requests_total'):,.0f} requests  ·  "
+                     f"{human(g(KEYS['prompt_tokens']))} prompt tok  ·  {human(g(KEYS['pred_tokens']))} generated"))
         if not STRATA:
             nl = npu_line()
             if nl:
-                L.append(f" {B('NPU')}           {nl}")
+                L.append(row("NPU", nl))
         qw = g("halogen:queue_waited_total")  # halogen 0.18.3+; absent on older/Strata
         if qw:
-            L.append(f" {B('QUEUE')}         {qw:.0f} waited >30s  ·  {dur(g('halogen:queue_wait_seconds_total'))} total"
-                     f"  ·  {g('halogen:queue_gave_up_total'):.0f} gave up")
+            L.append(row("QUEUE", f"{qw:.0f} waited >30s  ·  {dur(g('halogen:queue_wait_seconds_total'))} total"
+                         f"  ·  {g('halogen:queue_gave_up_total'):.0f} gave up"))
         L.append("")
 
         # recent requests
-        L.append(f" {B('RECENT')}  {DIM('time        n   prompt tok  prefill t/s   gen tok  decode t/s' + ('   mtp  cache'))}")
+        L.append(row("RECENT", DIM("time        n   prompt tok  prefill t/s   gen tok  decode t/s   mtp  cache")))
         if not recent:
-            L.append(DIM("   —"))
+            L.append(f"{IND}{DIM('—')}")
         for r in reversed(recent):
             ts = time.strftime("%H:%M:%S", time.localtime(r["t"]))
             pre, dec = r["pre"], r["dec"]
-            L.append(f"         {ts}  {r['n']:>2}  {r['ptok']:>10,.0f}  {CYN(f'{pre:11.1f}')}"
-                     f"  {r['gtok']:>8,.0f}  {MAG(f'{dec:10.1f}')}"
-                     f"  {r['mtp']:4.0%}  {r['cache']}")
+            L.append(f"{IND}{ts}  {pad(r['n'],2)}  {pad(f'{r["ptok"]:,.0f}',11)}  {prefmt(r,11)}"
+                     f"  {pad(f'{r["gtok"]:,.0f}',9)}  {MAG(pad(rrate(dec),10))}"
+                     f"  {pad(f'{r["mtp"]:.0%}',5)}  {r['cache']}")
     L.append("")
     L.append(DIM(f" every {INTERVAL:g}s  ·  history {HIST} ({rows} rows)  ·  Ctrl-C quits"))
     H = shutil.get_terminal_size((100, 30)).lines
@@ -385,8 +422,10 @@ def main():
                         recent.append(r)
                         if r["dec"]:
                             dec_hist.append(r["dec"])
+                        if r["pre"]:
+                            pre_hist.append(r["pre"])
                         if not TTY:
-                            print(log_line(r), flush=True)
+                            print(log_line(r, m), flush=True)
             prev = m
             record(m)
         elif not TTY:

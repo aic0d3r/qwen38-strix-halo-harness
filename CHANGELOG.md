@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+- `scripts/halogen-top.sh`: aggregate prefill and decode speed (since server start and since this dashboard started) in the THROUGHPUT panel, plus in the piped one-line mode; prefill trend sparkline.
+
+### Changed
+- `scripts/halogen-top.sh` layout: one label column for every panel, padded numbers with thousands separators, and a fully prompt-cached request shows `cached` instead of a misleading `0.0 t/s`.
+
 ### Changed
 - `extensions/ling-tiny-commit.ts`: tighter commit-message prompt (verb must match the change, no vague nouns or filler, `extra` instructions drive the subject) and `tidyMessage` now cuts a too-long subject at a clause boundary instead of mid-phrase.
 
