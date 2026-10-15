@@ -12,3 +12,4 @@ bench/run-*.sh
 qa-*.png
 *.log
 .serena/
+tests/
