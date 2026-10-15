@@ -390,6 +390,14 @@ else
   warn "pi not found - skipped mcp.json"
 fi
 
+echo "== 2c. global AGENTS.md =="
+# user-owned: write only when absent, never append to or overwrite an existing one
+if [ -f "$PI_HOME/agent/AGENTS.md" ]; then
+  ok "AGENTS.md exists (left untouched; see $REPO/config/AGENTS.md for semble/serena guidance to merge)"
+elif [ -d "$PI_HOME/agent" ]; then
+  cp "$REPO/config/AGENTS.md" "$PI_HOME/agent/AGENTS.md" && ok "installed AGENTS.md (semble/serena guidance)"
+fi
+
 echo "== 3. ling-tiny sidecar (:8090) =="
 GGUF=""
 if tiny_up; then

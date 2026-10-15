@@ -105,6 +105,8 @@ if [ -f "$AG/mcp.json" ]; then
   echo "      left in place (contains serena/jina/playwright choices you may want elsewhere)"
 fi
 
+[ -f "$AG/AGENTS.md" ] && echo "      AGENTS.md left in place (user-owned)"
+
 echo "[7/8] sidecar GGUF"
 GG=$(find "$HOME/.models" "$HOME/Downloads" "$HOME/LLMBench/models" -maxdepth 3 -name "Ling-3.0-tiny-Q4_K_M.gguf" 2>/dev/null | head -1)
 if [ -n "$GG" ]; then
