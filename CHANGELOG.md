@@ -1,8 +1,13 @@
 # Changelog
 
-## Unreleased
+## 1.5 - 2026-10-15
 
 ### Added
+- `extensions/work-guard.ts`: blocks source edits through bash (sed -i, python writes, redirects), requires the ui-ux-work skill to be read before the first UI edit, and warns (no block) when committing UI changes with no screenshot viewed.
+- `extensions/tool-trim/`: strips ANSI/progress frames and collapses repeats in bash output; very long output keeps first 60 + last 140 lines with the full original saved to /tmp/pi-out; identical re-reads of unchanged files return a pointer (reset on compaction).
+- `extensions/harness-status/`: `/usage` command and a footer halogen load status.
+- `scripts/usage-stats.py`: MCP / skill / extension / built-in usage per session or lifetime, never-used lists, 14-day trend, `--json`.
+- `ui-ux-guard` and `work-guard` log to harness-events.jsonl.
 - `scripts/halogen-top.sh --strata [url]`: the dashboard now reads Strata (default
   `:8080`). Its vLLM-style `/metrics?format=prometheus` is mapped onto the same counters;
   the halogen-only prompt-cache panel is hidden. Prefill t/s counts only tokens Strata

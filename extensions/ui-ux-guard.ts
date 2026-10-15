@@ -6,7 +6,11 @@
 // One-shot off switch: IMPECCABLE_HOOK_DISABLED=1 (same env var impeccable honors).
 
 import { resolve } from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
+// same event log as the other extensions; scripts/usage-stats.py counts it
+const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
 
 // Impeccable is not part of this harness (it ships no skills; see the 1.0.1 drop of vendored
 // design skills), so the detector binary is wherever the user put it: override with
@@ -58,6 +62,7 @@ export default function uiUxGuard(pi: ExtensionAPI) {
 			reported.add(key);
 			return true;
 		});
+		ev({ c: "ui-ux-guard", findings: fresh.length });
 		if (fresh.length === 0) return;
 
 		const shown = fresh.slice(0, 5);
