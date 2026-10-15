@@ -89,7 +89,7 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70
   (offline regression checks), plus `models.json.example` and the compaction snippet. Two
   numbers there must be understood, not copied: `reserveTokens` is per-model, and on halogen
   `maxTokens` must stay <= 8192 or the server 400s past ~32.7k ctx.
-- **Also shipped** — `harness-tune` (`/tune` live knobs), `turn-timer`, `subagent/`
+- **Also shipped** — `harness-tune` (`/tune` live knobs), `harness-update` (daily behind-origin notice + `/harness-update`; `HARNESS_AUTOUPDATE=1` applies it at startup), `turn-timer`, `subagent/`
   (worker/scout/reviewer/planner, session-model inheritance), `/gauntlet` and `/speedtest`
   prompt templates, and opt-in voice (`./setup.sh --voice`: [privateer-speak](https://npm.im/privateer-speak)
   on a local Lemonade server — whisper STT 0.43 s, kokoro TTS 0.3 s, both on CPU). Two pi packages
