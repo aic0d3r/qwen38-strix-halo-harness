@@ -1,7 +1,7 @@
 # Local AI Coding Agent Harness for AMD Strix Halo (Ryzen AI Max+ 395)
 
-**Guided setup for any local engine, tuned for Qwen3.8 125B on the Radeon 8060S iGPU with three small models on the NPU, cloud optional** — a
-self-hosted [pi](https://github.com/earendil-works/pi) coding-agent harness.
+**A local coding agent that runs a 125B model on your own box.** Guided setup for any engine,
+tuned for Strix Halo. Built on [pi](https://github.com/earendil-works/pi).
 
 <div align="center">
 
@@ -25,30 +25,18 @@ self-hosted [pi](https://github.com/earendil-works/pi) coding-agent harness.
 
 </div>
 
-A coding-agent harness for the **AMD Strix Halo** (Ryzen AI Max+ 395 / gfx1151): the
-[pi coding agent](https://github.com/earendil-works/pi) driving **Qwen3.8 Flash-Next (125B)** on
-the iGPU, with the NPU running the small side jobs (prompt-injection screening, fast routing
-decisions, embedding dedup) and a llama.cpp sidecar writing commits and compaction summaries.
-One-command guided setup, crash recovery that survives a killed server, and the **262k ctx** window the
-engine is capable of.
+Qwen3.8 Flash-Next (125B) on the Ryzen AI Max+ 395 iGPU, **262k context**, small NPU models
+screening prompts and routing decisions, a sidecar writing commits and compaction summaries.
 
-Built and measured on Strix Halo, but not locked to it: `./setup.sh` detects whatever engine you
-run (halogen, llama.cpp, Strata, vLLM, Ollama, LM Studio) and wires pi to it, and the extensions
-(commit, compaction, crash recovery, semantic search) work against any OpenAI-compatible engine —
-see [engines](#halogen-vs-gufo-the-best-engines-for-strix-halo). The NPU tools and
-`setup.sh --halogen` are Strix Halo only.
-
-It runs with **no API key and no outbound calls** by default, and switching to a cloud model
-mid-session is a supported shape rather than a fallback: the NPU tools and the whole sidecar suite
-stay on-device either way, so screening, search and compaction never follow your code off the box
-— [the hybrid, measured](docs/ENGINES.md#cloud-models-are-a-supported-hybrid).
-
-**The model was never the hard part.** This repo is everything *around* the model: the launch
-scripts, the extension suite, the allocator pre-flight, the speed tooling, and the measured
-numbers behind every claim. Every benchmark here is logged — see
-**[BENCHMARKS.md](docs/BENCHMARKS.md)** and the
-**[local vs cloud head-to-head](docs/local-vs-cloud-model-comparison.md)**, seven runs of one real
-debugging task rated against verified ground truth.
+- **Guided setup:** `./setup.sh` detects your engine (halogen, llama.cpp, Strata, vLLM, Ollama,
+  LM Studio) and wires pi to it. The NPU tools are Strix Halo only.
+- **Private by default:** no API key, no outbound calls. Cloud models are a supported
+  [hybrid](docs/ENGINES.md#cloud-models-are-a-supported-hybrid); screening, search and compaction
+  stay on-device either way.
+- **Crash-proof:** kill the server or pi mid-task, relaunch, say "continue".
+- **Measured:** the model was never the hard part. Everything around it is here, and every claim is
+  logged in [BENCHMARKS.md](docs/BENCHMARKS.md) and the
+  [local vs cloud head-to-head](docs/local-vs-cloud-model-comparison.md).
 
 > [!TIP]
 > **Start here:** run `./setup.sh` in a terminal. It is the guided setup for any engine — see
