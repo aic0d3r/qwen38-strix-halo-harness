@@ -11,6 +11,7 @@ tuned for Strix Halo. Built on [pi](https://github.com/earendil-works/pi).
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [Guided setup](#guided-setup) •
+[Efficiency](#efficiency) •
 [What you get](#what-you-get) •
 [The stack](#the-stack) •
 [Evidence](#evidence) •
@@ -33,6 +34,12 @@ screening prompts and routing decisions, a sidecar writing commits and compactio
 - **Private by default:** no API key, no outbound calls. Cloud models are a supported
   [hybrid](docs/ENGINES.md#cloud-models-are-a-supported-hybrid); screening, search and compaction
   stay on-device either way.
+- **Lean by design:** every layer keeps tokens and calls off the main model. [rtk](https://github.com/rtk-ai/rtk)
+  compresses command output before it reaches context, `tool-trim` caps long output and turns
+  repeat file reads into a pointer, semantic search replaces read-everything exploration, and
+  side jobs run on the NPU or a small sidecar so the prompt cache is never evicted. Fewer tokens
+  means faster turns locally and a smaller bill on a cloud model. See
+  [Efficiency](#efficiency) for what is measured.
 - **Crash-proof:** kill the server or pi mid-task, relaunch, say "continue".
 - **Measured:** the model was never the hard part. Everything around it is here, and every claim is
   logged in [BENCHMARKS.md](docs/BENCHMARKS.md) and the
@@ -73,6 +80,21 @@ Servers you started yourself are never restarted. Run non-interactively (scripts
 | `./harness status` | engine up/down, model, NPU, saved tuning, sidecar state |
 | `./harness tune` | re-run the speed probe and re-size the limits |
 | `./setup.sh --doctor` | read-only health check of the whole install |
+
+## Efficiency
+
+The harness is tuned to spend as few tokens, and as little main-model time, as possible:
+
+| lever | what it does | measured |
+|---|---|---|
+| **rtk** (`pi-rtk-optimizer`) | rewrites bash commands through the `rtk` binary so test, build and git output arrives compressed | per-command savings in `rtk gain`; no aggregate benchmark in this repo yet |
+| **`tool-trim`** | strips ANSI/progress noise, caps huge output (full text saved to a file), identical re-reads of unchanged files become a pointer | token savings shown by `/usage` |
+| **semble search** | finds code by meaning instead of reading files to explore | 17/18 vs 13/18 top-3 hits, 2-3x faster queries, ~40x faster indexing than the NPU pipeline it replaced |
+| **Sidecar + NPU** | commits, compaction and repo maps run off the main model; screening and routing on the NPU | compaction ~24 s non-blocking vs ~52 s blocking; large commit diffs 18.5k to 7.1k tokens (2.5x faster) |
+| **Warm prompt cache** | diffs and transcripts never touch the main model's prefix | warm replay 0.01-0.05 s on halogen |
+
+On a cloud model the same levers cut input tokens directly, which is where the API savings come
+from; locally they cut prefill time.
 
 ## What you get
 
