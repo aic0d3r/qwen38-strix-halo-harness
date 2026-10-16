@@ -56,12 +56,12 @@ deadlocks the iGPU and hard-locks the host.
 ```sh
 cp config/models.json.example ~/.pi/agent/models.json   # adjust paths/ports
 cat config/settings-snippet.json                        # merge into settings.json
-cp extensions/*.ts ~/.pi/agent/extensions/
+cp -r extensions/* ~/.pi/agent/extensions/              # dirs too: the .ts files import harness-profile/
 ```
 
 Two numbers in the snippet you must understand, not copy: `reserveTokens` ships **10240**
 because that is right for a 65536 window (halogen's launcher rescales it to match its own ctx); on the 27B's 262144 window use
-**~167144** instead. `thinkingBudgets` (per-request budgets pi sends) are what actually govern
+**60000** instead (what the halogen launcher sets at 262k; it resets any reserve of half the window or more). `thinkingBudgets` (per-request budgets pi sends) are what actually govern
 pi sessions; the server's `--reasoning-budget` flag is only a default for clients that do not
 send one. On this path the NPU extensions are inert — there is no halogen to serve them.
 

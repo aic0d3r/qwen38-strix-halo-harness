@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # uninstall.sh — remove everything setup.sh provisioned. Backs up first.
 # Leaves alone: your own model entries, non-harness extensions, the halogen
-# container/checkpoint, mcp.json if you've modified it, the sidecar GGUF
+# container/checkpoint, mcp.json, the sidecar GGUF
 # (prints the rm command instead).
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -30,6 +30,7 @@ echo "[1/8] backup -> $BACKUP"
 # one tar call: a second `czf` would truncate the first archive (backup lost)
 TAR_ARGS=(-C "$PI_HOME" agent/extensions agent/prompts agent/skills agent/themes agent/settings.json agent/models.json agent/mcp.json)
 [ -f "$HOME/.config/systemd/user/ling-tiny.service" ] && TAR_ARGS+=(-C "$HOME/.config/systemd/user" ling-tiny.service)
+for f in harness-profile.json harness-tuned.json; do [ -f "$AG/$f" ] && TAR_ARGS+=(-C "$PI_HOME" "agent/$f"); done
 [ -f "$AG/rag-index.py" ] && TAR_ARGS+=(-C "$PI_HOME" agent/rag-index.py) # own -C: tar applies earlier -C to later members
 tar czf "$BACKUP" "${TAR_ARGS[@]}" 2>/dev/null
 echo "      $(du -h "$BACKUP" | cut -f1)"
@@ -53,12 +54,11 @@ else
 fi
 
 echo "[3/8] extensions provisioned by the harness"
-for f in progress-tracker.ts npu-retrieval.ts ling-tiny-compaction.ts ling-tiny-commit.ts \
-         ling-tiny-branch-summary.ts ling-tiny-repomap.ts harness-tune.ts auto-guard.ts turn-timer.ts \
-         ui-ux-guard.ts; do
-  [ -f "$AG/extensions/$f" ] && rm -f "$AG/extensions/$f"
+# whatever setup.sh copies (every extensions/*.ts and extensions/*/), so new extensions are never missed
+for p in "$REPO"/extensions/*.ts "$REPO"/extensions/*/; do
+  b=$(basename "$p"); [ -e "$AG/extensions/$b" ] && rm -rf "${AG:?}/extensions/$b"
 done
-[ -d "$AG/extensions/subagent" ] && rm -rf "$AG/extensions/subagent"
+rm -f "$AG/harness-profile.json" "$AG/harness-tuned.json"  # ./harness wizard state
 [ -d "$AG/extensions/optional" ] && rm -rf "$AG/extensions/optional"
 [ -f "$AG/rag-index.py" ] && rm -f "$AG/rag-index.py" && echo "      rag-index.py removed (installed by setup)"
 echo "      done (extensions you added yourself are left in place)"

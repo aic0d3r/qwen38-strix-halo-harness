@@ -4,6 +4,9 @@
 
 ### Fixed
 - `setup.sh`: unknown options (including `--help`) were silently ignored and ran a full install. `-h`/`--help` now prints usage and exits; anything unknown exits 2. `--halogen-upgrade <tag>` no longer leaves the tag behind as a stray argument.
+- `scripts/uninstall.sh` missed five installed extensions (`harness-profile/`, `harness-status/`, `harness-update.ts`, `tool-trim/`, `work-guard.ts`); it now removes whatever setup copies from `extensions/`, plus the wizard's `harness-profile.json` / `harness-tuned.json`.
+- `docs/LLAMACPP.md`: `cp extensions/*.ts` skipped `harness-profile/`, which the ling-tiny extensions import; the 27B reserve advice (~167144) contradicted the launcher's own half-window cap and now says 60000.
+- `/gauntlet` and `/speedtest` prompts still named the removed `codebase_search` tool and the dropped reranker; now semble and the decider.
 
 ### Changed
 - Proofread all docs: the NPU runs three small models by default (not four), README lists all three pi packages setup installs, and `extensions/README.md` now covers every extension.
@@ -14,19 +17,15 @@
 - Guided setup for any engine: `./setup.sh` (no flags, in a terminal) or `./harness setup` detects hardware and running engines (halogen, llama.cpp, Strata, vLLM, Ollama, LM Studio), asks only when ambiguous, writes the pi provider with per-model defaults from `config/profiles.json`, and probes prefill/decode to size `maxTokens` and the compaction reserve. Then `./harness use <engine>[/<model>]`, `./harness status`, `./harness tune`. Servers you started are never restarted. Measured on Strata (Qwen3.8-Flash-Next IQ4_XS): 1137 t/s prefill, 47.2 t/s decode, 262k ctx detected.
 - `extensions/harness-profile/`: the active engine profile. The ling-tiny extensions, `harness-tune`, `auto-guard` and `npu-retrieval` read provider, model, sidecar and NPU URLs from it instead of hardcoding halogen, so sidecar compaction, branch summary, repo map and the commit guard now work on every local engine. No profile file = previous behaviour.
 - `tests/test_harness.py`: wizard self-test against a mock OpenAI server.
+- `setup.sh --gufo [url]`: pi-only install plus a `gufo` provider (default `http://127.0.0.1:8080`, what `server/start-gufo-flashnext.sh` serves), same flow as `--strata`. `--doctor` now checks either provider.
+- `scripts/halogen-top.sh`: aggregate prefill and decode speed (since server start and since this dashboard started) in the THROUGHPUT panel, plus in the piped one-line mode; prefill trend sparkline.
 
 ### Fixed
 - `/commit` in a repo with no commits reported "Nothing to commit" (diffed against a missing HEAD).
+- `extensions/work-guard.ts`: scratch work was blocked when the session's cwd was the project and the command moved into the temp dir itself (`cd /tmp; python3 - <<'PY' … open('p.py','w')`). The temp-dir exemption now also looks inside the command. The rule is exported as `blocksBashEdit` and covered by `tests/work-guard.test.ts`.
 
 ### Removed
 - `work-guard`: the serena-first rule. Native `edit`/`write` on source files no longer wait for `mcp__serena__activate_project` (it blocked config/shell/one-line edits and cost a retry). The bash-edit block stays.
-
-### Fixed
-- `extensions/work-guard.ts`: scratch work was blocked when the session's cwd was the project and the command moved into the temp dir itself (`cd /tmp; python3 - <<'PY' … open('p.py','w')`). The temp-dir exemption now also looks inside the command. The rule is exported as `blocksBashEdit` and covered by `tests/work-guard.test.ts`.
-
-### Added
-- `setup.sh --gufo [url]`: pi-only install plus a `gufo` provider (default `http://127.0.0.1:8080`, what `server/start-gufo-flashnext.sh` serves), same flow as `--strata`. `--doctor` now checks either provider.
-- `scripts/halogen-top.sh`: aggregate prefill and decode speed (since server start and since this dashboard started) in the THROUGHPUT panel, plus in the piped one-line mode; prefill trend sparkline.
 
 ### Changed
 - `scripts/halogen-top.sh` layout: one label column for every panel, padded numbers with thousands separators, and a fully prompt-cached request shows `cached` instead of a misleading `0.0 t/s`.

@@ -2,7 +2,7 @@
 
 Launch-prep hardening milestone — work through all phases in order, in this single session. Do not stop early, do not suggest alternatives. Commit after each phase only if its verification passes.
 
-Phase 0 — preflight: read the compaction/knob config files directly (the /tune slash command is TUI-only), check `curl -s http://127.0.0.1:8731/health` (cache + vision) and the sidecar on :8090. Use codebase_search and serena for navigation; bash only for builds/tests/git.
+Phase 0 — preflight: read the compaction/knob config files directly (the /tune slash command is TUI-only), check `curl -s http://127.0.0.1:8731/health` (cache + vision) and the sidecar on :8090. Use semble search and serena for navigation; bash only for builds/tests/git.
 
 Phase 1 — docs reconciliation: audit every table in docs/status.md against the actual code; fix contradictions; refresh the Updated line.
 

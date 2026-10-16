@@ -1,10 +1,11 @@
 /**
- * progress-tracker.ts v4 — verified against the real pi -p event shapes:
+ * progress-tracker.ts — verified against the real pi -p event shapes:
  *   session_start:          {type, reason}          — no messages (v2/v3 injection was a silent no-op)
  *   before_agent_start:     {type, prompt, ...}     — prompt = the task; MUTABLE (injection point)
  *   after_provider_response:{type, status, headers} — no messages
  *
- * v4: task from event.prompt; resume = prepend PROGRESS.md into event.prompt once.
+ * Task label from event.prompt; resume = PROGRESS.md returned once as { systemPrompt } from
+ * before_agent_start (mutating event.prompt is ignored by pi; see the handler).
  */
 
 import * as fs from "node:fs";
@@ -59,10 +60,8 @@ let responseCount = 0;
 		// prompts resume the stored task.
 		const t = promptText(event?.prompt).trim();
 		const cont = isContinuation(t);
-		// v6.3.1: a substantial prompt relabels the task but the note ALWAYS
-		// injects (marked data-not-instructions). v6.1 dropped the note on
-		// question-style resumes ("what were we doing?") - a real resume pattern.
-		// only SUBSTANTIAL prompts relabel the task (questions like "what were we
+		// question-style resumes ("what were we doing?") keep the note - a real resume
+		// pattern; the note-drop gate is further down. Only SUBSTANTIAL prompts relabel the task (questions like "what were we
 		// doing?" must not overwrite it - that cannibalized the note in testing)
 		if (t && t.length >= 120 && !cont && taskDescription !== t.slice(0, 2000)) {
 			taskDescription = t.slice(0, 2000);
@@ -78,8 +77,9 @@ let responseCount = 0;
 			// gate: a substantial non-continuation first prompt means the user has
 			// moved on to new work - drop the stale note instead of saddling the
 			// whole session with it (same criterion as the task-relabel logic above).
-			// short prompts (greetings, questions) and continuation-like prompts get
-			// the note; it is context-shaped, so a false positive can't hijack.
+			// short prompts (questions) and continuation-like prompts get the note;
+			// a bare greeting defers it to the next prompt (regex below). It is
+			// context-shaped, so a false positive can't hijack.
 			if (t.length >= 120 && !cont) {
 				resumeNote = null;
 				if (DEBUG) console.log(`[progress-tracker] substantial new task - resume note dropped`);

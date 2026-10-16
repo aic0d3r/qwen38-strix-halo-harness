@@ -107,7 +107,7 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70
 
 ## The stack
 
-One box, four model servers (five with voice), three pieces of silicon:
+One box, two model servers (three with voice), three pieces of silicon:
 
 - **halogen** (`:8731`, iGPU) — Qwen3.8 Flash-Next 125B from a local checkpoint: the agent's main
   model, 262,144 ctx x 4 slots, prompt cache on.

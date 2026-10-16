@@ -1,10 +1,11 @@
 /**
  * Ling-3.0-tiny repo-map extension
  *
- * Auto-injects only on a fresh session with the local halogen model (not on resume or cloud models).
- * /repomap: builds a compact repo map with tiny (git ls-files + key file heads),
- * inserts it as a user message so the main model starts oriented without
- * spending its first turns on exploratory reads.
+ * Auto-injects (system-prompt section) only on a fresh session with the local engine model
+ * from the harness profile (not on resume or cloud models), so the main model starts oriented
+ * without spending its first turns on exploratory reads.
+ * /repomap: builds the map with tiny (git ls-files + key file heads) and writes it to
+ * .pi/repomap.md for the model to read on request.
  */
 
 import * as os from "node:os";
@@ -141,7 +142,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("repomap", {
-		description: "Build a repo map with ling3.0-tiny and insert it into the session",
+		description: "Build a repo map with ling3.0-tiny and write it to .pi/repomap.md",
 		handler: async (args, ctx) => {
 			const model = ctx.modelRegistry.find(TINY_PROVIDER, TINY_MODEL);
 			if (!model) {

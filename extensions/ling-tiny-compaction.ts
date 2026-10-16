@@ -7,8 +7,7 @@
  * so compaction drops from minutes to seconds. Falls back to default compaction
  * if tiny's provider is missing or the call fails.
  *
- * Install: copy to ~/.pi/agent/extensions/ling-tiny-compaction.ts
- * (or load once with pi --extension)
+ * Install: ./setup.sh (needs extensions/harness-profile/ next to it)
  */
 
 import { uuidv7 } from "@earendil-works/pi-ai";
