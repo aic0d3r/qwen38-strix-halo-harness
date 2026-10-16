@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.6.0 - 2026-10-16
+
+### Added
+- Guided setup for any engine: `./setup.sh` (no flags, in a terminal) or `./harness setup` detects hardware and running engines (halogen, llama.cpp, Strata, vLLM, Ollama, LM Studio), asks only when ambiguous, writes the pi provider with per-model defaults from `config/profiles.json`, and probes prefill/decode to size `maxTokens` and the compaction reserve. Then `./harness use <engine>[/<model>]`, `./harness status`, `./harness tune`. Servers you started are never restarted. Measured on Strata (Qwen3.8-Flash-Next IQ4_XS): 1137 t/s prefill, 47.2 t/s decode, 262k ctx detected.
+- `extensions/harness-profile/`: the active engine profile. The ling-tiny extensions, `harness-tune`, `auto-guard` and `npu-retrieval` read provider, model, sidecar and NPU URLs from it instead of hardcoding halogen, so sidecar compaction, branch summary, repo map and the commit guard now work on every local engine. No profile file = previous behaviour.
+- `tests/test_harness.py`: wizard self-test against a mock OpenAI server.
+
+### Fixed
+- `/commit` in a repo with no commits reported "Nothing to commit" (diffed against a missing HEAD).
 
 ### Removed
 - `work-guard`: the serena-first rule. Native `edit`/`write` on source files no longer wait for `mcp__serena__activate_project` (it blocked config/shell/one-line edits and cost a retry). The bash-edit block stays.
