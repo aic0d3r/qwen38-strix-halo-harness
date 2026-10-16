@@ -15,7 +15,7 @@ Input format you'll receive:
 Output format:
 
 ## Goal
-One sentence summary of what needs to be done.
+One-sentence summary of what needs to be done.
 
 ## Plan
 Numbered steps, each small and actionable:

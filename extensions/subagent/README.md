@@ -147,8 +147,8 @@ body to the subagent's system prompt *and* passes `--skill <path>`: pi's `--skil
 registers the skill in `<available_skills>` (name, description, path) and leaves the body to be
 read, which needs the subagent to cooperate. Inlining makes it unconditional; the registration
 stays so relative paths inside the skill (`reference/...`) resolve. A missing skill is skipped,
-not fatal. Leave `skills` off unless the agent's job needs it — that is what the
-1.4s-per-dispatch scan measurement was about.
+not fatal. Leave `skills` off unless the agent's job needs it: the measured ~1.4s-per-dispatch
+skill scan is why subagents run with `--no-skills` in the first place.
 
 **Locations:**
 - `~/.pi/agent/agents/*.md` - User-level (always loaded)

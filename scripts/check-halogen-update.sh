@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prints one line if a newer halogen image tag exists than the pin. Never installs, never blocks:
+# Prints one line if a halogen image tag newer than the pin exists. Never installs, never blocks:
 # 3s budget, silent on any failure. Opt-in: HALOGEN_CHECK_UPDATES=1, or the answer saved by setup.sh.
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 PREF="${PI_CODING_AGENT_DIR:-${PI_HOME:-$HOME/.pi}/agent}/harness-update-check"

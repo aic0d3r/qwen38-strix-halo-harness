@@ -67,7 +67,7 @@ Halogen is still ahead on this chip (65 t/s decode battery median on 0.18.5, 131
 about 1,520 t/s), so here Strata is the open-source/GGUF alternative, not the upgrade. Its pitch is
 NVIDIA/AMD desktop GPUs. Needle test on the tuned config: 5/5 at 28-30k tokens.
 
-Tuned config (`docs/STRIX_HALO.md` section 5 of Strata, plus three flags), in
+Tuned config (section 5 of Strata's `docs/STRIX_HALO.md`, plus three flags), in
 `strata-<model>.json`:
 
 ```
@@ -95,7 +95,7 @@ cd Strata && ROCM_PATH=/nonexistent ./setup.sh --yes --family unsloth --model UD
   (`/opt/rocm/llvm/bin/clang++` missing; the compiler is in `lib/llvm`).
 - `--yes` picked a 32k context here; pass `--context` for more.
 - The 94 GB download can come from an existing copy: put the three `UD-IQ4_XS-0000N-of-00003.gguf`
-  shards in `Strata-data/models/unsloth-UD-IQ4_XS/` (a hardlink works) before step 5 and setup
+  shards in `Strata-data/models/unsloth-UD-IQ4_XS/` (a hardlink works) before step 5, and setup
   verifies them by size and SHA-256.
 - `--no-start` leaves the server down. Start it without opening a browser:
   `.venv/bin/python serve/server.py --engine strata --config strata-<model>.json --port 8080`.

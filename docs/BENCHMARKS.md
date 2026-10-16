@@ -10,7 +10,7 @@ Rig: ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB unified, Linux),
 - (on 0.16.2 every NPU call carried ~4s of fixed overhead - 0.16.3's batching fix removed it. If you're on an older release, your NPU numbers are 30x worse than they should be.)
 - Decider (binary): 118ms, 78% accuracy (18 realistic prompts) - ships as the `triage` tool
 - Decider (3-option, free-form output): 925ms, 40% accuracy (too biased toward "keep"). The shipped `triage` constrains the answer with a `json_schema` enum + logprobs instead; multi-option accuracy has not been re-measured since, so treat its output as a hint.
-- Moderation: 42% recall / 0% fp on 30-prompt canary (ships as tripwire)
+- Moderation: 42% recall / 0% fp on a 30-prompt canary (ships as tripwire)
 - Text gen (qwen3.5-2b): 16.6 tok/s decode (removed - slower than the sidecar)
 - LLM decode while NPU works: unchanged (separate silicon)
 
@@ -32,7 +32,7 @@ Rig: ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB unified, Linux),
 
 ## Install & ops
 
-**Install - fully automated, one prompt total.** Clone github.com/aic0d3r/qwen38-strix-halo-harness (tagged v1.2, MIT, changelog in the repo) and run `./setup.sh --halogen auto`. It installs pi via npm if missing, pulls the pinned halogen image, and if you don't have the model files it downloads them for you: ~124 GB resumable (that's the one prompt you'll see - it checks your free space first), then the 35 MB portable llama-server for the sidecar, the tiny gguf sha256-verified against Hugging Face, ten extensions, prompt templates, skills, theme, and the systemd keep-alive unit - and your own model entries and pi settings are never touched. `./setup.sh --doctor` verifies every piece with live probes; `./setup.sh --uninstall` backs everything up and returns pi to stock in one command.
+**Install - fully automated, one prompt total.** Clone github.com/aic0d3r/qwen38-strix-halo-harness (tagged v1.2, MIT, changelog in the repo) and run `./setup.sh --halogen auto`. It installs pi via npm if missing, pulls the pinned halogen image, and if you don't have the model files it downloads them for you: ~124 GB resumable (that's the one prompt you'll see - it checks your free space first), then the 35 MB portable llama-server for the sidecar, the tiny GGUF sha256-verified against Hugging Face, ten extensions, prompt templates, skills, theme, and the systemd keep-alive unit - and your own model entries and pi settings are never touched. `./setup.sh --doctor` verifies every piece with live probes; `./setup.sh --uninstall` backs everything up and returns pi to stock in one command.
 
 **Docker is the one prerequisite** we won't auto-install (system package, needs sudo). First boot pins the 47.7 GiB lookup table from disk, so a few minutes of startup is normal. The launcher pre-flights allocator fragmentation before committing to 262k context and fails in seconds with the exact fix instead of wedging for half an hour, and a 15-min systemd compaction timer keeps the allocator healthy between sessions.
 

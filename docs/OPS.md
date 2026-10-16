@@ -39,9 +39,9 @@ Two tools ship for it:
 ```
 
 `halogen-top.sh` appends each scrape to `$XDG_STATE_HOME/halogen-top/history.csv`; that file is
-what `--perf` diffs `/metrics` over a window — the counters are cumulative and carry no session
-id, so a window that was never recorded can only be rebuilt from the logs. Leave one running in
-a screen for the diff to work. Grafana/Prometheus works too (scrape `127.0.0.1:8731/metrics`) —
+what `--perf` uses to diff `/metrics` over a window — the counters are cumulative and carry no session
+id, so a window that was never recorded can only be rebuilt from the logs. Leave it running (e.g. in
+a `screen` session) for the diff to work. Grafana/Prometheus works too (scrape `127.0.0.1:8731/metrics`) —
 the dashboards are yours to build; these two scripts exist because they cost no extra containers.
 
 ## Troubleshooting
@@ -60,4 +60,4 @@ the dashboards are yours to build; these two scripts exist because they cost no 
 
 ## Stopping the servers
 
-`scripts/stop-all.sh` stops halogen (docker) and the ling-tiny sidecar, then pops a desktop notification (it warns if GPU memory stays held, which needs a reboot). `scripts/stop-all.sh --install` adds "Stop LLM servers" and "Start LLM servers" entries to the app menu and ~/Desktop. The start one (`scripts/start-servers.sh`) runs `setup.sh --halogen auto` headless, with no terminal and no pi, and notifies when both servers answer; run `pi` to open it. pi and other engines are untouched.
+`scripts/stop-all.sh` stops halogen (docker) and the ling-tiny sidecar, then pops a desktop notification (it warns if GPU memory stays held, which needs a reboot). `scripts/stop-all.sh --install` adds "Stop LLM servers" and "Start LLM servers" entries to the app menu and ~/Desktop. The start one (`scripts/start-servers.sh`) runs `setup.sh --halogen auto` headless, with no terminal and no pi, and notifies when both servers answer; then run `pi`. pi and other engines are untouched.

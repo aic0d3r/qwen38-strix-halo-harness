@@ -3,7 +3,9 @@
 # Idempotent: safe to re-run. Applies what it safely can (extensions, pi
 # providers, sidecar), checks servers, prints exact next steps for what it can't fix.
 #
-#   ./setup.sh                  install + verify everything
+#   ./setup.sh                  in a terminal: guided wizard for any engine (= ./harness setup);
+#                               otherwise (scripts, CI): install + verify everything
+#   ./setup.sh --halogen [auto|path.hgn]  also provision + start the halogen server
 #   ./setup.sh --doctor         read-only status check
 #   ./setup.sh --no-halogen     pi-only install: skip the halogen provider, the NPU
 #                               extensions and all container management (for boxes that
@@ -14,6 +16,9 @@
 #                               and start Strata itself first, per its README.
 #   ./setup.sh --gufo [url]     same pi-only install for gufo (default http://127.0.0.1:8080, what
 #                               server/start-gufo-flashnext.sh serves). Stop halogen first.
+#   ./setup.sh --voice          also set up the voice stack (Lemonade STT/TTS)
+#   ./setup.sh --halogen-upgrade [tag]  upgrade the halogen image, roll back on failure
+#   ./setup.sh --uninstall      remove what setup provisioned (backs up first)
 set -u
 # bare invocation in a terminal = the guided wizard (flags below stay for scripts/CI)
 if [ $# -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then exec python3 -u "$(dirname "$(readlink -f "$0")")/setup/harness.py" setup; fi
@@ -26,9 +31,10 @@ while [ $# -gt 0 ]; do
                case "${2:-}" in http*) ENG_URL="${2%/}"; shift 2 ;; *) shift ;; esac ;;
     --doctor)  DOCTOR=1; shift ;;
     --voice)   VOICE=1; shift ;;
-    --halogen-upgrade) HALOGEN_UPGRADE="${2:-latest}"; shift 2>/dev/null || shift ;;
+    --halogen-upgrade) case "${2:-}" in ""|-*) HALOGEN_UPGRADE=latest; shift ;; *) HALOGEN_UPGRADE="$2"; shift 2 ;; esac ;;
     --uninstall) UNINSTALL=1; shift ;;
-    *) shift ;;
+    -h|--help) sed -n '2,/^set -u/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
+    *) echo "unknown option: $1 (see ./setup.sh --help)" >&2; exit 2 ;;
   esac
 done
 REPO="$(cd "$(dirname "$0")" && pwd)"

@@ -1,6 +1,6 @@
 # Local AI Coding Agent Harness for AMD Strix Halo (Ryzen AI Max+ 395)
 
-**Qwen3.8 125B on the Radeon 8060S iGPU, four small models on the NPU, cloud optional** — a
+**Qwen3.8 125B on the Radeon 8060S iGPU, three small models on the NPU, cloud optional** — a
 self-hosted [pi](https://github.com/earendil-works/pi) coding-agent harness built on llama.cpp.
 
 <div align="center">
@@ -15,7 +15,7 @@ self-hosted [pi](https://github.com/earendil-works/pi) coding-agent harness buil
 [Evidence](#evidence) •
 [Install](#install) •
 [Model files](#model-files) •
-[Quick Start](#quick-start) •
+[Quick start](#quick-start) •
 [The NPU](#the-npu) •
 [Crash recovery](#crash-recovery) •
 [Upgrading halogen](#upgrading-halogen) •
@@ -36,8 +36,8 @@ crash recovery, semantic search) work against any OpenAI-compatible engine, so N
 users can swap in their own — see [engines](#halogen-vs-gufo-the-best-engines-for-strix-halo).
 The NPU tools and `setup.sh --halogen` are Strix Halo only.
 
-It runs with **no API key and no outbound calls** by default, and switching to a cloud model mid
-session is a supported shape rather than a fallback: the NPU tools and the whole sidecar suite
+It runs with **no API key and no outbound calls** by default, and switching to a cloud model
+mid-session is a supported shape rather than a fallback: the NPU tools and the whole sidecar suite
 stay on-device either way, so screening, search and compaction never follow your code off the box
 — [the hybrid, measured](docs/ENGINES.md#cloud-models-are-a-supported-hybrid).
 
@@ -83,7 +83,7 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70
 - **Semantic code search** — the pinned [semble](https://pypi.org/project/semble/) MCP server
   (`search` + `find_related`), wired into `mcp.json` by setup. A/B on 18 ground-truth queries
   against the NPU RAG pipeline it replaced: 17/18 vs 13/18 top-3 hits, 2-3x faster queries, ~40x
-  faster indexing. It needs no NPU and indexes any local path or remote git URL, on first query.
+  faster indexing. It needs no NPU and indexes any local path or remote git URL on first query.
 - **Sidecar suite off the main context** — `ling-tiny-compaction` (non-blocking, thinking off,
   10/10 rule retention on the canary), `ling-tiny-commit`, `ling-tiny-branch-summary`,
   `ling-tiny-repomap`. Diffs and transcripts never touch halogen's prompt cache, so a side call
@@ -99,10 +99,10 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70
 - **Also shipped** — `harness-tune` (`/tune` live knobs), `harness-update` (daily behind-origin notice + `/harness-update`; `HARNESS_AUTOUPDATE=1` applies it at startup), `turn-timer`, `subagent/`
   (worker/scout/reviewer/planner, session-model inheritance), `/gauntlet` and `/speedtest`
   prompt templates, and opt-in voice (`./setup.sh --voice`: [privateer-speak](https://npm.im/privateer-speak)
-  on a local Lemonade server — whisper STT 0.43 s, kokoro TTS 0.3 s, both on CPU). Two pi packages
-  are installed by `setup.sh` when missing — [ponytail](https://github.com/DietrichGebert/ponytail)
-  and [rpiv-ask-user-question](https://npm.im/@juicesharp/rpiv-ask-user-question) (the structured
-  `ask_user_question` tool) — they live in `~/.pi/agent/settings.json`, not in this repo. Measured
+  on a local Lemonade server — whisper STT 0.43 s, kokoro TTS 0.3 s, both on CPU). Three pi packages
+  are installed by `setup.sh` when missing — [ponytail](https://github.com/DietrichGebert/ponytail),
+  [rpiv-ask-user-question](https://npm.im/@juicesharp/rpiv-ask-user-question) (the structured
+  `ask_user_question` tool) and pi-rtk-optimizer — they live in `~/.pi/agent/settings.json`, not in this repo. Measured
   no-ops were deleted; receipts in [`extensions/README.md`](extensions/README.md).
 
 ## The stack
@@ -120,7 +120,7 @@ One box, four model servers (five with voice), three pieces of silicon:
 
 Flow: every prompt is screened by the NPU guard before the main model sees it; the main model
 generates on the iGPU with its prompt cache warm; side jobs that need a judgement in
-milliseconds (is this injection, which of these three is it, which files are near-duplicates) go
+milliseconds (is this an injection, which of these three is it, which files are near-duplicates) go
 to the NPU instead of the 125B model; sidecars read diffs and transcripts directly so they never
 evict the cached prefix; and search runs on CPU against an index built at first query. Halogen is
 the only engine `setup.sh` provisions — [what breaks on another engine](docs/ENGINES.md) is
@@ -187,8 +187,8 @@ gufo, stop halogen first (they share one memory heap), then `server/start-gufo-f
 ./setup.sh --doctor
 ```
 
-`--halogen auto` finds `*.hgn` in `.`, `/models`, `~/models`, `~/Downloads`, or pass a path
-explicitly; restart later with `./start-halogen.sh` (written on first launch); `--no-halogen`
+`--halogen auto` finds `*.hgn` in `.`, `/models`, `~/models`, `~/Downloads` (or pass a path
+explicitly); restart later with `./start-halogen.sh` (written on first launch); `--no-halogen`
 installs pi without container management (laptop pi against your own providers, or against a
 remote Strix Halo appliance via `baseUrl` + `PI_NPU_BASE`). Other flags: `--voice`,
 `--halogen-upgrade [tag]`, `--uninstall`. Prerequisites: docker (setup will not sudo-install it),
@@ -236,10 +236,10 @@ done
 
 Skip the rest (`w4b.hgn`, `ht43.hgn`, `MTP.hgn`, `w4b.overlay*.hgn`, `qwen3.5-2b`) — the
 checkpoint carries its own draft head. Upstream also ships an optional smaller/faster `ht43.hgn`
-checkpoint; the default stays `v2` — pass its path explicitly to use it. First cold boot pins the
+checkpoint; the default stays `v2` — pass the `ht43.hgn` path explicitly to use it. First cold boot pins the
 47.7 GiB lookup table from disk, so a few minutes of startup is normal.
 
-## Quick Start
+## Quick start
 
 ```sh
 # daily driver: heals any dead server, then opens the pi TUI
@@ -275,9 +275,9 @@ Point it at a remote box with `HALOGEN_URL=http://host:8731`. Details in
 
 ## The NPU
 
-The NPU is not where the big model runs. It runs four small models whose whole job is to answer,
+The NPU is not where the big model runs. By default it runs three small models whose whole job is to answer,
 in 0.1-1 s, questions the 125B model would take 5-90 s on — and without touching the main model's
-prompt cache. halogen exposes them on the same `:8731` server.
+prompt cache. Halogen exposes them on the same `:8731` server.
 
 | model | how it is called | used by | what it does | measured |
 |---|---|---|---|---|

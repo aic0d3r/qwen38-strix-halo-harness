@@ -61,7 +61,7 @@ Core three - these carry the measured value:
 
 | extension | measured saving |
 |---|---|
-| `progress-tracker.ts` | resume after crash/kill: recovery 455s vs 572s fresh baseline; note auto-injects, zero agent adoption needed |
+| `progress-tracker.ts` | resume after crash/kill: recovery 455s vs 572s fresh baseline; auto-injects, so zero agent adoption needed |
 | semble MCP (`search`/`find_related`) | replaced NPU codebase_search 2026-10-10: A/B 17/18 vs 13/18 top-3 hit-rate, 0.55s p50 queries, 1.2s index builds; no NPU required |
 | `ling-tiny-compaction.ts` | summaries ~24s non-blocking vs ~52s blocking on the main model (decode-bound: tiny 122 t/s vs 27B ~45 t/s) |
 
@@ -71,7 +71,7 @@ Optional / situational:
   never fire slash commands: 3 measured misses). Offloads commit messages to
   the sidecar; keeps main-model turns free.
 - `ling-tiny-repomap.ts`, `auto-guard.ts` - cheap, fired, benefit unmeasured.
-- `context-prune.ts`, `NPU-triage.ts`, `ling-tiny-triage.ts` - deleted
+- `context-prune.ts`, `npu-triage.ts`, `ling-tiny-triage.ts` - deleted
   (last in commit `5bc375f` under `extensions/optional/`; 0.0k saved / 0 firings across all in-session A/Bs;
   setup.sh removes stale copies on upgrade). `triage` + `dedup_scan` still
   ship inside npu-retrieval.ts (search moved to the semble MCP server) - agents never
@@ -136,3 +136,13 @@ Copilot and Gemini - not for pi - so this is the pi wiring for the same check.
   `~/.pi/agent/skills/impeccable/scripts/impeccable` exists; set
   `IMPECCABLE_BIN` to point it somewhere else. One-shot disable:
   `IMPECCABLE_HOOK_DISABLED=1`.
+
+## Other extensions
+
+- `harness-profile/` - shared helper, not a feature: loads the active engine profile from `<agent dir>/harness-profile.json` (legacy halogen defaults if absent) and registers nothing; imported by the ling-tiny-*, harness-tune, auto-guard and npu-retrieval extensions.
+- `harness-status/` - `/usage` runs `scripts/usage-stats.py` inside pi; a footer status shows halogen load from `:8731/metrics` (hidden when unreachable).
+- `harness-update.ts` - once-a-day notice when the harness repo is behind origin; `/harness-update` applies it (fast-forward only, refuses on a dirty tree, re-runs setup.sh).
+- `tool-trim/` - keeps big tool output out of context: cleans and caps long bash output (full text saved to a file) and turns identical re-reads of unchanged files into a pointer. Off switch: `TOOL_TRIM_DISABLED=1`.
+- `turn-timer.ts` - per-turn elapsed wall time in the footer.
+- `work-guard.ts` - enforces AGENTS.md rules: blocks source edits via bash, blocks UI edits until the ui-ux-work skill is read, warns on committing UI changes with no render viewed. Off switch: `WORK_GUARD_DISABLED=1`.
+- `subagent/` - `subagent` tool: delegates tasks to isolated `pi` subprocesses (single, parallel, chain); see [subagent/README.md](subagent/README.md).

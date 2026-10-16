@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Ling-3.0-tiny aux server (compaction/triage/repomap summaries) on :8090.
-# Same engine build as the main server. Chat endpoint + template is mandatory
+# Same engine build as the main server. Chat endpoint + template are mandatory
 # for this model (raw /completion degenerates); the extensions use chat.
 set -euo pipefail
 ENGINE_DIR=${ENGINE_DIR:?set ENGINE_DIR to your llama-server build dir}

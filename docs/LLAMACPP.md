@@ -10,8 +10,8 @@ Use `./setup.sh --no-halogen` for the pi wiring on this path, or wire it by hand
 
 [Nathanw1014/strix-halo-llamacpp](https://github.com/Nathanw1014/strix-halo-llamacpp) v0.7.4.1+
 (fixed stale-KV and a top-k race that were in upstream too); the Vulkan work is migrating to
-[halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp), either tree works.
-Build from source if you can — the portable payload leaves 6-24 % decode on the table.
+[halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp); either tree works.
+Build from source if you can — the portable payload leaves 6-24% decode on the table.
 
 ## 2. Models
 

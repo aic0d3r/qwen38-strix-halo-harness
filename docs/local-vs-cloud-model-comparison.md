@@ -64,7 +64,7 @@ directory` line, does it need fixing?
 Runs 1 and 8 - the same local model at medium and at max - are the only ones that found
 the already-open upstream PR (linuxmint/timeshift#496). The other six
 missed it or suggested reporting upstream - noted per run below. The user also had GLM 5.3
-flashx rate both pi-harness answers; it picked qwen's.
+flashx rate both pi-harness answers; it picked Qwen's.
 
 ![wall clock per run](charts/wallclock-by-run.png)
 
@@ -92,8 +92,8 @@ flashx rate both pi-harness answers; it picked qwen's.
    (tarball, exact lines, local repro), not a better answer. The chat template's default
    effort is the maximum, so bare-API users get run-8 depth on every question.
 7. **The clock was a tie where it was matched.** The only runs that beat the local box on
-   wall time were the two opencode runs: 1m08s (wrong mechanism) and 1m30s (shallow, no
-   repro, no PR) at flashx's ~151 t/s decode. In the same harness, GLM at max effort, the
+   wall time were the two opencode runs: 1m8s (wrong mechanism) and 1m30s (shallow, no
+   repro, no PR) at flashx's ~151 t/s decode. In the same harness, with GLM at max effort, the
    gaps were 14 seconds (flashx over the local medium run) and one second (the 753B over
    the local max rerun). Decode rate predicted nothing (#5); neither did the cloud.
 
@@ -128,6 +128,7 @@ Related: [halogen-flash-server](https://github.com/peonist-ai/halogen-flash-serv
 [neon-ladder benchmark](https://github.com/aic0d3r/neon-ladder).
 
 ## Parameter size sources (grounding for the size claims)
+
 - Flash-Next: 125B params + 51B n-gram table + 4B MTP (180B total) - unsloth model card and
   halogen docs/QUANT.md.
 - glm-5.3-flash / flashx: 320B total, 18B active per token - z.ai blog "GLM-5.3-Flash"
@@ -147,7 +148,7 @@ Related: [halogen-flash-server](https://github.com/peonist-ai/halogen-flash-serv
   is a PR, not an issue. "PR missed" for flashx confirmed.
 
 - Session audit 3: all pi sessions now searched. flash-pi (01a11923): zero PR
-  references, single "496" digit match inside a token count. Full audit table:
+  references, single "496" digit match inside a token count. Full audit summary:
   halogen found and cited #496 in its answer; flash, flashx and glm-5.3 all missed it.
 
 - Session audit 4 (run 8, 01a126bc): the max-effort rerun cited linuxmint/timeshift#496

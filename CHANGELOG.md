@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- `setup.sh`: unknown options (including `--help`) were silently ignored and ran a full install. `-h`/`--help` now prints usage and exits; anything unknown exits 2. `--halogen-upgrade <tag>` no longer leaves the tag behind as a stray argument.
+
+### Changed
+- Proofread all docs: the NPU runs three small models by default (not four), README lists all three pi packages setup installs, and `extensions/README.md` now covers every extension.
+
 ## 1.6.0 - 2026-10-16
 
 ### Added
@@ -53,7 +61,7 @@
 
 ### Changed
 - `setup.sh`: serena now starts with `--project-from-cwd` (new installs, and added to an existing mcp.json), so the project is active at startup. It also records the repo path in `~/.pi/agent/harness-repo` so `/usage` works from any install location.
-- `work-guard`: source edits inside the project are blocked until `mcp__serena__activate_project` was called (only when serena is configured and its activate tool is exposed to the session).
+- `work-guard`: source edits inside the project are blocked until `mcp__serena__activate_project` has been called (only when serena is configured and its activate tool is exposed to the session).
 
 ## 1.5 - 2026-10-15
 
@@ -109,7 +117,7 @@
 - Commit tool `message` parameter: commits an exact, dictated message without the sidecar
   (agents used to undo commits and retry "USE VERBATIM" until the sidecar copied it).
 
-### Performance improvements
+### Changed
 - Commit messages for large diffs are 2.5x faster (7.2 s -> 2.9 s on a 30-commit diff). Almost
   all the time was the sidecar reading the diff (~3,500 tok/s), so the diff it reads is now
   smaller: the file summary comes first (cutting never hides a file), 1 line of context
@@ -174,7 +182,7 @@
 - Stale NPU claims fixed: the decider tool is `triage` (it was never called `decide`), codebase
   search no longer uses the NPU (semble does, on CPU), the reranker is idle since v1.1 and can be
   dropped from `HALOGEN_NPU_MODELS`, NPU dirs are lowercase `npu/`, and the GPU+NPU fabric-clock
-  requirement, the `/health` npu probe and a triage/dedup troubleshooting row are now written down.
+  requirement, the `/health` NPU probe and a triage/dedup troubleshooting row are now written down.
 - `docs/BENCHMARKS.md`: labels the retrieval eval as superseded by semble, marks the rerank
   number idle, notes the pin moved to 0.18.0, and states that multi-option `triage` accuracy is
   unmeasured for the constrained-enum implementation (the 40 % figure was the dropped variant).
@@ -340,7 +348,7 @@ Initial public release. A coding-agent harness for Qwen3.8-Flash-Next on AMD Str
 - **10 pi extensions:**
   - `progress-tracker` - crash recovery: kill the agent mid-task, the next session picks up
     the exact task and state (310+ checkpoints, validated at the model level)
-  - `NPU-retrieval` - `codebase_search` (semantic, 15/20 vs 9/20 for grep on intent queries),
+  - `npu-retrieval` - `codebase_search` (semantic, 15/20 vs 9/20 for grep on intent queries),
     `dedup_scan` (45 duplicate pairs in 8.4s), `decide` (78% binary decisions, ~120ms)
   - `ling-tiny-compaction` - sidecar-summarized compaction, thinking off, 10/10 rule
     retention on the canary set (~80-95s faster than main-model fallback)
