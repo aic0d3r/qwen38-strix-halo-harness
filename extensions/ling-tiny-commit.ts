@@ -10,6 +10,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { isMain, profile } from "./harness-profile/index.ts";
 
 const TINY_MODEL = "ling3.0-tiny";
 // one JSON line per sidecar/NPU call; summarized by scripts/session-audit.sh --harness
@@ -49,7 +50,7 @@ export const tidyMessage = (msg: string): string => {
 	return body ? `${subject}\n\n${body}` : subject;
 };
 
-const SIDECAR = "http://127.0.0.1:8090";
+const SIDECAR = profile().sidecarUrl;
 
 export default function (pi: ExtensionAPI) {
 	// nothing-at-boot policy leaves the sidecar down after a reboot: start the unit on demand
@@ -166,7 +167,7 @@ ${fullDiff}
 	// goes through pi.exec, which tool_call hooks never see.
 	pi.on("tool_call", async (event: any, ctx: any) => {
 		// local halogen only: the sidecar offload is pointless for cloud models
-		if ((ctx as any).model?.provider !== "halogen") return;
+		if (!isMain(ctx)) return;
 		if (event?.toolName !== "bash" || !isDirectCommit(String(event?.input?.command ?? ""))) return;
 		return { block: true, reason: "Commits go through the commit tool (ling-tiny writes the message). Call the commit tool (or /commit) instead of git commit; pass `message` to use an exact message and `cwd` to commit another repo." };
 	});

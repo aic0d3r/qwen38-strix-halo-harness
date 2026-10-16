@@ -12,6 +12,7 @@ import * as nodePath from "node:path";
 import { uuidv7 } from "@earendil-works/pi-ai";
 import * as fs from "node:fs";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { isMain } from "./harness-profile/index.ts";
 
 const TINY_PROVIDER = "llamacpp-tiny";
 const TINY_MODEL = "ling3.0-tiny";
@@ -94,7 +95,7 @@ export default function (pi: ExtensionAPI) {
 		// local halogen only: cloud models explore cheaply and the map would just bloat their
 		// system prompt; a resumed session (prior messages) already holds what the map would say.
 		// /repomap still works on demand.
-		if ((ctx as any).model?.provider !== "halogen") return;
+		if (!isMain(ctx)) return;
 		const prior: any[] = (ctx as any).sessionManager?.getBranch?.() ?? [];
 		if (prior.some((e) => e?.type === "message" && e.message?.role === "assistant")) return;
 		const fs = await import("node:fs/promises");

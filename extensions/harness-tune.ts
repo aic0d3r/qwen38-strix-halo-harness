@@ -15,13 +15,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { profile } from "./harness-profile/index.ts";
 
 const AGENT_DIR = getAgentDir();
 const SETTINGS = path.join(AGENT_DIR, "settings.json");
 const MODELS = path.join(AGENT_DIR, "models.json");
 const UBATCH_FILE = path.join(AGENT_DIR, "harness-ubatch");
-const MAIN_PROVIDER = "halogen";
-const MAIN_MODEL = "halogen-qwen3.8-flash-next";
+const MAIN_PROVIDER = profile().provider;
+const MAIN_MODEL = profile().model;
 
 // canonical post-setup values = what setup.sh provisions (keep in sync):
 // maxTokens 8192 because halogen hard-rejects bigger requests past ~32.7k ctx;

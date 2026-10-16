@@ -15,6 +15,8 @@
 #   ./setup.sh --gufo [url]     same pi-only install for gufo (default http://127.0.0.1:8080, what
 #                               server/start-gufo-flashnext.sh serves). Stop halogen first.
 set -u
+# bare invocation in a terminal = the guided wizard (flags below stay for scripts/CI)
+if [ $# -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then exec python3 "$(dirname "$(readlink -f "$0")")/setup/harness.py" setup; fi
 HALOGEN_CKPT=""; DOCTOR=0; VOICE=0; NO_HALOGEN=0; STRATA=0; GUFO=0; ENG=strata; ENG_URL=http://127.0.0.1:8080
 while [ $# -gt 0 ]; do
   case "$1" in

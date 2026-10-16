@@ -49,6 +49,13 @@ numbers behind every claim. Every benchmark here is logged — see
 debugging task rated against verified ground truth.
 
 > [!TIP]
+> **Any engine, guided:** `./setup.sh` in a terminal (or `./harness setup`) detects your hardware and
+> running engines (halogen, llama.cpp, Strata, vLLM, Ollama, LM Studio), asks only if it is ambiguous,
+> writes the pi provider with per-model defaults from [`config/profiles.json`](config/profiles.json),
+> and probes prefill/decode for ~1 min. Later: `./harness use <engine>[/<model>]`, `./harness status`,
+> `./harness tune`. Servers you started yourself are never restarted. Self-test: `python3 tests/test_harness.py`.
+
+> [!TIP]
 > **Just want the agent running?** `./setup.sh --halogen auto`, then `./start.sh ~/my-project`.
 > The two things you must supply are [docker](#install) and the
 > [model files](#model-files) (~124 GB, local). Everything else is optional, and

@@ -12,6 +12,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { convertToLlm, serializeConversation } from "@earendil-works/pi-coding-agent";
+import { isMain } from "./harness-profile/index.ts";
 
 const TINY_PROVIDER = "llamacpp-tiny";
 const TINY_MODEL = "ling3.0-tiny";
@@ -21,7 +22,7 @@ const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "ha
 export default function (pi: ExtensionAPI) {
 	pi.on("session_before_tree", async (event, ctx) => {
 		// local halogen only: the sidecar offload is pointless for cloud models
-		if ((ctx as any).model?.provider !== "halogen") return;
+		if (!isMain(ctx)) return;
 		const { preparation, signal } = event;
 		const { entriesToSummarize, oldLeafId, targetId } = preparation;
 

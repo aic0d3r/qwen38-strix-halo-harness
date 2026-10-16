@@ -14,8 +14,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { profile } from "./harness-profile/index.ts";
 
-const BASE = process.env.PI_NPU_BASE || "http://127.0.0.1:8731";
+const BASE = process.env.PI_NPU_BASE || profile().npuUrl;
 // one JSON line per sidecar/NPU call; summarized by scripts/session-audit.sh --harness
 const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
 

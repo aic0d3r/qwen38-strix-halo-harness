@@ -1,0 +1,324 @@
+#!/usr/bin/env python3
+"""harness - detect the local engine/model, apply optimized pi defaults, switch later.
+
+  ./harness setup [--yes] [--no-tune]   wizard: detect -> ask only if ambiguous -> apply -> tune -> verify
+  ./harness use <engine>[/<model>]      switch the active engine/model (no restart of servers you started)
+  ./harness tune                        re-run the 1-2 min probe for the active profile
+  ./harness status                      what is active, is it answering, last tuning
+  ./harness detect                      print what was found (json)
+
+Profiles live in config/profiles.json. Stdlib only. Never kills or restarts servers it did not launch.
+"""
+import json, os, re, shutil, subprocess, sys, time, urllib.request, uuid, hashlib, glob
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+AGENT = os.environ.get("PI_CODING_AGENT_DIR") or os.path.join(os.environ.get("PI_HOME", os.path.expanduser("~/.pi")), "agent")
+PROFILES = json.load(open(os.path.join(REPO, "config", "profiles.json")))
+MODEL_DIRS = ["~/models", "~/.cache/huggingface/hub", "/models", "~/llm"]
+TUNE_BUDGET_S = 120
+
+
+def jget(path, default=None):
+    try:
+        return json.load(open(path))
+    except Exception:
+        return default
+
+
+def jput(path, obj):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    json.dump(obj, open(path, "w"), indent=2)
+    open(path, "a").write("\n")
+
+
+def http(url, body=None, timeout=3):
+    req = urllib.request.Request(url, data=json.dumps(body).encode() if body else None, headers={"Content-Type": "application/json"})
+    return urllib.request.urlopen(req, timeout=timeout)
+
+
+# ---------- detect ----------
+def hardware():
+    mem = 0
+    try:
+        mem = int(re.search(r"MemTotal:\s+(\d+)", open("/proc/meminfo").read()).group(1)) // 1048576
+    except Exception:
+        pass
+    gpu = "none"
+    if shutil.which("nvidia-smi"):
+        gpu = "nvidia"
+    elif os.path.exists("/dev/kfd"):
+        gpu = "amd"
+    elif sys.platform == "darwin":
+        gpu = "apple"
+    return {"cpus": os.cpu_count(), "ram_gb": mem, "gpu": gpu, "npu": bool(glob.glob("/dev/accel/accel*"))}
+
+
+def served_models(port):
+    try:
+        return [m["id"] for m in json.load(http(f"http://127.0.0.1:{port}/v1/models"))["data"]]
+    except Exception:
+        return []
+
+
+def identify(name, port):
+    """Several engines share :8080 (strata / llamacpp): tell them apart by what answers."""
+    if name == "llamacpp":  # llama-server exposes /props; Strata does not
+        try:
+            http(f"http://127.0.0.1:{port}/props")
+            return True
+        except Exception:
+            return False
+    if name == "strata":
+        return not identify("llamacpp", port)
+    return True
+
+
+def detect():
+    found = []
+    for name, e in PROFILES["engines"].items():
+        try:
+            http(f"http://127.0.0.1:{e['port']}{e['probe']}")
+        except Exception:
+            continue
+        if identify(name, e["port"]):
+            found.append({"engine": name, "port": e["port"], "models": served_models(e["port"])})
+    ggufs = []
+    for d in MODEL_DIRS:
+        ggufs += glob.glob(os.path.join(os.path.expanduser(d), "**", "*.gguf"), recursive=True)[:20]
+    return {"hardware": hardware(), "engines": found, "gguf": ggufs[:20], "docker": bool(shutil.which("docker")), "pi": bool(shutil.which("pi"))}
+
+
+# ---------- ask ----------
+def choose(question, options, yes):
+    if len(options) == 1 or yes or not sys.stdin.isatty():
+        return options[0]
+    if shutil.which("gum"):
+        r = subprocess.run(["gum", "choose", "--header", question, *options], stdout=subprocess.PIPE, text=True)
+        if r.stdout.strip():
+            return r.stdout.strip()
+    print(question)
+    for i, o in enumerate(options, 1):
+        print(f"  {i}) {o}")
+    a = input("number [1]: ").strip() or "1"
+    return options[int(a) - 1] if a.isdigit() and 0 < int(a) <= len(options) else options[0]
+
+
+# ---------- profile ----------
+def model_profile(model_id):
+    m = PROFILES["models"]
+    out = json.loads(json.dumps(m["default"]))
+    for k, v in m.items():
+        if k != "default" and re.search(v["match"], model_id, re.I):
+            out.update({a: b for a, b in v.items() if a != "match"})
+            break
+    return out
+
+
+def server_ctx(port):
+    """Real context window from the server, or 0 if it will not say."""
+    for path, pick in (("/props", lambda d: d["default_generation_settings"]["n_ctx"]), ("/v1/models", lambda d: d["data"][0]["meta"]["n_ctx"])):
+        try:
+            return int(pick(json.load(http(f"http://127.0.0.1:{port}{path}"))))
+        except Exception:
+            pass
+    return 0
+
+
+def build_entry(engine, model_id, ctx, tuned):
+    e = PROFILES["engines"][engine]
+    mp = model_profile(model_id)
+    ctx = ctx or 32768
+    max_tokens = tuned.get("maxTokens") or min(mp["maxTokens"], max(1024, ctx // 8))
+    entry = {"id": model_id, "name": f"{model_id} ({engine})", "reasoning": mp["reasoning"], "input": ["text"],
+             "contextWindow": ctx, "maxTokens": max_tokens, "samplingParams": mp["samplingParams"]}
+    for k in ("compat", "thinkingLevelMap"):
+        if k in mp:
+            entry[k] = mp[k]
+    return {"baseUrl": f"http://127.0.0.1:{e['port']}/v1", "api": "openai-completions", "apiKey": "dummy", "models": [entry]}
+
+
+def apply(engine, model_id, tuned=None):
+    tuned = tuned or {}
+    e = PROFILES["engines"][engine]
+    ctx = server_ctx(e["port"])
+    mj = os.path.join(AGENT, "models.json")
+    m = jget(mj, {})
+    if os.path.exists(mj) and not os.path.exists(mj + ".pre-harness"):
+        shutil.copy(mj, mj + ".pre-harness")  # one-time backup before we first touch it
+    prov = e["provider"]
+    old = m.get("providers", {}).get(prov)
+    new = build_entry(engine, model_id, ctx, tuned)
+    if old and engine == "halogen":  # setup.sh provisions the halogen provider; never overwrite it
+        new = old
+    m.setdefault("providers", {})[prov] = new
+    jput(mj, m)
+    ctx = new["models"][0]["contextWindow"]
+    sj = os.path.join(AGENT, "settings.json")
+    s = jget(sj, {})
+    s["defaultProvider"], s["defaultModel"] = prov, new["models"][0]["id"]
+    reserve = tuned.get("reserveTokens") or min(model_profile(model_id)["reserveTokens"], ctx // 4)
+    s.setdefault("compaction", {}).update({"enabled": True, "reserveTokens": reserve})
+    jput(sj, s)
+    jput(os.path.join(AGENT, "harness-profile.json"), {
+        "engine": engine, "provider": prov, "model": new["models"][0]["id"], "npu": bool(e["npu"]),
+        "npuUrl": "http://127.0.0.1:8731", "sidecarUrl": "http://127.0.0.1:8090"})
+    return prov, new["models"][0]["id"], ctx
+
+
+def install_extensions(engine):
+    args = ["--halogen", "auto"] if engine == "halogen" else ["--no-halogen"]
+    return subprocess.run(["bash", os.path.join(REPO, "setup.sh"), *args]).returncode == 0
+
+
+# ---------- tune ----------
+def hw_key(engine, model_id):
+    h = hardware()
+    return hashlib.sha1(f"{engine}|{model_id}|{h['gpu']}|{h['ram_gb']}".encode()).hexdigest()[:12]
+
+
+def stream_once(port, model_id, prompt, max_tokens):
+    """-> (prompt_tokens, ttft_s, decode_tps) for one streamed chat completion."""
+    t0, first, n, ptok = time.time(), None, 0, 0
+    body = {"model": model_id, "stream": True, "max_tokens": max_tokens, "temperature": 0,
+            "stream_options": {"include_usage": True}, "messages": [{"role": "user", "content": prompt}]}
+    for line in http(f"http://127.0.0.1:{port}/v1/chat/completions", body, timeout=TUNE_BUDGET_S):
+        line = line.decode().strip()
+        if not line.startswith("data:") or line.endswith("[DONE]"):
+            continue
+        d = json.loads(line[5:])
+        if d.get("usage"):
+            ptok = d["usage"].get("prompt_tokens", 0)
+        for c in d.get("choices", []):
+            delta = c.get("delta", {})
+            if delta.get("content") or delta.get("reasoning_content"):
+                first = first or time.time()
+                n += 1
+    end = time.time()
+    return ptok, (first or end) - t0, (n / (end - first)) if first and end > first else 0.0
+
+
+def tune(engine, model_id):
+    port = PROFILES["engines"][engine]["port"]
+    ctx = server_ctx(port)
+    words = min(3000, max(200, (ctx or 8192) // 8))  # ~words*1.3 tokens; never more than 1/6 of the window
+    filler = " ".join(f"item{i}" for i in range(words))
+    res = {"engine": engine, "model": model_id, "ctx": ctx, "when": time.strftime("%Y-%m-%d")}
+    try:
+        ptok, ttft, _ = stream_once(port, model_id, f"[{uuid.uuid4()}] Count the items:\n{filler}", 1)
+        res["prefill_tps"] = round(ptok / ttft) if ptok and ttft else 0
+        _, _, tps = stream_once(port, model_id, "Write a Python function that reverses a linked list.", 128)
+        res["decode_tps"] = round(tps, 1)
+    except Exception as ex:
+        res["error"] = str(ex)[:120]
+        return res  # keep the shipped profile; a failed probe must never degrade defaults
+    # derive settings: answer room scales with decode speed, compaction reserve with the real window
+    if ctx:
+        res["maxTokens"] = int(min(model_profile(model_id)["maxTokens"], max(1024, ctx // 8)))
+        res["reserveTokens"] = int(min(60000, ctx // 4))
+    cache = os.path.join(AGENT, "harness-tuned.json")
+    c = jget(cache, {})
+    c[hw_key(engine, model_id)] = res
+    jput(cache, c)
+    return res
+
+
+# ---------- commands ----------
+def active():
+    return jget(os.path.join(AGENT, "harness-profile.json"))
+
+
+def cmd_detect(_):
+    print(json.dumps(detect(), indent=1))
+
+
+def pick_target(d, yes, want=None):
+    engines = d["engines"]
+    if want:
+        eng, _, mod = want.partition("/")
+        if eng not in PROFILES["engines"]:
+            sys.exit(f"unknown engine {eng}; known: {', '.join(PROFILES['engines'])}")
+        hit = next((x for x in engines if x["engine"] == eng), None)
+        if not hit:
+            sys.exit(f"{eng} is not answering on :{PROFILES['engines'][eng]['port']} - start it first")
+        models = hit["models"]
+        return eng, mod or (models[0] if models else sys.exit("server lists no models"))
+    if not engines:
+        sys.exit("no engine answering on the usual ports. Start one (see docs/ENGINES.md, or `./setup.sh --halogen auto`), then re-run.")
+    eng = choose("Which engine?", [x["engine"] for x in engines], yes)
+    hit = next(x for x in engines if x["engine"] == eng)
+    if not hit["models"]:
+        sys.exit(f"{eng} lists no models")
+    return eng, choose("Which model?", hit["models"], yes)
+
+
+def finish(eng, mod, no_tune):
+    tuned = jget(os.path.join(AGENT, "harness-tuned.json"), {}).get(hw_key(eng, mod), {}) if no_tune else {}
+    if not no_tune:
+        print(f"== probing {eng}/{mod} (prefill + decode, <2 min) ==")
+        tuned = tune(eng, mod)
+        print("  ", {k: v for k, v in tuned.items() if k in ("ctx", "prefill_tps", "decode_tps", "error")})
+        if "error" in tuned:
+            print("  probe failed - keeping shipped defaults")
+            tuned = {}
+    prov, mid, ctx = apply(eng, mod, tuned)
+    print(f"== active: {prov}/{mid}, ctx {ctx} ==")
+    print(f"start pi:  pi --provider {prov} --model {mid}")
+
+
+def cmd_setup(a):
+    d = detect()
+    h = d["hardware"]
+    print(f"hardware: {h['ram_gb']} GB RAM, gpu={h['gpu']}, npu={h['npu']}; engines up: {[x['engine'] for x in d['engines']] or 'none'}")
+    if not d["pi"]:
+        print("! pi not found on PATH - install it first")
+    eng, mod = pick_target(d, a.yes)
+    if not install_extensions(eng):
+        print("! setup.sh reported problems (see above)")
+    finish(eng, mod, a.no_tune)
+
+
+def cmd_use(a):
+    eng, mod = pick_target(detect(), True, a.target)
+    install_extensions(eng)
+    finish(eng, mod, a.no_tune or bool(jget(os.path.join(AGENT, "harness-tuned.json"), {}).get(hw_key(eng, mod))))
+
+
+def cmd_tune(_):
+    p = active() or sys.exit("no active profile: run ./harness setup")
+    finish(p["engine"], p["model"], False)
+
+
+def cmd_status(_):
+    p = active()
+    if not p:
+        return print("not configured: run ./harness setup")
+    port = PROFILES["engines"][p["engine"]]["port"]
+    up = p["model"] in served_models(port) or bool(served_models(port))
+    print(f"engine {p['engine']} :{port} {'UP' if up else 'DOWN'}  model {p['model']}  npu {p['npu']}")
+    t = jget(os.path.join(AGENT, "harness-tuned.json"), {}).get(hw_key(p["engine"], p["model"]))
+    print("tuning:", t or "none yet (./harness tune)")
+    try:
+        http(p["sidecarUrl"] + "/health")
+        print("sidecar: UP")
+    except Exception:
+        print("sidecar: down (starts on demand via ling-tiny.service)")
+
+
+def main():
+    import argparse
+    ap = argparse.ArgumentParser(prog="harness")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for n, f in (("detect", cmd_detect), ("setup", cmd_setup), ("use", cmd_use), ("tune", cmd_tune), ("status", cmd_status)):
+        p = sub.add_parser(n)
+        p.set_defaults(fn=f)
+        if n in ("setup", "use"):
+            p.add_argument("--yes", action="store_true")
+            p.add_argument("--no-tune", action="store_true")
+        if n == "use":
+            p.add_argument("target", help="engine[/model]")
+    a = ap.parse_args()
+    a.fn(a)
+
+
+if __name__ == "__main__":
+    main()

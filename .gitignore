@@ -12,4 +12,5 @@ bench/run-*.sh
 qa-*.png
 *.log
 .serena/
-tests/
+tests/*
+!tests/test_harness.py
