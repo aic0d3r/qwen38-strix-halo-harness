@@ -177,8 +177,15 @@ gufo, stop halogen first (they share one memory heap), then `server/start-gufo-f
 ## Install
 
 ```sh
-# one-time install: extensions, providers, sidecar, pi defaults
+# guided setup for ANY engine (halogen, llama.cpp, Strata, vLLM, Ollama, LM Studio):
+# in a terminal this runs the wizard (same as ./harness setup); in scripts/CI it does
+# the plain install: extensions, providers, sidecar, pi defaults
 ./setup.sh
+
+# afterwards: switch engine/model, check state, re-probe speed
+./harness use <engine>[/<model>]
+./harness status
+./harness tune
 
 # launch halogen from your local checkpoint (zero downloads)
 ./setup.sh --halogen auto
