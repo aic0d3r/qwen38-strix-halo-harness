@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.6.1 - 2026-10-16
 
 ### Fixed
 - `setup.sh`: unknown options (including `--help`) were silently ignored and ran a full install. `-h`/`--help` now prints usage and exits; anything unknown exits 2. `--halogen-upgrade <tag>` no longer leaves the tag behind as a stray argument.
