@@ -82,8 +82,8 @@ Servers you started yourself are never restarted. Run non-interactively (scripts
 | `./harness setup` | the wizard above |
 | `./harness detect` | list hardware and running engines, change nothing |
 | `./harness use <engine>[/<model>]` | switch pi to another engine or model |
-| `./harness status` | active engine, model, context and measured speeds |
-| `./harness tune` | re-probe and re-size the limits |
+| `./harness status` | engine up/down, model, NPU, saved tuning, sidecar state |
+| `./harness tune` | re-run the speed probe and re-size the limits |
 | `./setup.sh --doctor` | read-only health check of the whole install |
 
 ## What you get
