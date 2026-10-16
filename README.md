@@ -34,7 +34,7 @@ screening prompts and routing decisions, a sidecar writing commits and compactio
 - **Private by default:** no API key, no outbound calls. Cloud models are a supported
   [hybrid](docs/ENGINES.md#cloud-models-are-a-supported-hybrid); screening, search and compaction
   stay on-device either way.
-- **Lean by design:** every layer keeps tokens and calls off the main model. [rtk](https://github.com/rtk-ai/rtk)
+- **Lean by design:** every layer keeps tokens and calls off the main model. [rtk](https://npm.im/@estebanforge/pi-rtk-optimizer)
   compresses command output before it reaches context, `tool-trim` caps long output and turns
   repeat file reads into a pointer, semantic search replaces read-everything exploration, and
   side jobs run on the NPU or a small sidecar so the prompt cache is never evicted. Fewer tokens
