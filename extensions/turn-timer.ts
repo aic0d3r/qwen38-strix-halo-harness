@@ -28,8 +28,10 @@ export default function turnTimer(pi: import("@earendil-works/pi-coding-agent").
 		start = Date.now();
 	});
 
-	pi.on("agent_end", async () => {
+	// agent_settled, not agent_end: retries/compaction can continue after agent_end (pi >= 1.1 adds `aborted`)
+	pi.on("agent_settled", async (event: any, ctx) => {
 		if (start !== null) last = fmt(Math.round((Date.now() - start) / 1000));
 		start = null;
+		if (last) ctx.ui.setStatus("turn-timer", ctx.ui.theme.fg("muted", `\u23f1 ${last}${event?.aborted ? " (aborted)" : ""}`));
 	});
 }

@@ -27,7 +27,7 @@ on `http://127.0.0.1:8080`, so it plugs into pi like any other engine.
 # 2. then, in this repo:
 ./setup.sh --strata                      # or: ./setup.sh --strata http://host:port
 ./setup.sh --doctor                      # checks Strata is answering
-pi --provider strata
+pi --provider strata --model <id>        # id: `curl -s localhost:8080/v1/models`; pi >= 1.0 rejects --provider alone
 ```
 
 `--strata` is a pi-only install (it implies `--no-halogen`): it installs the extensions and adds a

@@ -199,6 +199,7 @@ else:
         "models": [{"id": mid, "name": f"{eng} (local)", "reasoning": True, "input": inp,
                     "contextWindow": ctx, "maxTokens": 8192}]}
     print(f"  added provider: {eng}")
+print(f"  model id: {mid}")
 json.dump(m, open(path, "w"), indent=1)
 sp = os.path.join(os.path.dirname(path), "settings.json")
 try: st = json.load(open(sp))
@@ -622,7 +623,7 @@ host_checks
 echo
 echo "done. doctor check any time:  ./setup.sh --doctor"
 if [ "$STRATA" = 1 ] || [ "$GUFO" = 1 ]; then
-  echo "use it:  pi --provider $ENG   (no NPU tools on $ENG, see docs/ENGINES.md)"; exit 0
+  echo "use it:  pi --provider $ENG --model <model id above>   (no NPU tools on $ENG, see docs/ENGINES.md)"; exit 0
 fi
 echo "smoke test:"
 echo "  pi -p --no-skills --no-context-files --provider halogen \\"
