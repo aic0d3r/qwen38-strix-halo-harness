@@ -1,7 +1,7 @@
 # Local AI Coding Agent Harness for AMD Strix Halo (Ryzen AI Max+ 395)
 
-**Qwen3.8 125B on the Radeon 8060S iGPU, three small models on the NPU, cloud optional** — a
-self-hosted [pi](https://github.com/earendil-works/pi) coding-agent harness built on llama.cpp.
+**Guided setup for any local engine, tuned for Qwen3.8 125B on the Radeon 8060S iGPU with three small models on the NPU, cloud optional** — a
+self-hosted [pi](https://github.com/earendil-works/pi) coding-agent harness.
 
 <div align="center">
 
@@ -10,6 +10,7 @@ self-hosted [pi](https://github.com/earendil-works/pi) coding-agent harness buil
 [![Cloud](https://img.shields.io/badge/cloud-optional-blueviolet)](docs/ENGINES.md#cloud-models-are-a-supported-hybrid)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+[Guided setup](#guided-setup) •
 [What you get](#what-you-get) •
 [The stack](#the-stack) •
 [Evidence](#evidence) •
@@ -28,13 +29,14 @@ A coding-agent harness for the **AMD Strix Halo** (Ryzen AI Max+ 395 / gfx1151):
 [pi coding agent](https://github.com/earendil-works/pi) driving **Qwen3.8 Flash-Next (125B)** on
 the iGPU, with the NPU running the small side jobs (prompt-injection screening, fast routing
 decisions, embedding dedup) and a llama.cpp sidecar writing commits and compaction summaries.
-One-command setup, crash recovery that survives a killed server, and the **262k ctx** window the
+One-command guided setup, crash recovery that survives a killed server, and the **262k ctx** window the
 engine is capable of.
 
-Built and measured on Strix Halo, but not locked to it: the pi extensions (commit, compaction,
-crash recovery, semantic search) work against any OpenAI-compatible engine, so NVIDIA or Apple
-users can swap in their own — see [engines](#halogen-vs-gufo-the-best-engines-for-strix-halo).
-The NPU tools and `setup.sh --halogen` are Strix Halo only.
+Built and measured on Strix Halo, but not locked to it: `./setup.sh` detects whatever engine you
+run (halogen, llama.cpp, Strata, vLLM, Ollama, LM Studio) and wires pi to it, and the extensions
+(commit, compaction, crash recovery, semantic search) work against any OpenAI-compatible engine —
+see [engines](#halogen-vs-gufo-the-best-engines-for-strix-halo). The NPU tools and
+`setup.sh --halogen` are Strix Halo only.
 
 It runs with **no API key and no outbound calls** by default, and switching to a cloud model
 mid-session is a supported shape rather than a fallback: the NPU tools and the whole sidecar suite
@@ -49,26 +51,45 @@ numbers behind every claim. Every benchmark here is logged — see
 debugging task rated against verified ground truth.
 
 > [!TIP]
-> **Any engine, guided:** `./setup.sh` in a terminal (or `./harness setup`) detects your hardware and
-> running engines (halogen, llama.cpp, Strata, vLLM, Ollama, LM Studio), asks only if it is ambiguous,
-> writes the pi provider with per-model defaults from [`config/profiles.json`](config/profiles.json),
-> and probes prefill/decode for ~1 min. Later: `./harness use <engine>[/<model>]`, `./harness status`,
-> `./harness tune`. Servers you started yourself are never restarted. Self-test: `python3 tests/test_harness.py`.
-
-> [!TIP]
-> **Just want the agent running?** `./setup.sh --halogen auto`, then `./start.sh ~/my-project`.
-> The two things you must supply are [docker](#install) and the
-> [model files](#model-files) (~124 GB, local). Everything else is optional, and
-> `./setup.sh --doctor` tells you what is live.
+> **Start here:** run `./setup.sh` in a terminal. It is the guided setup for any engine — see
+> [Guided setup](#guided-setup). On a Strix Halo with the halogen checkpoint, `./setup.sh --halogen auto`
+> then `./start.sh ~/my-project` is the zero-question path (needs [docker](#install) and the
+> [model files](#model-files), ~124 GB). `./setup.sh --doctor` tells you what is live.
 
 ![Local Qwen3.8 Flash-Next 125B vs GLM 5.3 cloud tiers on Strix Halo: time to first token and decode tokens per second](docs/charts/local-vs-cloud.png)
 
 Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70 W sustained.
 
+## Guided setup
+
+`./setup.sh` in a terminal (same as `./harness setup`) runs a wizard that works for any engine:
+
+1. **Detects** your hardware and which engines are already serving: halogen, llama.cpp, Strata,
+   vLLM, Ollama, LM Studio.
+2. **Asks only when ambiguous** (several engines up, several models served).
+3. **Writes the pi provider** with per-model defaults (reasoning, sampling, compaction reserve)
+   from [`config/profiles.json`](config/profiles.json), and records the active engine in a
+   profile that the sidecar, guard and NPU extensions read, so they follow your engine instead
+   of assuming halogen.
+4. **Probes** prefill and decode for ~1 min and sizes `maxTokens` and the compaction reserve to
+   what it measured.
+
+Servers you started yourself are never restarted. Run non-interactively (scripts, CI) and
+`./setup.sh` does the plain install instead.
+
+| command | does |
+|---|---|
+| `./harness setup` | the wizard above |
+| `./harness detect` | list hardware and running engines, change nothing |
+| `./harness use <engine>[/<model>]` | switch pi to another engine or model |
+| `./harness status` | active engine, model, context and measured speeds |
+| `./harness tune` | re-probe and re-size the limits |
+| `./setup.sh --doctor` | read-only health check of the whole install |
+
 ## What you get
 
-- **One-command setup** — `./setup.sh` is idempotent: extensions, providers, sidecar download,
-  keep-alive units, halogen launch, memory check. It touches nothing you configured yourself and
+- **One-command setup** — `./setup.sh` is idempotent: guided engine wiring, extensions, providers, sidecar download,
+  keep-alive units, halogen launch (when chosen), memory check. It touches nothing you configured yourself and
   probes every piece instead of trusting it — the NPU guard answers a real `/v1/moderations`
   probe, the vision tower shows `enabled: true` on `/health`, and the smoke test checks its own
   file artifact rather than the model's report.
@@ -123,16 +144,16 @@ generates on the iGPU with its prompt cache warm; side jobs that need a judgemen
 milliseconds (is this an injection, which of these three is it, which files are near-duplicates) go
 to the NPU instead of the 125B model; sidecars read diffs and transcripts directly so they never
 evict the cached prefix; and search runs on CPU against an index built at first query. Halogen is
-the only engine `setup.sh` provisions — [what breaks on another engine](docs/ENGINES.md) is
-measured, too.
+the only engine `setup.sh` launches and manages; every other engine is detected and wired but you
+run it yourself ([what breaks on another engine](docs/ENGINES.md) is measured, too).
 
 ### Halogen vs gufo (the best engines for Strix Halo)
 
 **The engine is swappable.** The harness is a pi setup plus extensions that talk to an
 OpenAI-compatible endpoint, so on other hardware (NVIDIA, Apple Silicon, plain CPU) use any
 server that fits it: [Strata](docs/ENGINES.md#strata-the-pick-for-nvidia-and-amd-desktop-gpus) (NVIDIA/AMD desktop GPUs), llama.cpp (CUDA/Metal builds), vLLM, Ollama, LM Studio, MLX, or gufo where
-it supports your GPU. Point `models.json` at it ([example](config/models.json.example)) and skip
-`--halogen`. Only the Strix Halo numbers below are measured here; nothing on NVIDIA or Apple was
+it supports your GPU. Start it, run `./setup.sh` (or `./harness use <engine>`) and skip
+`--halogen`; hand-writing `models.json` ([example](config/models.json.example)) still works. Only the Strix Halo numbers below are measured here; nothing on NVIDIA or Apple was
 tested. What you lose off halogen is the NPU tooling ([list](docs/ENGINES.md#what-breaks-on-another-engine)).
 Which engine for which hardware:
 
@@ -177,17 +198,10 @@ gufo, stop halogen first (they share one memory heap), then `server/start-gufo-f
 ## Install
 
 ```sh
-# guided setup for ANY engine (halogen, llama.cpp, Strata, vLLM, Ollama, LM Studio):
-# in a terminal this runs the wizard (same as ./harness setup); in scripts/CI it does
-# the plain install: extensions, providers, sidecar, pi defaults
+# any engine: guided wizard in a terminal, plain install in scripts/CI (see Guided setup)
 ./setup.sh
 
-# afterwards: switch engine/model, check state, re-probe speed
-./harness use <engine>[/<model>]
-./harness status
-./harness tune
-
-# launch halogen from your local checkpoint (zero downloads)
+# Strix Halo: launch halogen from your local checkpoint (zero downloads)
 ./setup.sh --halogen auto
 
 # status check any time, ends with a live model ping
@@ -197,8 +211,9 @@ gufo, stop halogen first (they share one memory heap), then `server/start-gufo-f
 `--halogen auto` finds `*.hgn` in `.`, `/models`, `~/models`, `~/Downloads` (or pass a path
 explicitly); restart later with `./start-halogen.sh` (written on first launch); `--no-halogen`
 installs pi without container management (laptop pi against your own providers, or against a
-remote Strix Halo appliance via `baseUrl` + `PI_NPU_BASE`). Other flags: `--voice`,
-`--halogen-upgrade [tag]`, `--uninstall`. Prerequisites: docker (setup will not sudo-install it),
+remote Strix Halo appliance via `baseUrl` + `PI_NPU_BASE`). `--strata [url]` and `--gufo [url]`
+do a pi-only install with a provider for that engine. Other flags: `--voice`,
+`--halogen-upgrade [tag]`, `--uninstall`, `--help`. Prerequisites: docker (setup will not sudo-install it),
 pi (setup installs it via npm if missing), `uvx` from [uv](https://docs.astral.sh/uv) for semantic
 search, and an IOMMU-enabled gfx1151 box for the NPU driver. The launch is pinned to local files
 (no `HALOGEN_DOWNLOAD`), so the engine makes no outbound connections.
@@ -208,8 +223,8 @@ search, and an IOMMU-enabled gfx1151 box for the NPU driver. The launch is pinne
 > set is ~124 GB. `./setup.sh --halogen auto` offers to fetch exactly the right files and resumes
 > where it stopped if interrupted.
 
-Plain `pi` also works after setup: startup defaults point at halogen, and existing overrides are
-never touched.
+Plain `pi` also works after setup: startup defaults point at the engine you chose, and existing
+overrides are never touched.
 
 ## Model files
 
@@ -249,9 +264,15 @@ checkpoint; the default stays `v2` — pass the `ht43.hgn` path explicitly to us
 ## Quick start
 
 ```sh
-# daily driver: heals any dead server, then opens the pi TUI
+# halogen daily driver: heals any dead server, then opens the pi TUI
 ./start.sh ~/my-project
+
+# any other engine: start your server, then run pi in the project (provider set by setup)
+cd ~/my-project && pi
 ```
+
+`start.sh` is halogen-specific (it relaunches halogen and opens pi on its model). For other
+engines, start the server yourself and use `pi`; `./harness status` shows what pi is pointed at.
 
 In the session: `read`/`edit`/`bash` as usual, `mcp__semble__search` for "where is X implemented",
 `commit` for a sidecar-written message, `triage` when a decision is a one-word call, and `/tune`
@@ -358,7 +379,7 @@ log-routing behavior have all changed between releases.
 ```
 
 Removes everything the installer provisioned — extensions, templates, skills, theme, pi defaults,
-the two providers (only where they still match what setup set) and the systemd units — after
+the providers and the wizard's profile files (only where they still match what setup set) and the systemd units — after
 backing all of it up to `~/pi-harness-uninstall-backup-*.tar.gz`. **Deliberately left alone:**
 your own model entries, `mcp.json`, the sidecar GGUF (the reclaim command is printed), the halogen
 container and your checkpoint files.
@@ -369,7 +390,7 @@ container and your checkpoint files.
   results, and every claim in this README with its logged run.
 - **[Local vs cloud model comparison](docs/local-vs-cloud-model-comparison.md)** — seven runs, one
   real debugging task, answers rated against verified ground truth.
-- **[Engines](docs/ENGINES.md)** — the two stacks, halogen vs gufo 0.12, what breaks on a non-halogen engine, sidecar
+- **[Engines](docs/ENGINES.md)** — the engines and which fits which hardware, halogen vs gufo 0.12, what breaks on a non-halogen engine, sidecar
   isolation, and running a cloud model with the local NPU tools.
 - **[llama.cpp path](docs/LLAMACPP.md)** — the full-control engine: engine build, GGUFs and
   drafters, GPU-memory boot args, pi wiring.
