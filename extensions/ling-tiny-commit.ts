@@ -103,9 +103,11 @@ export default function (pi: ExtensionAPI) {
 		notify("Collecting diff...", "info");
 		// prefill dominates sidecar latency (~3.5k tok/s): stat first so truncation never hides a file,
 		// -U1 trims context lines, 24k cap. Measured 10-12: worst case 7.2s -> 2.9s.
+		// no commits yet: HEAD does not resolve, so diff against git's empty tree instead
+		const base = (await git(["rev-parse", "--verify", "-q", "HEAD"])).code === 0 ? "HEAD" : "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 		const [{ stdout: stat }, { stdout: diff }, { stdout: untracked }] = await Promise.all([
-			git(["diff", "HEAD", "--stat"]),
-			git(["diff", "-U1", "HEAD"]),
+			git(["diff", base, "--stat"]),
+			git(["diff", "-U1", base]),
 			git(["ls-files", "--others", "--exclude-standard"]),
 		]);
 

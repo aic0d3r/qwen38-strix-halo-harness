@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-exec python3 "$(dirname "$(readlink -f "$0")")/setup/harness.py" "$@"
+exec python3 -u "$(dirname "$(readlink -f "$0")")/setup/harness.py" "$@"

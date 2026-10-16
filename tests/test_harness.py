@@ -12,7 +12,7 @@ class Mock(http.server.BaseHTTPRequestHandler):
     def _j(self, o):
         b = json.dumps(o).encode(); self.send_response(200); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
     def do_GET(self):
-        if self.path == "/v1/models": self._j({"data": [{"id": "Qwen3-8B"}]})
+        if self.path == "/v1/models": self._j({"data": [{"id": "Qwen3-8B", **({} if STRATA else {"owned_by": "llamacpp"})}]})
         elif self.path == "/props": self._j({"default_generation_settings": {"n_ctx": 32768}})
         else: self._j({"ok": 1})
     def do_POST(self):
@@ -22,6 +22,7 @@ class Mock(http.server.BaseHTTPRequestHandler):
             self.wfile.write(f"data: {c}\n\n".encode())
 
 
+STRATA = False
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Mock)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 h.PROFILES["engines"]["llamacpp"]["port"] = srv.server_port
@@ -35,4 +36,9 @@ prov, mid, ctx = h.apply("llamacpp", "Qwen3-8B", {"maxTokens": 4096})
 m = json.load(open(f"{AGENT}/models.json"))["providers"]["llamacpp"]["models"][0]
 assert (prov, mid, ctx) == ("llamacpp", "Qwen3-8B", 32768) and m["maxTokens"] == 4096 and "chatTemplateKwargs" in m["compat"]
 assert json.load(open(f"{AGENT}/harness-profile.json"))["npu"] is False
+assert "llamacpp-tiny" in json.load(open(f"{AGENT}/models.json"))["providers"]  # sidecar reachable by registry lookups
+# Strata shares :8080 and also serves /props (seen on Strata 0.1.44) but no owned_by=llamacpp
+STRATA = True
+h.PROFILES["engines"]["strata"]["port"] = srv.server_port
+assert [e["engine"] for e in h.detect()["engines"]] == ["strata"]
 print("ok")

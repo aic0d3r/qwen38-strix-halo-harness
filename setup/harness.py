@@ -62,10 +62,9 @@ def served_models(port):
 
 def identify(name, port):
     """Several engines share :8080 (strata / llamacpp): tell them apart by what answers."""
-    if name == "llamacpp":  # llama-server exposes /props; Strata does not
+    if name == "llamacpp":  # llama-server tags its models owned_by=llamacpp; Strata also serves /props, so that is no tell
         try:
-            http(f"http://127.0.0.1:{port}/props")
-            return True
+            return any(m.get("owned_by") == "llamacpp" for m in json.load(http(f"http://127.0.0.1:{port}/v1/models"))["data"])
         except Exception:
             return False
     if name == "strata":
@@ -151,6 +150,13 @@ def apply(engine, model_id, tuned=None):
     if old and engine == "halogen":  # setup.sh provisions the halogen provider; never overwrite it
         new = old
     m.setdefault("providers", {})[prov] = new
+    # compaction/branch-summary look the sidecar up in the model registry; setup.sh only adds it on
+    # the halogen path, so without this every other engine silently fell back to main-model summaries
+    m["providers"].setdefault("llamacpp-tiny", {
+        "baseUrl": "http://127.0.0.1:8090/v1", "api": "openai-completions", "apiKey": "dummy",
+        "models": [{"id": "ling3.0-tiny", "name": "Ling-3.0-tiny sidecar", "reasoning": True, "input": ["text"],
+                    "contextWindow": 131072, "maxTokens": 8192,
+                    "compat": {"thinkingFormat": "chat-template", "chatTemplateKwargs": {"enable_thinking": False}}}]})
     jput(mj, m)
     ctx = new["models"][0]["contextWindow"]
     sj = os.path.join(AGENT, "settings.json")
