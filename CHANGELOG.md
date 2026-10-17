@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixed
+- Halogen update check never ran and setup never asked: the `harness-update` extension used the same file (`harness-update-check`) as setup's saved answer and rewrote it empty once a day, so the answer was wiped and an empty file counted as "already asked". The extension now stamps `harness-update-stamp`, and setup treats an empty answer file as unanswered.
+
 ### Changed
 - `tool-trim`: a whole-file `read` of a source file over 6,000 chars gets a one-line hint (once per file per session) to use `mcp__serena__find_symbol` / `get_symbols_overview` or `offset`/`limit`. Basis: logged sessions show `read` returning a median 2.6k / mean 7k chars while serena lookups return ~0.2k but were used ~35 times in 416 sessions (see `docs/BENCHMARKS.md`).
 - `config/AGENTS.md`: serena section now says not to read a whole file for one symbol, and to fall back to semble + `offset`/`limit` when no language server covers the file.

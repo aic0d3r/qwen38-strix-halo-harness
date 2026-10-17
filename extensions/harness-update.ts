@@ -12,7 +12,8 @@ import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent"
 
 const run = promisify(execFile);
 const AGENT_DIR = getAgentDir();
-const STAMP = path.join(AGENT_DIR, "harness-update-check");
+// not "harness-update-check": that file holds setup.sh's halogen-update answer (1/0) and this stamp wiped it
+const STAMP = path.join(AGENT_DIR, "harness-update-stamp");
 const DAY = 24 * 3600 * 1000;
 
 const git = (repo: string, ...a: string[]) => run("git", ["-C", repo, ...a], { timeout: 5000 }).then((r) => r.stdout.trim());
