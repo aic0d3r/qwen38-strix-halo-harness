@@ -11,13 +11,16 @@ import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { BOUNDED, trim } from "./core.ts";
 
+const NUDGE_CHARS = 6000;
+const SOURCE = /\.(py|tsx?|jsx?|mjs|go|rs|java|kt|c|cc|cpp|h|hpp|cs|rb|php|swift)$/i;
 const OUT_DIR = path.join(os.tmpdir(), "pi-out");
 const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
 
 export default function toolTrim(pi: ExtensionAPI) {
 	let seq = 0;
 	let reads = new Map<string, string>(); // path|offset|limit -> content hash
-	for (const e of ["session_start", "session_compact", "session_tree", "session_switch", "session_fork"]) pi.on(e as any, async () => { reads = new Map(); });
+	let nudged = new Set<string>(); // source files already given the narrow-read hint this session
+	for (const e of ["session_start", "session_compact", "session_tree", "session_switch", "session_fork"]) pi.on(e as any, async () => { reads = new Map(); nudged = new Set(); });
 
 	pi.on("tool_result", async (event: any) => {
 		if (process.env.TOOL_TRIM_DISABLED || event.isError && event.toolName === "read") return;
@@ -40,7 +43,16 @@ export default function toolTrim(pi: ExtensionAPI) {
 			const h = crypto.createHash("sha1").update(before).digest("hex");
 			const seen = reads.get(key) === h;
 			reads.set(key, h);
-			if (!seen) return;
+			if (!seen) {
+				// logged sessions: median read 2.6k chars, a serena symbol lookup ~0.2k; nudge once per big whole-file source read
+				const p = String(event.input?.path ?? "");
+				if (before.length > NUDGE_CHARS && event.input?.offset == null && event.input?.limit == null && SOURCE.test(p) && !nudged.has(p)) {
+					nudged.add(p);
+					ev({ c: "tool-trim", k: "nudge", chars: before.length });
+					return { content: [{ type: "text" as const, text: `${before}\n\n[tool-trim: whole-file read of ${before.length} chars. For one function or class next time use mcp__serena__find_symbol / get_symbols_overview, or read with offset/limit.]` }] };
+				}
+				return;
+			}
 			const text = `[tool-trim: ${event.input?.path} is unchanged since your earlier read (${before.split("\n").length} lines); that content is still in your context above. Re-read with a different offset/limit if you need other lines.]`;
 			ev({ c: "tool-trim", k: "reread", saved: before.length - text.length });
 			return { content: [{ type: "text" as const, text }] };

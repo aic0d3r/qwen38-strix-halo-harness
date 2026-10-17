@@ -15,6 +15,12 @@ Call `mcp__serena__activate_project` once per project, then prefer Serena for sy
 (project-wide rename), `get_diagnostics_for_file` (type/syntax errors). Use grep only for
 exact-string sweeps, and native read/edit for docs and config files.
 
+Don't read a whole source file to look at one symbol: a function body via `find_symbol` costs
+~0.8k chars against ~14k for the file, and an outline via `get_symbols_overview` ~0.4k. Read a
+file whole only when you need most of it; otherwise use `offset`/`limit`. Serena needs a
+language server for the file's language (`.serena/project.yml` `language_servers`); if a tool
+reports none, fall back to semble + `read` with `offset`/`limit`.
+
 ## Web search — jina
 
 If an answer depends on knowledge likely newer than your training (recent packages/tools,

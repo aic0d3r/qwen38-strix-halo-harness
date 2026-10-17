@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- `tool-trim`: a whole-file `read` of a source file over 6,000 chars gets a one-line hint (once per file per session) to use `mcp__serena__find_symbol` / `get_symbols_overview` or `offset`/`limit`. Basis: logged sessions show `read` returning a median 2.6k / mean 7k chars while serena lookups return ~0.2k but were used ~35 times in 416 sessions (see `docs/BENCHMARKS.md`).
+- `config/AGENTS.md`: serena section now says not to read a whole file for one symbol, and to fall back to semble + `offset`/`limit` when no language server covers the file.
+- `turn-timer` freezes on `agent_settled` and shows `(aborted)`; setup hint for `--strata`/`--gufo` now includes `--model` (pi >= 1.0 rejects `--provider` alone).
+
 ## 1.6.1 - 2026-10-16
 
 ### Fixed
