@@ -30,6 +30,27 @@ Rig: ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB unified, Linux),
 
 **The invalid experiment I almost published:** my first "controlled experiment" showed a 2x speedup - but the NPU arm never had a working index (path bug), and the task was a public httpx fix the model had memorized (92s, zero search calls). Per-call telemetry caught it, and every tool call now logs its index and query.
 
+## Serena: context returned per navigation task (2026-10-16)
+
+One call each on this repo (`setup/harness.py`, 13,980 chars), characters returned to the model
+(~4 chars per token). The "grep" arm is a careful baseline (`grep -n` plus a few lines of context);
+"read" is the naive one.
+
+| task | serena | grep + context | read the file |
+|---|---|---|---|
+| body of one function (`finish`) | 822 | 1,186 | 13,980 |
+| outline of a file | 390 | 761 | 13,980 |
+| callers of a function | 813 | 313 | n/a |
+
+Serena is ~17-36x smaller than reading the file and 1.4-2x smaller than careful grep, but **larger**
+than grep for callers (it adds the containing symbol). Limits seen: only the Python language server is
+active in this project, so `get_symbols_overview` on a `.ts` file errors.
+
+Real usage across 416 logged sessions (`~/.pi/agent/sessions`): `read` returned a median 2,605 and
+mean 7,029 chars over 1,246 calls; serena navigation returned a mean 213-244 chars
+(`find_symbol`, `get_symbols_overview`) but ran only ~35 times, in 29 sessions. The saving exists;
+the agent rarely takes it.
+
 ## Install & ops
 
 **Install - fully automated, one prompt total.** Clone github.com/aic0d3r/qwen38-strix-halo-harness (tagged releases, MIT, changelog in the repo) and run `./setup.sh --halogen auto`. It installs pi via npm if missing, pulls the pinned halogen image, and if you don't have the model files it downloads them for you: ~124 GB resumable (that's the one prompt you'll see - it checks your free space first), then the 35 MB portable llama-server for the sidecar, the tiny GGUF sha256-verified against Hugging Face, the extension suite, prompt templates, skills, theme, and the systemd keep-alive unit - and your own model entries and pi settings are never touched. `./setup.sh --doctor` verifies every piece with live probes; `./setup.sh --uninstall` backs everything up and returns pi to stock in one command.

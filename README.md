@@ -89,6 +89,7 @@ The harness is tuned to spend as few tokens, and as little main-model time, as p
 |---|---|---|
 | **rtk** (`pi-rtk-optimizer`) | rewrites bash commands through the `rtk` binary so test, build and git output arrives compressed | per-command savings in `rtk gain`; no aggregate benchmark in this repo yet |
 | **`tool-trim`** | strips ANSI/progress noise, caps huge output (full text saved to a file), identical re-reads of unchanged files become a pointer | token savings shown by `/usage` |
+| **serena** (LSP symbol tools) | reads one function or an outline instead of the whole file; precise symbol edits and renames | 822 chars for a function body vs 13,980 to read the file; 390 for an outline; callers cost more than grep ([details](docs/BENCHMARKS.md#serena-context-returned-per-navigation-task-2026-10-16)) |
 | **semble search** | finds code by meaning instead of reading files to explore | 17/18 vs 13/18 top-3 hits, 2-3x faster queries, ~40x faster indexing than the NPU pipeline it replaced |
 | **Sidecar + NPU** | commits, compaction and repo maps run off the main model; screening and routing on the NPU | compaction ~24 s non-blocking vs ~52 s blocking; large commit diffs 18.5k to 7.1k tokens (2.5x faster) |
 | **Warm prompt cache** | diffs and transcripts never touch the main model's prefix | warm replay 0.01-0.05 s on halogen |
@@ -111,6 +112,12 @@ from; locally they cut prefill time.
   embedding similarity); `auto-guard` screens every prompt on the guard model as a fail-open
   tripwire (42 % recall / 0 % false positives on the 30-prompt canary — not a security boundary).
   See [The NPU](#the-npu).
+- **Symbol-precise code tools** — the [serena](https://github.com/oraios/serena) MCP server (find a
+  symbol, its callers, an outline, diagnostics, symbol-level edits and renames), wired into
+  `mcp.json` by setup and started on your current project. Install serena yourself (setup expects
+  `~/.local/bin/serena`); it also needs a language server for your language. Measured: a function body in ~820 chars instead of reading a ~14,000-char file. In real
+  sessions the agent still reaches for `read` far more often, so tell it to use serena for
+  navigation.
 - **Semantic code search** — the pinned [semble](https://pypi.org/project/semble/) MCP server
   (`search` + `find_related`), wired into `mcp.json` by setup. A/B on 18 ground-truth queries
   against the NPU RAG pipeline it replaced: 17/18 vs 13/18 top-3 hits, 2-3x faster queries, ~40x
