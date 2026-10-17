@@ -53,11 +53,14 @@ def hardware():
     return {"cpus": os.cpu_count(), "ram_gb": mem, "gpu": gpu, "npu": bool(glob.glob("/dev/accel/accel*"))}
 
 
-def served_models(port):
+def served_models(port, engine=None):
+    """Model ids the server lists, minus helper models the engine hides (halogen's NPU sidecars)."""
+    hide = PROFILES["engines"].get(engine or "", {}).get("hide")
     try:
-        return [m["id"] for m in json.load(http(f"http://127.0.0.1:{port}/v1/models"))["data"]]
+        ids = [m["id"] for m in json.load(http(f"http://127.0.0.1:{port}/v1/models"))["data"]]
     except Exception:
         return []
+    return [i for i in ids if not (hide and re.search(hide, i))]
 
 
 def identify(name, port):
@@ -75,12 +78,14 @@ def identify(name, port):
 def detect():
     found = []
     for name, e in PROFILES["engines"].items():
+        if e.get("autodetect") is False:
+            continue
         try:
             http(f"http://127.0.0.1:{e['port']}{e['probe']}")
         except Exception:
             continue
         if identify(name, e["port"]):
-            found.append({"engine": name, "port": e["port"], "models": served_models(e["port"])})
+            found.append({"engine": name, "port": e["port"], "models": served_models(e["port"], name)})
     ggufs = []
     for d in MODEL_DIRS:
         ggufs += glob.glob(os.path.join(os.path.expanduser(d), "**", "*.gguf"), recursive=True)[:20]
@@ -238,23 +243,35 @@ def cmd_detect(_):
 
 
 def pick_target(d, yes, want=None):
-    engines = d["engines"]
+    running = {x["engine"]: x for x in d["engines"]}
+
+    def models_of(eng):
+        e = PROFILES["engines"][eng]
+        if eng in running:
+            return running[eng]["models"]
+        for x in d["engines"]:  # strata / llama.cpp / gufo share :8080: whatever answers there is what you started
+            if x["port"] == e["port"]:
+                return x["models"]
+        sys.exit(f"{eng} is not answering on :{e['port']} - {e.get('start', 'start it first')}")
+
     if want:
         eng, _, mod = want.partition("/")
         if eng not in PROFILES["engines"]:
             sys.exit(f"unknown engine {eng}; known: {', '.join(PROFILES['engines'])}")
-        hit = next((x for x in engines if x["engine"] == eng), None)
-        if not hit:
-            sys.exit(f"{eng} is not answering on :{PROFILES['engines'][eng]['port']} - start it first")
-        models = hit["models"]
+        models = models_of(eng)
         return eng, mod or (models[0] if models else sys.exit("server lists no models"))
-    if not engines:
+    if not running:
         sys.exit("no engine answering on the usual ports. Start one (see docs/ENGINES.md, or `./setup.sh --halogen auto`), then re-run.")
-    eng = choose("Which engine?", [x["engine"] for x in engines], yes)
-    hit = next(x for x in engines if x["engine"] == eng)
-    if not hit["models"]:
+    if yes or not sys.stdin.isatty():  # unattended: only what is already up
+        labels = {e: e for e in running}
+    else:  # interactive: offer every known engine so strata / gufo are visible even when down
+        labels = {e: f"{e} ({'running' if e in running else 'not running'})" for e in sorted(PROFILES["engines"], key=lambda e: e not in running)}
+    pick = choose("Which engine?", list(labels.values()), yes)
+    eng = next(e for e, l in labels.items() if l == pick)
+    models = models_of(eng)
+    if not models:
         sys.exit(f"{eng} lists no models")
-    return eng, choose("Which model?", hit["models"], yes)
+    return eng, choose("Which model?", models, yes)
 
 
 def finish(eng, mod, no_tune):
@@ -299,7 +316,7 @@ def cmd_status(_):
     if not p:
         return print("not configured: run ./harness setup")
     port = PROFILES["engines"][p["engine"]]["port"]
-    up = p["model"] in served_models(port) or bool(served_models(port))
+    up = bool(served_models(port, p["engine"]))
     print(f"engine {p['engine']} :{port} {'UP' if up else 'DOWN'}  model {p['model']}  npu {p['npu']}")
     t = jget(os.path.join(AGENT, "harness-tuned.json"), {}).get(hw_key(p["engine"], p["model"]))
     print("tuning:", t or "none yet (./harness tune)")

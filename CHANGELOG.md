@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Fixed
+- Guided setup listed halogen's NPU helper models (`decider-0.8b`, embedding, guard) as chat models to pick. They are now hidden (`hide` in `config/profiles.json`), so halogen has one model and no question.
+- Guided setup only offered engines that were already running. In a terminal it now lists every known engine, marked running or not; picking one that is down prints how to start it. Added `gufo` as an engine (`./harness use gufo`); it shares :8080 with Strata and llama.cpp so it is never auto-detected, only picked by name.
+- `tests/test_harness.py` failed on any box with a real halogen running.
+
+### Fixed
 - Halogen update check never ran and setup never asked: the `harness-update` extension used the same file (`harness-update-check`) as setup's saved answer and rewrote it empty once a day, so the answer was wiped and an empty file counted as "already asked". The extension now stamps `harness-update-stamp`, and setup treats an empty answer file as unanswered.
 
 ### Changed

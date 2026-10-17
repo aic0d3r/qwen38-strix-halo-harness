@@ -40,5 +40,12 @@ assert "llamacpp-tiny" in json.load(open(f"{AGENT}/models.json"))["providers"]  
 # Strata shares :8080 and also serves /props (seen on Strata 0.1.44) but no owned_by=llamacpp
 STRATA = True
 h.PROFILES["engines"]["strata"]["port"] = srv.server_port
-assert [e["engine"] for e in h.detect()["engines"]] == ["strata"]
+up = [e["engine"] for e in h.detect()["engines"] if e["engine"] != "halogen"]  # a real halogen on :8731 may also be up
+assert up == ["strata"], up
+# gufo shares :8080: never auto-detected, but selectable by name once something answers there
+h.PROFILES["engines"]["gufo"]["port"] = srv.server_port
+assert h.pick_target(h.detect(), True, "gufo")[0] == "gufo"
+# halogen's NPU helper models are not offered as chat models
+h.PROFILES["engines"]["vllm"]["hide"] = "^Qwen3"
+assert h.served_models(srv.server_port, "vllm") == []
 print("ok")

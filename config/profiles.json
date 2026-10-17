@@ -1,8 +1,13 @@
 {
   "_doc": "Engine + model-family defaults used by ./harness. Engines are probed in order; models.* are regexes on the served model id (first match wins), merged over `default`.",
   "engines": {
-    "halogen":  { "port": 8731,  "probe": "/health",     "provider": "halogen", "npu": true,  "managed": true,  "note": "Strix Halo NPU+GPU engine; provisioned by setup.sh --halogen" },
-    "strata":   { "port": 8080,  "probe": "/v1/models",  "provider": "strata",  "npu": false, "managed": false, "note": "NVIDIA/AMD desktop GPUs" },
+    "halogen":  { "port": 8731,  "probe": "/health",     "provider": "halogen", "npu": true,  "managed": true,  "note": "Strix Halo NPU+GPU engine; provisioned by setup.sh --halogen",
+                 "hide": "^(decider|qwen3-embedding|qwen3guard|qwen3-reranker)" },
+    "strata":   { "port": 8080,  "probe": "/v1/models",  "provider": "strata",  "npu": false, "managed": false, "note": "NVIDIA/AMD desktop GPUs",
+                 "start": "install and start Strata per its README (docs/ENGINES.md#strata-the-pick-for-nvidia-and-amd-desktop-gpus)" },
+    "gufo":     { "port": 8080,  "probe": "/v1/models",  "provider": "gufo",    "npu": false, "managed": false, "autodetect": false,
+                 "note": "shares :8080 with strata/llama.cpp, so it is never auto-detected; pick it by name",
+                 "start": "stop halogen first, then run server/start-gufo-flashnext.sh" },
     "llamacpp": { "port": 8080,  "probe": "/health",     "provider": "llamacpp","npu": false, "managed": false, "note": "llama-server; see docs/LLAMACPP.md" },
     "vllm":     { "port": 8000,  "probe": "/v1/models",  "provider": "vllm",    "npu": false, "managed": false },
     "ollama":   { "port": 11434, "probe": "/v1/models",  "provider": "ollama",  "npu": false, "managed": false },
