@@ -176,8 +176,8 @@ def apply(engine, model_id, tuned=None):
     return prov, new["models"][0]["id"], ctx
 
 
-def install_extensions(engine):
-    args = ["--halogen", "auto"] if engine == "halogen" else ["--no-halogen"]
+def install_extensions(engine, extra=()):
+    args = (["--halogen", "auto"] if engine == "halogen" else ["--no-halogen"]) + list(extra)
     return subprocess.run(["bash", os.path.join(REPO, "setup.sh"), *args]).returncode == 0
 
 
@@ -262,16 +262,83 @@ def pick_target(d, yes, want=None):
         return eng, mod or (models[0] if models else sys.exit("server lists no models"))
     if not running:
         sys.exit("no engine answering on the usual ports. Start one (see docs/ENGINES.md, or `./setup.sh --halogen auto`), then re-run.")
-    if yes or not sys.stdin.isatty():  # unattended: only what is already up
-        labels = {e: e for e in running}
-    else:  # interactive: offer every known engine so strata / gufo are visible even when down
-        labels = {e: f"{e} ({'running' if e in running else 'not running'})" for e in sorted(PROFILES["engines"], key=lambda e: e not in running)}
-    pick = choose("Which engine?", list(labels.values()), yes)
-    eng = next(e for e, l in labels.items() if l == pick)
+    if list(running) == ["halogen"]:  # fast path: nothing else is up, no question
+        eng = "halogen"
+    else:
+        if yes or not sys.stdin.isatty():  # unattended: only what is already up
+            labels = {e: e for e in running}
+        else:  # interactive: offer every known engine so strata / gufo are visible even when down
+            labels = {e: f"{e} ({'running' if e in running else 'not running'})" for e in sorted(PROFILES["engines"], key=lambda e: e not in running)}
+        pick = choose("Which engine?", list(labels.values()), yes)
+        eng = next(e for e, l in labels.items() if l == pick)
     models = models_of(eng)
     if not models:
         sys.exit(f"{eng} lists no models")
     return eng, choose("Which model?", models, yes)
+
+
+# ---------- extras (asked once, answers saved) ----------
+EXTRAS = os.path.join(AGENT, "harness-extras.json")
+# file extension -> serena language_servers name
+LANGS = {".py": "python", ".ts": "typescript", ".tsx": "typescript", ".js": "typescript", ".jsx": "typescript",
+         ".go": "go", ".rs": "rust", ".java": "java", ".kt": "kotlin", ".rb": "ruby", ".cs": "csharp",
+         ".php": "php", ".swift": "swift", ".c": "cpp", ".cc": "cpp", ".cpp": "cpp", ".h": "cpp"}
+
+
+def ask_yn(question):
+    return input(f"{question} [y/N] ").strip().lower().startswith("y")
+
+
+def ask_once(key, question, reconfigure):
+    """y/N asked on a terminal, then remembered; --reconfigure asks again."""
+    st = jget(EXTRAS, {})
+    if (key in st and not reconfigure) or not sys.stdin.isatty():
+        return bool(st.get(key))
+    st[key] = ask_yn(question)
+    jput(EXTRAS, st)
+    return st[key]
+
+
+def serena_languages(root="."):
+    """Enable serena language servers for the languages found in the project; -> languages added."""
+    yml = os.path.join(root, ".serena", "project.yml")
+    if not os.path.exists(yml):
+        return []
+    n = {}
+    for dp, dn, fn in os.walk(root):
+        dn[:] = [d for d in dn if d not in (".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".serena")]
+        for f in fn:
+            lang = LANGS.get(os.path.splitext(f)[1])
+            if lang:
+                n[lang] = n.get(lang, 0) + 1
+        if sum(n.values()) > 5000:
+            break
+    want = [l for l, c in n.items() if c >= 3]
+    text = open(yml).read()
+    m = re.search(r"^language_servers:\n((?:- .*\n)+)", text, re.M)
+    if not m:
+        return []
+    have = [x[2:].strip() for x in m.group(1).splitlines()]
+    add = [l for l in want if l not in have]
+    if add:
+        open(yml, "w").write(text[:m.end(1)] + "".join(f"- {l}\n" for l in add) + text[m.end(1):])
+    return add
+
+
+def halogen_upgrade_offer():
+    """If the update check is on and a newer image exists, offer the safe upgrade."""
+    pref = ""
+    try:
+        pref = open(os.path.join(AGENT, "harness-update-check")).read().strip()
+    except OSError:
+        pass
+    if pref != "1" or not sys.stdin.isatty():
+        return
+    msg = subprocess.run(["bash", os.path.join(REPO, "scripts", "check-halogen-update.sh")], capture_output=True, text=True).stdout.strip()
+    if msg:
+        print(msg)
+        if ask_yn("Upgrade halogen now? (restarts the server, rolls back on failure)"):
+            subprocess.run(["bash", os.path.join(REPO, "scripts", "upgrade-halogen.sh")])
 
 
 def finish(eng, mod, no_tune):
@@ -284,8 +351,10 @@ def finish(eng, mod, no_tune):
             print("  probe failed - keeping shipped defaults")
             tuned = {}
     prov, mid, ctx = apply(eng, mod, tuned)
-    print(f"== active: {prov}/{mid}, ctx {ctx} ==")
-    print(f"start pi:  pi --provider {prov} --model {mid}")
+    speed = f"{tuned['prefill_tps']} t/s prefill, {tuned['decode_tps']} t/s decode" if tuned.get("decode_tps") else "not probed (./harness tune)"
+    print(f"\n== ready ==\n  engine   {eng} -> {prov}/{mid}\n  context  {ctx}\n  speed    {speed}")
+    print(f"  start    {'./start.sh ~/your-project' if eng == 'halogen' else f'pi --provider {prov} --model {mid}'}")
+    print("  check    ./setup.sh --doctor   (status: ./harness status)")
 
 
 def cmd_setup(a):
@@ -295,8 +364,14 @@ def cmd_setup(a):
     if not d["pi"]:
         print("! pi not found on PATH - install it first")
     eng, mod = pick_target(d, a.yes)
-    if not install_extensions(eng):
+    voice = not a.yes and ask_once("voice", "Set up voice (local STT/TTS via Lemonade)?", a.reconfigure)
+    if not install_extensions(eng, ["--voice"] if voice else []):
         print("! setup.sh reported problems (see above)")
+    if eng == "halogen":
+        halogen_upgrade_offer()
+    added = serena_languages()
+    if added:
+        print(f"serena: enabled language servers {added} in .serena/project.yml (restart serena to load them)")
     finish(eng, mod, a.no_tune)
 
 
@@ -337,6 +412,7 @@ def main():
         if n in ("setup", "use"):
             p.add_argument("--yes", action="store_true")
             p.add_argument("--no-tune", action="store_true")
+            p.add_argument("--reconfigure", action="store_true", help="ask the saved extras again")
         if n == "use":
             p.add_argument("target", help="engine[/model]")
     a = ap.parse_args()

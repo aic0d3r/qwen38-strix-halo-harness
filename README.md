@@ -61,13 +61,19 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70
 
 1. **Detects** your hardware and which engines are already serving: halogen, llama.cpp, Strata,
    vLLM, Ollama, LM Studio.
-2. **Asks only when ambiguous** (several engines up, several models served).
+2. **Asks only when ambiguous.** Halogen alone is picked with no question. With several engines
+   it lists every known one (including Strata and gufo) marked running or not; picking one that is
+   down prints how to start it.
 3. **Writes the pi provider** with per-model defaults (reasoning, sampling, compaction reserve)
    from [`config/profiles.json`](config/profiles.json), and records the active engine in a
    profile that the sidecar, guard and NPU extensions read, so they follow your engine instead
    of assuming halogen.
 4. **Probes** prefill and decode for ~1 min and sizes `maxTokens` and the compaction reserve to
-   what it measured.
+   what it measured, then prints a short summary and the command to start.
+5. **Extras, asked once and remembered** (`./harness setup --reconfigure` asks again): halogen
+   update check, with an offer to upgrade right away when a newer image exists, and voice. Serena
+   language servers for the languages found in your project are enabled automatically in
+   `.serena/project.yml` (restart serena to load them).
 
 Servers you started yourself are never restarted. Run non-interactively (scripts, CI) and
 `./setup.sh` does the plain install instead.

@@ -48,4 +48,16 @@ assert h.pick_target(h.detect(), True, "gufo")[0] == "gufo"
 # halogen's NPU helper models are not offered as chat models
 h.PROFILES["engines"]["vllm"]["hide"] = "^Qwen3"
 assert h.served_models(srv.server_port, "vllm") == []
+# serena: detect project languages and enable matching language servers (idempotent)
+proj = tempfile.mkdtemp()
+os.makedirs(f"{proj}/.serena")
+open(f"{proj}/.serena/project.yml", "w").write('project_name: "x"\nlanguage_servers:\n- python\nencoding: "utf-8"\n')
+for i in range(3):
+    open(f"{proj}/a{i}.py", "w").write("x=1")
+    open(f"{proj}/b{i}.ts", "w").write("let x=1")
+open(f"{proj}/lone.go", "w").write("package x")  # one file: below the 3-file bar
+assert h.serena_languages(proj) == ["typescript"] and h.serena_languages(proj) == []
+assert "- typescript\nencoding" in open(f"{proj}/.serena/project.yml").read()
+# extras answers: no terminal -> not asked, remembered answer used
+assert h.ask_once("voice", "?", False) is False
 print("ok")

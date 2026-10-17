@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- Guided setup polish: halogen alone is used with no question; extras are asked once and saved in `~/.pi/agent/harness-extras.json` (voice; the halogen update check keeps its own answer file), `./harness setup --reconfigure` asks again; when the update check is on and a newer halogen image exists, setup offers the safe upgrade right away; serena language servers for the languages found in the project are added to `.serena/project.yml`; the run ends with a short summary (engine, context, measured speed, start command).
+
 ### Fixed
 - Guided setup listed halogen's NPU helper models (`decider-0.8b`, embedding, guard) as chat models to pick. They are now hidden (`hide` in `config/profiles.json`), so halogen has one model and no question.
 - Guided setup only offered engines that were already running. In a terminal it now lists every known engine, marked running or not; picking one that is down prints how to start it. Added `gufo` as an engine (`./harness use gufo`); it shares :8080 with Strata and llama.cpp so it is never auto-detected, only picked by name.
