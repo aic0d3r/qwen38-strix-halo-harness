@@ -281,9 +281,12 @@ def last_speed(engine):
     return f"{t[-1]['prefill_tps']}/{t[-1]['decode_tps']} t/s pf/dec" if t else "not measured"
 
 
+BIG = ("halogen", "gufo", "strata")  # big engines: one GPU memory heap, and gufo/strata also share :8080
+
+
 def heap_holder(running):
-    """halogen and gufo share one GPU memory heap: whichever is up blocks the other."""
-    return next((e for e in ("halogen", "gufo") if e in running), None)
+    """The big engines share one GPU memory heap: whichever is up blocks the others."""
+    return next((e for e in BIG if e in running), None)
 
 
 def engine_menu(running):
@@ -299,18 +302,36 @@ def engine_menu(running):
         mods = running[e]["models"] if e in running else []
         state = f"running: {mods[0] if mods else '-'}" if e in running else "not running"
         lose = f"loses: {c.get('loses', '?')}"
-        warn = f" | ! stops {holder} first (shared GPU memory)" if e in ("halogen", "gufo") and holder and holder != e and e not in running else ""
+        warn = f" | ! stops {holder} first (shared GPU memory)" if e in BIG and holder and holder != e and e not in running else ""
         labels[f"{'*' if e == cur else ' '}{'o' if e in running else '-'} {e:9s} {state} | {last_speed(e)} | {lose}{warn}"] = e
     return labels[choose("Which engine? (* = current, o = running)", list(labels), False)]
+
+
+def stop_process(port):
+    """SIGTERM the process listening on port (ours only: ss shows pids of the current user), wait until it lets go."""
+    pids = set(re.findall(r"pid=(\d+)", subprocess.run(["ss", "-ltnpH", f"sport = :{port}"], capture_output=True, text=True).stdout))
+    if not pids:
+        return False
+    for p in pids:
+        try:
+            os.kill(int(p), 15)
+        except OSError:
+            return False
+    for _ in range(30):
+        if not subprocess.run(["ss", "-ltnH", f"sport = :{port}"], capture_output=True, text=True).stdout.strip():
+            return True
+        time.sleep(2)
+    return False
 
 
 def stop_engine(engine, running):
     port = PROFILES["engines"][engine]["port"]
     cid = subprocess.run(["docker", "ps", "-q", "--filter", f"publish={port}"], capture_output=True, text=True).stdout.split()
-    if not cid:
-        print(f"  could not find a container for {engine} on :{port}; stop it yourself")
+    if cid:
+        subprocess.run(["docker", "stop", "-t", "30", *cid], stdout=subprocess.DEVNULL)
+    elif not stop_process(port):  # Strata runs as a plain process, not a container
+        print(f"  could not find what serves {engine} on :{port}; stop it yourself")
         return False
-    subprocess.run(["docker", "stop", "-t", "30", *cid], stdout=subprocess.DEVNULL)
     # the ling-tiny sidecar is a GPU llama-server holding ~8 GiB too (measured: GTT 9.7 -> 1.5 GiB when stopped);
     # it restarts on demand, so stopping it here frees the memory for the next engine
     subprocess.run(["systemctl", "--user", "stop", "ling-tiny.service"], stderr=subprocess.DEVNULL)
@@ -336,7 +357,7 @@ def plan_start(engine, running):
         return None
     plan = {"stop": None, "download": False}
     holder = heap_holder(running)
-    if holder and holder != engine and engine in ("halogen", "gufo"):
+    if holder and holder != engine and engine in BIG:
         if not ask_yn(f"{holder} holds the GPU memory {engine} needs. Stop {holder} and the ling-tiny sidecar?"):
             return None
         plan["stop"] = holder
@@ -394,7 +415,7 @@ def pick_engine(d, yes, want=None):
             sys.exit("no engine answering on the usual ports. Start one (see docs/ENGINES.md, or `./setup.sh --halogen auto`), then re-run.")
         return next(iter(sorted(running, key=lambda e: e != "halogen"))), None
     if not running:
-        print("No engine is running yet. Pick one: halogen and gufo can be started (and halogen downloaded) from here.")
+        print("No engine is running yet. Pick one: halogen, gufo and Strata can be started (and halogen downloaded) from here.")
     eng = engine_menu(running)
     if eng in running:
         return eng, None

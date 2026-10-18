@@ -80,8 +80,8 @@ os.remove(f"{AGENT}/harness-sidecar")
 run = {"strata": {"engine": "strata", "port": 1, "models": ["m"]}}
 assert h.engine_menu(run) == "llamacpp"  # no tty: first entry, which is the saved current engine
 run2 = dict(run)
-assert h.heap_holder({"gufo": 1}) == "gufo" and h.heap_holder(run) is None
-assert h.start_engine("strata", run) is False
+assert h.heap_holder({"gufo": 1}) == "gufo" and h.heap_holder(run) == "strata" and h.heap_holder({"vllm": 1}) is None
+assert h.start_engine("vllm", run) is False  # no launcher: prints how to start it
 # quiet install: full setup.sh output goes to setup.log, the exit code still decides success
 fake = tempfile.mkdtemp()
 open(f"{fake}/setup.sh", "w").write('echo "== 1. a =="; printf "  \\033[32m✓\\033[0m fine\\n"; echo "== 2. b =="; echo "  ! careful"; exit 3\n')

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixed
+- Switching to Strata from the wizard stopped at "install and start Strata per its README": the wizard had no Strata launcher. New `server/start-strata.sh` starts a local Strata the way its own setup left it (newest `run-<model>.sh`, else its `./setup.sh --yes`; folder from `$STRATA_DIR` or ~/coding/Strata, ~/Strata, ...; no browser tab). Strata now counts as a big engine like halogen and gufo: picking it stops whichever of them holds the GPU memory, and switching away from Strata stops its process (it is not a container; was "could not find a container").
+
 ### Added
 - Safe Strata upgrade: `scripts/upgrade-strata.sh` finds the running Strata (its folder and exact command line from the process on :8080), stops it, runs Strata's own `./update.sh --yes`, restarts it the same way (no browser tab), and runs the shared acceptance battery (`scripts/engine-acceptance.py`: answers, decodes > 15 t/s; gufo's upgrader uses it too). Any failure checks out the previous commit, rebuilds and restarts it. Refuses on a non-git copy or local changes to tracked files. Offered by the wizard and `start.sh` when the update check finds a newer Strata release.
 - Safe gufo upgrade, like halogen's: `scripts/upgrade-gufo.sh [tag]` (default: highest x.y.z tag on ghcr) pulls the image, restarts gufo on it, checks it answers and decodes > 15 t/s, then moves the pin (`GUFO_VERSION` + digest in `server/start-gufo-flashnext.sh`); any failed check restarts the old pin. Refuses while halogen runs (shared GPU memory). The wizard and `start.sh` offer it when the update check finds a newer gufo, the same way they offer halogen's (any `scripts/upgrade-<engine>.sh` is picked up). The wizard now runs the upgrade after the engine is up.
