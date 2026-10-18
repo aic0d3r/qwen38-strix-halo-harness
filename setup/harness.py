@@ -264,6 +264,7 @@ def pick_target(d, yes, want=None):
         sys.exit("no engine answering on the usual ports. Start one (see docs/ENGINES.md, or `./setup.sh --halogen auto`), then re-run.")
     if list(running) == ["halogen"]:  # fast path: nothing else is up, no question
         eng = "halogen"
+        print("using halogen (the only engine up). To switch: start the other engine, then ./harness use <engine>")
     else:
         if yes or not sys.stdin.isatty():  # unattended: only what is already up
             labels = {e: e for e in running}
