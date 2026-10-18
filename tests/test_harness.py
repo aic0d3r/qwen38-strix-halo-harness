@@ -60,4 +60,10 @@ assert h.serena_languages(proj) == ["typescript"] and h.serena_languages(proj) =
 assert "- typescript\nencoding" in open(f"{proj}/.serena/project.yml").read()
 # extras answers: no terminal -> not asked, remembered answer used
 assert h.ask_once("voice", "?", False) is False
+# engine menu: running first, labels map back to engine names; engines without a launcher print how to start
+run = {"strata": {"engine": "strata", "port": 1, "models": ["m"]}}
+assert h.engine_menu(run) == "llamacpp"  # no tty: first entry, which is the saved current engine
+run2 = dict(run)
+assert h.heap_holder({"gufo": 1}) == "gufo" and h.heap_holder(run) is None
+assert h.start_engine("strata", run) is False
 print("ok")

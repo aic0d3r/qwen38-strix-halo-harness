@@ -61,9 +61,12 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70
 
 1. **Detects** your hardware and which engines are already serving: halogen, llama.cpp, Strata,
    vLLM, Ollama, LM Studio.
-2. **Asks only when ambiguous.** Halogen alone is picked with no question. With several engines
-   it lists every known one (including Strata and gufo) marked running or not; picking one that is
-   down prints how to start it.
+2. **Shows one engine menu every run** (current engine first): running or not, the served model,
+   the last measured prefill/decode speed, what you lose on that engine (the NPU tools off halogen),
+   and a warning when halogen and gufo would fight over the same GPU memory. Picking an engine that
+   is down offers to start it (halogen, gufo), asks before stopping the one holding the memory, and
+   waits until it answers. Other engines print how to start them. To switch later, run `./setup.sh`
+   again.
 3. **Writes the pi provider** with per-model defaults (reasoning, sampling, compaction reserve)
    from [`config/profiles.json`](config/profiles.json), and records the active engine in a
    profile that the sidecar, guard and NPU extensions read, so they follow your engine instead

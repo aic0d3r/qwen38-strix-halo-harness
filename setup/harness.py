@@ -86,6 +86,10 @@ def detect():
             continue
         if identify(name, e["port"]):
             found.append({"engine": name, "port": e["port"], "models": served_models(e["port"], name)})
+    if (active() or {}).get("engine") == "gufo":  # gufo shares :8080, so only the saved choice can name it
+        for x in found:
+            if x["port"] == PROFILES["engines"]["gufo"]["port"]:
+                x["engine"] = "gufo"
     ggufs = []
     for d in MODEL_DIRS:
         ggufs += glob.glob(os.path.join(os.path.expanduser(d), "**", "*.gguf"), recursive=True)[:20]
@@ -242,6 +246,74 @@ def cmd_detect(_):
     print(json.dumps(detect(), indent=1))
 
 
+def last_speed(engine):
+    t = [v for v in jget(os.path.join(AGENT, "harness-tuned.json"), {}).values() if v.get("engine") == engine and v.get("decode_tps")]
+    t.sort(key=lambda v: v.get("when", ""))
+    return f"{t[-1]['prefill_tps']}/{t[-1]['decode_tps']} t/s pf/dec" if t else "not measured"
+
+
+def heap_holder(running):
+    """halogen and gufo share one GPU memory heap: whichever is up blocks the other."""
+    return next((e for e in ("halogen", "gufo") if e in running), None)
+
+
+def engine_menu(running):
+    """One screen: state, model, last speed, what you lose, memory conflicts. -> engine name."""
+    cur = (active() or {}).get("engine")
+    order = sorted(PROFILES["engines"], key=lambda e: (e != cur, e not in running, e))
+    holder = heap_holder(running)
+    labels = {}
+    for e in order:
+        c = PROFILES["engines"][e]
+        mods = running[e]["models"] if e in running else []
+        state = f"running: {mods[0] if mods else '-'}" if e in running else "not running"
+        lose = f"loses: {c.get('loses', '?')}"
+        warn = f" | ! stops {holder} first (shared GPU memory)" if e in ("halogen", "gufo") and holder and holder != e and e not in running else ""
+        labels[f"{'*' if e == cur else ' '}{'o' if e in running else '-'} {e:9s} {state} | {last_speed(e)} | {lose}{warn}"] = e
+    return labels[choose("Which engine? (* = current, o = running)", list(labels), False)]
+
+
+def stop_engine(engine, running):
+    port = PROFILES["engines"][engine]["port"]
+    cid = subprocess.run(["docker", "ps", "-q", "--filter", f"publish={port}"], capture_output=True, text=True).stdout.split()
+    if not cid:
+        print(f"  could not find a container for {engine} on :{port}; stop it yourself")
+        return False
+    subprocess.run(["docker", "stop", "-t", "30", *cid], stdout=subprocess.DEVNULL)
+    return True
+
+
+def start_engine(engine, running, wait_s=900):
+    """Offer to start an engine we ship a launcher for (halogen, gufo). -> True once it answers."""
+    c = PROFILES["engines"][engine]
+    script = c.get("script")
+    if not script:
+        print(f"{engine}: {c.get('start', 'start it yourself')}")
+        return False
+    holder = heap_holder(running)
+    if holder and holder != engine and engine in ("halogen", "gufo"):
+        if not ask_yn(f"{holder} holds the GPU memory {engine} needs. Stop {holder} now?"):
+            return False
+        if not stop_engine(holder, running):
+            return False
+    if not ask_yn(f"Start {engine} now? (runs {script} in the background, log /tmp/harness-{engine}.log)"):
+        return False
+    log = open(f"/tmp/harness-{engine}.log", "w")
+    subprocess.Popen(["bash", os.path.join(REPO, script)], stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
+    t0 = time.time()
+    try:
+        while time.time() - t0 < wait_s:
+            if served_models(c["port"], engine):
+                print(f"\n  {engine} is up")
+                return True
+            print(f"\r  waiting for {engine} on :{c['port']} ... {int(time.time() - t0)}s (Ctrl-C to stop waiting)", end="", flush=True)
+            time.sleep(3)
+    except KeyboardInterrupt:
+        pass
+    print(f"\n  {engine} did not answer in time; see /tmp/harness-{engine}.log")
+    return False
+
+
 def pick_target(d, yes, want=None):
     running = {x["engine"]: x for x in d["engines"]}
 
@@ -262,16 +334,17 @@ def pick_target(d, yes, want=None):
         return eng, mod or (models[0] if models else sys.exit("server lists no models"))
     if not running:
         sys.exit("no engine answering on the usual ports. Start one (see docs/ENGINES.md, or `./setup.sh --halogen auto`), then re-run.")
-    if list(running) == ["halogen"]:  # fast path: nothing else is up, no question
-        eng = "halogen"
-        print("using halogen (the only engine up). To switch: start the other engine, then ./harness use <engine>")
+    if yes or not sys.stdin.isatty():  # unattended: only what is already up, halogen first
+        eng = next(iter(sorted(running, key=lambda e: e != "halogen")))
     else:
-        if yes or not sys.stdin.isatty():  # unattended: only what is already up
-            labels = {e: e for e in running}
-        else:  # interactive: offer every known engine so strata / gufo are visible even when down
-            labels = {e: f"{e} ({'running' if e in running else 'not running'})" for e in sorted(PROFILES["engines"], key=lambda e: e not in running)}
-        pick = choose("Which engine?", list(labels.values()), yes)
-        eng = next(e for e, l in labels.items() if l == pick)
+        eng = engine_menu(running)
+        if eng not in running:
+            if not start_engine(eng, running):
+                sys.exit(f"{eng} is not answering on :{PROFILES['engines'][eng]['port']} - {PROFILES['engines'][eng].get('start', 'start it first')}")
+            d["engines"] = detect()["engines"]
+            running = {x["engine"]: x for x in d["engines"]}
+            if eng not in running:  # shares :8080 with strata / llama.cpp: take what answers there
+                eng = next(x["engine"] for x in d["engines"] if x["port"] == PROFILES["engines"][eng]["port"])
     models = models_of(eng)
     if not models:
         sys.exit(f"{eng} lists no models")

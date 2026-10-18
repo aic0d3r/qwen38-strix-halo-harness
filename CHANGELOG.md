@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- Engine switcher: `./setup.sh` in a terminal always shows one engine menu (current first) with running state, model, last measured speed, what you lose, and a shared-GPU-memory warning for halogen vs gufo. Picking a stopped halogen or gufo offers to start it in the background (`/tmp/harness-<engine>.log`), asks before stopping the engine holding the memory, and waits until it answers. Replaces the halogen-alone fast path in interactive runs; `--yes` and non-terminal runs still pick what is up, halogen first.
+
+### Added
 - Guided setup polish: halogen alone is used with no question; extras are asked once and saved in `~/.pi/agent/harness-extras.json` (voice; the halogen update check keeps its own answer file), `./harness setup --reconfigure` asks again; when the update check is on and a newer halogen image exists, setup offers the safe upgrade right away; serena language servers for the languages found in the project are added to `.serena/project.yml`; the run ends with a short summary (engine, context, measured speed, start command).
 
 ### Fixed
