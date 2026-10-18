@@ -430,6 +430,7 @@ if [ "$SIDECAR_ON" = 0 ]; then
   tiny_up && systemctl --user stop ling-tiny.service 2>/dev/null && ok "stopped the running sidecar (frees ~8 GiB GPU memory)"
 elif tiny_up; then
   ok "sidecar is up"
+  [ -f "$SC_PREF" ] || warn "sidecar is on by default (~8 GiB GPU memory); opt out with ./setup.sh --no-sidecar"
 elif [ -f "$HOME/.config/systemd/user/ling-tiny.service" ]; then
   # unit exists from a previous setup: start it (supervised + keep-alive) instead of raw-spawning
   systemctl --user daemon-reload 2>/dev/null; systemctl --user start ling-tiny.service 2>/dev/null
