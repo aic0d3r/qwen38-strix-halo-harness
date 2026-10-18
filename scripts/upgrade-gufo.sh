@@ -23,7 +23,7 @@ fi
 # one big engine at a time: gufo and halogen share the GPU heap (device-lost if both run)
 [ -n "$(docker ps -q --filter publish=8731)" ] && { echo "FAIL: halogen is running - stop it first (gufo and halogen share the GPU memory)"; exit 1; }
 
-echo "[1/5] pulling $IMG:$TAG (pinned: $CUR)"
+echo "[1/4] pulling $IMG:$TAG (pinned: $CUR)"
 docker pull "$IMG:$TAG" >/dev/null 2>&1 || { echo "FAIL: pull $IMG:$TAG"; exit 1; }
 DIGEST=$(docker image inspect -f '{{index .RepoDigests 0}}' "$IMG:$TAG" 2>/dev/null | cut -d@ -f2)
 case "$DIGEST" in sha256:*) ;; *) echo "FAIL: no registry digest for $IMG:$TAG"; exit 1 ;; esac
@@ -42,7 +42,7 @@ rollback(){
   exit 1
 }
 
-echo "[2/5] restarting on $TAG (first load of the model can take minutes)"
+echo "[2/4] restarting on $TAG (first load of the model can take minutes)"
 [ "$WAS_UP" = 1 ] && docker stop -t 30 "$OLD_ID" >/dev/null
 rm -f "$LOG"
 GUFO_IMAGE="$IMG@$DIGEST" setsid nohup bash "$START" > "$LOG" 2>&1 < /dev/null &
@@ -51,32 +51,10 @@ for i in $(seq 1 60); do sleep 15; up && break; done
 up || { tail -5 "$LOG"; rollback "not answering after $((i*15))s (log: $LOG)"; }
 echo "      answering on :$PORT"
 
-echo "[3/5] answer check"
-python3 - "$URL" <<'PY' || rollback "answer check"
-import json, sys, urllib.request
-body = json.dumps({"model": "qwen3.8-flash-next", "max_tokens": 400, "temperature": 0,
-                   "messages": [{"role": "user", "content": "Reply with exactly: OK"}]}).encode()
-d = json.load(urllib.request.urlopen(urllib.request.Request(sys.argv[1] + "/v1/chat/completions", data=body,
-                                     headers={"content-type": "application/json"}), timeout=180))
-txt = d["choices"][0]["message"].get("content") or ""
-print(f"      reply: {txt.strip()[:40]!r}")
-assert "OK" in txt, "no OK in reply"
-PY
+echo "[3/4] answer + decode check"
+python3 "$REPO/scripts/engine-acceptance.py" "$URL" 15 || rollback "acceptance"
 
-echo "[4/5] decode sanity (must be > 15 t/s)"
-python3 - "$URL" <<'PY' || rollback "decode"
-import json, sys, time, urllib.request
-body = json.dumps({"model": "qwen3.8-flash-next", "max_tokens": 300, "temperature": 0,
-                   "messages": [{"role": "user", "content": "Count from 1 to 80, digits only, no spaces."}]}).encode()
-t0 = time.time()
-d = json.load(urllib.request.urlopen(urllib.request.Request(sys.argv[1] + "/v1/chat/completions", data=body,
-                                     headers={"content-type": "application/json"}), timeout=180))
-dt = time.time() - t0; n = d["usage"]["completion_tokens"]; ts = n / dt
-print(f"      {n} tok in {dt:.1f}s = {ts:.1f} t/s")
-assert ts > 15, f"decode {ts:.1f} t/s below 15"
-PY
-
-echo "[5/5] updating pin $CUR -> $TAG"
+echo "[4/4] updating pin $CUR -> $TAG"
 sed -i -e "s/^GUFO_VERSION=$CUR/GUFO_VERSION=$TAG/" \
   -e "s|gufo-runtime@sha256:[0-9a-f]*|gufo-runtime@$DIGEST|" "$START"
 grep -E '^GUFO_(VERSION|IMAGE)=' "$START"
