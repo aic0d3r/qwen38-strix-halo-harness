@@ -103,8 +103,9 @@ def choose(question, options, yes):
         return options[0]
     if shutil.which("gum"):
         r = subprocess.run(["gum", "choose", "--header", question, *options], stdout=subprocess.PIPE, text=True)
-        if r.stdout.strip():
-            return r.stdout.strip()
+        out = r.stdout.strip()
+        if out:  # gum trims the line it prints: map it back to the exact option (labels can start with a space)
+            return next((o for o in options if o.strip() == out), out)
     print(question)
     for i, o in enumerate(options, 1):
         print(f"  {i}) {o}")
