@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- `./setup.sh` (wizard) checks whether the harness checkout is behind origin and offers a fast-forward pull, then restarts on the new code. Quiet when offline, when the tree has local edits, or when up to date; skipped with `--yes` and outside a terminal.
+
+### Added
 - Engine switcher: `./setup.sh` in a terminal always shows one engine menu (current first) with running state, model, last measured speed, what you lose, and a shared-GPU-memory warning for halogen vs gufo. Picking a stopped halogen or gufo offers to start it in the background (`/tmp/harness-<engine>.log`), asks before stopping the engine holding the memory, and waits until it answers. Replaces the halogen-alone fast path in interactive runs; `--yes` and non-terminal runs still pick what is up, halogen first.
 
 ### Added

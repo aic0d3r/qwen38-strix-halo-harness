@@ -59,6 +59,9 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70
 
 `./setup.sh` in a terminal (same as `./harness setup`) runs a wizard that works for any engine:
 
+0. **Checks for harness updates** first: if your checkout is behind origin it lists the new commits
+   and offers `git pull --ff-only`, then restarts on the new code. It stays quiet offline, with local
+   edits, or when there is nothing new.
 1. **Detects** your hardware and which engines are already serving: halogen, llama.cpp, Strata,
    vLLM, Ollama, LM Studio.
 2. **Shows one engine menu every run** (current engine first): running or not, the served model,

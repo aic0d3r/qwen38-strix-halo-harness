@@ -399,6 +399,33 @@ def serena_languages(root="."):
     return add
 
 
+def git(*a, timeout=15):
+    r = subprocess.run(["git", "-C", REPO, *a], capture_output=True, text=True, timeout=timeout)
+    return r.returncode, r.stdout.strip()
+
+
+def harness_update_offer():
+    """If this checkout is behind its upstream, offer a fast-forward pull, then restart the wizard on the new code."""
+    if not sys.stdin.isatty():
+        return
+    try:
+        if git("fetch", "--quiet", timeout=10)[0] or git("status", "--porcelain")[1]:
+            return  # offline / no remote, or local edits: stay quiet (the /harness-update command explains)
+        rc, n = git("rev-list", "--count", "HEAD..@{u}")
+        if rc or not n.isdigit() or int(n) == 0:
+            return
+        print(f"harness is {n} commit(s) behind origin:")
+        print(git("log", "--oneline", "-8", "HEAD..@{u}")[1])
+        if not ask_yn("Update now? (git pull --ff-only, then setup restarts)"):
+            return
+        if git("pull", "--ff-only", "--quiet", timeout=60)[0]:
+            return print("! pull failed (diverged from origin?): run git pull yourself")
+        print("updated; restarting setup on the new code\n")
+        os.execv(sys.executable, [sys.executable, "-u", *sys.argv])
+    except (subprocess.TimeoutExpired, OSError):
+        return
+
+
 def halogen_upgrade_offer(relevant):
     """Update check + safe-upgrade offer. Runs before engine selection: it needs no running engine.
     relevant: halogen is up or this box has an NPU, so asking about halogen makes sense."""
@@ -443,6 +470,7 @@ def cmd_setup(a):
     if not d["pi"]:
         print("! pi not found on PATH - install it first")
     if not a.yes:
+        harness_update_offer()
         halogen_upgrade_offer(h["npu"] or any(x["engine"] == "halogen" for x in d["engines"]))
     eng, mod = pick_target(d, a.yes)
     voice = not a.yes and ask_once("voice", "Set up voice (local STT/TTS via Lemonade)?", a.reconfigure)
