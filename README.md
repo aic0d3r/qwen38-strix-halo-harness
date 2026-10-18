@@ -78,7 +78,10 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70
    what it measured, then prints a short summary and the command to start. The probe is one short
    prompt (a few thousand tokens), so its speeds are for sizing limits only: they are not comparable to
    the engine benchmark tables below, which use the `halogen-cmp.py` battery and 2k-119k depth prompts.
-5. **Extras, asked once and remembered** (`./harness setup --reconfigure` asks again): halogen
+5. **Extras, asked once and remembered** (`./harness setup --reconfigure` asks again): whether to
+   run the **ling-tiny sidecar** (default yes; it holds ~8 GiB of GPU memory, and "no" means the
+   main model writes commits and summaries, with compaction blocking on it; non-interactive:
+   `./setup.sh --no-sidecar` / `--sidecar`), halogen
    update check (it runs before engine selection, so it works with no engine running) with an offer
    to upgrade right away when a newer image exists, and voice. Serena
    language servers for the languages found in your project are enabled automatically in

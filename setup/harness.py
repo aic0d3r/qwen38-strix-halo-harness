@@ -372,6 +372,24 @@ def ask_yn(question):
     return input(f"{question} [y/N] ").strip().lower().startswith("y")
 
 
+def sidecar_pref():
+    """'1' / '0' / '' (never asked) from the file setup.sh reads."""
+    try:
+        return open(os.path.join(AGENT, "harness-sidecar")).read().strip()
+    except OSError:
+        return ""
+
+
+def ask_sidecar(reconfigure):
+    """Ask once whether to run the ling-tiny sidecar (default yes); setup.sh reads the saved answer."""
+    if (sidecar_pref() and not reconfigure) or not sys.stdin.isatty():
+        return
+    a = input("Run the ling-tiny sidecar? Faster commits/compaction (~2x) but holds ~8 GiB of GPU memory.\n"
+              "No = the main model writes them instead. [Y/n] ").strip().lower()
+    os.makedirs(AGENT, exist_ok=True)
+    open(os.path.join(AGENT, "harness-sidecar"), "w").write("0\n" if a.startswith("n") else "1\n")
+
+
 def ask_once(key, question, reconfigure):
     """y/N asked on a terminal, then remembered; --reconfigure asks again."""
     st = jget(EXTRAS, {})
@@ -482,6 +500,8 @@ def cmd_setup(a):
         harness_update_offer()
         halogen_upgrade_offer(h["npu"] or any(x["engine"] == "halogen" for x in d["engines"]))
     eng, mod = pick_target(d, a.yes)
+    if not a.yes:
+        ask_sidecar(a.reconfigure)
     voice = not a.yes and ask_once("voice", "Set up voice (local STT/TTS via Lemonade)?", a.reconfigure)
     if not install_extensions(eng, ["--voice"] if voice else []):
         print("! setup.sh reported problems (see above)")

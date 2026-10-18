@@ -17,12 +17,14 @@
 #   ./setup.sh --gufo [url]     same pi-only install for gufo (default http://127.0.0.1:8080, what
 #                               server/start-gufo-flashnext.sh serves). Stop halogen first.
 #   ./setup.sh --voice          also set up the voice stack (Lemonade STT/TTS)
+#   ./setup.sh --no-sidecar     do not run the ling-tiny sidecar (saves ~8 GiB GPU memory; the
+#                               main model writes commits/summaries). --sidecar turns it back on.
 #   ./setup.sh --halogen-upgrade [tag]  upgrade the halogen image, roll back on failure
 #   ./setup.sh --uninstall      remove what setup provisioned (backs up first)
 set -u
 # bare invocation in a terminal = the guided wizard (flags below stay for scripts/CI)
 if [ $# -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then exec python3 -u "$(dirname "$(readlink -f "$0")")/setup/harness.py" setup; fi
-HALOGEN_CKPT=""; DOCTOR=0; VOICE=0; NO_HALOGEN=0; STRATA=0; GUFO=0; ENG=strata; ENG_URL=http://127.0.0.1:8080
+HALOGEN_CKPT=""; SIDECAR_SET=""; DOCTOR=0; VOICE=0; NO_HALOGEN=0; STRATA=0; GUFO=0; ENG=strata; ENG_URL=http://127.0.0.1:8080
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-halogen)  NO_HALOGEN=1; shift ;;
@@ -31,6 +33,7 @@ while [ $# -gt 0 ]; do
                case "${2:-}" in http*) ENG_URL="${2%/}"; shift 2 ;; *) shift ;; esac ;;
     --doctor)  DOCTOR=1; shift ;;
     --voice)   VOICE=1; shift ;;
+    --sidecar|--no-sidecar) SIDECAR_SET=$([ "$1" = --sidecar ] && echo 1 || echo 0); shift ;;
     --halogen-upgrade) case "${2:-}" in ""|-*) HALOGEN_UPGRADE=latest; shift ;; *) HALOGEN_UPGRADE="$2"; shift 2 ;; esac ;;
     --uninstall) UNINSTALL=1; shift ;;
     -h|--help) sed -n '2,/^set -u/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
@@ -42,6 +45,10 @@ PI_HOME="${PI_HOME:-$HOME/.pi}"
 EXT_DIR="$PI_HOME/agent/extensions"
 MODELS_JSON="$PI_HOME/agent/models.json"
 TINY_PORT=8090; HAL_PORT=8731
+# ling-tiny sidecar is a saved choice (1/0), asked by the wizard; absent = on (old installs keep working)
+SC_PREF="$PI_HOME/agent/harness-sidecar"
+[ -n "$SIDECAR_SET" ] && { mkdir -p "$(dirname "$SC_PREF")"; echo "$SIDECAR_SET" > "$SC_PREF"; }
+SIDECAR_ON=1; [ "$(cat "$SC_PREF" 2>/dev/null)" = 0 ] && SIDECAR_ON=0
 # sidecar batch size shared with /tune and start-ling-tiny.sh; without this the
 # unit and first-boot spawn ran llama.cpp's 512 default, 8x below the measured 4096
 UB_TINY=$(tr -dc '0-9' < "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/harness-ubatch" 2>/dev/null); UB_TINY=${UB_TINY:-4096}
@@ -108,7 +115,8 @@ if [ "$DOCTOR" = 1 ]; then
   python3 -c "import json,os;p=json.load(open('$MODELS_JSON'))['providers'];p['llamacpp-tiny'];os.path.exists('$EXT_DIR/npu-retrieval.ts') and p['halogen']" 2>/dev/null \
                                     && ok "providers configured"   || fail "providers missing - run ./setup.sh"
   [ -f "$PI_HOME/agent/mcp.json" ]  && ok "mcp.json present (serena+jina+semble)" || warn "no mcp.json - serena/jina/semble unavailable (run ./setup.sh)"
-  tiny_up                           && ok "sidecar up (:8090)"     || fail "sidecar down - run ./setup.sh (or: systemctl --user enable --now ling-tiny)"
+  if [ "$SIDECAR_ON" = 0 ]; then ok "sidecar off (opted out; ./setup.sh --sidecar turns it on)"
+  else tiny_up                      && ok "sidecar up (:8090)"     || fail "sidecar down - run ./setup.sh (or: systemctl --user enable --now ling-tiny)"; fi
   if [ -f "$EXT_DIR/npu-retrieval.ts" ]; then
     hal_up                          && ok "halogen up (:8731)"     || fail "halogen down - run: ./setup.sh --halogen auto   (or existing start-halogen.sh)"
   else
@@ -417,7 +425,10 @@ fi
 
 echo "== 3. ling-tiny sidecar (:8090) =="
 GGUF=""
-if tiny_up; then
+if [ "$SIDECAR_ON" = 0 ]; then
+  ok "sidecar off (opted out: the main model writes commits and summaries; ./setup.sh --sidecar turns it on)"
+  tiny_up && systemctl --user stop ling-tiny.service 2>/dev/null && ok "stopped the running sidecar (frees ~8 GiB GPU memory)"
+elif tiny_up; then
   ok "sidecar is up"
 elif [ -f "$HOME/.config/systemd/user/ling-tiny.service" ]; then
   # unit exists from a previous setup: start it (supervised + keep-alive) instead of raw-spawning

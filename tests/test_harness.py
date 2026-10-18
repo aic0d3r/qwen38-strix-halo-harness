@@ -60,6 +60,13 @@ assert h.serena_languages(proj) == ["typescript"] and h.serena_languages(proj) =
 assert "- typescript\nencoding" in open(f"{proj}/.serena/project.yml").read()
 # extras answers: no terminal -> not asked, remembered answer used
 assert h.ask_once("voice", "?", False) is False
+# sidecar opt-out answer: not asked without a terminal; read back from the file setup.sh and the extensions share
+assert h.sidecar_pref() == ""
+h.ask_sidecar(False)
+assert h.sidecar_pref() == ""
+open(f"{AGENT}/harness-sidecar", "w").write("0\n")
+assert h.sidecar_pref() == "0"
+os.remove(f"{AGENT}/harness-sidecar")
 # engine menu: running first, labels map back to engine names; engines without a launcher print how to start
 run = {"strata": {"engine": "strata", "port": 1, "models": ["m"]}}
 assert h.engine_menu(run) == "llamacpp"  # no tty: first entry, which is the saved current engine

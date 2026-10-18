@@ -10,7 +10,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
-import { isMain, profile } from "./harness-profile/index.ts";
+import { isMain, profile, sidecarOn } from "./harness-profile/index.ts";
 
 const TINY_MODEL = "ling3.0-tiny";
 // one JSON line per sidecar/NPU call; summarized by scripts/session-audit.sh --harness
@@ -53,6 +53,7 @@ export const tidyMessage = (msg: string): string => {
 const SIDECAR = profile().sidecarUrl;
 
 export default function (pi: ExtensionAPI) {
+	if (!sidecarOn()) return; // opted out (./setup.sh --no-sidecar): the main model does this work
 	// nothing-at-boot policy leaves the sidecar down after a reboot: start the unit on demand
 	const ensureSidecar = async (notify: (m: string, l?: string) => string): Promise<boolean> => {
 		const up = () => fetch(`${SIDECAR}/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok, () => false);

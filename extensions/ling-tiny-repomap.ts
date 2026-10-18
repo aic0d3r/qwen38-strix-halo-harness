@@ -13,7 +13,7 @@ import * as nodePath from "node:path";
 import { uuidv7 } from "@earendil-works/pi-ai";
 import * as fs from "node:fs";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
-import { isMain } from "./harness-profile/index.ts";
+import { isMain, sidecarOn } from "./harness-profile/index.ts";
 
 const TINY_PROVIDER = "llamacpp-tiny";
 const TINY_MODEL = "ling3.0-tiny";
@@ -87,6 +87,7 @@ ${inventory}
 }
 
 export default function (pi: ExtensionAPI) {
+	if (!sidecarOn()) return; // opted out (./setup.sh --no-sidecar): the main model does this work
 	// auto-fire once per session on the first agent turn (git repos only):
 	// the main model starts with the map instead of exploratory reads
 	let autoFired = false;

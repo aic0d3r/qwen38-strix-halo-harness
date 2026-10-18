@@ -13,6 +13,10 @@ const LEGACY: Profile = { engine: "halogen", provider: "halogen", model: "haloge
 export const profile = (): Profile => {
 	try { return { ...LEGACY, ...JSON.parse(fs.readFileSync(path.join(getAgentDir(), "harness-profile.json"), "utf8")) }; } catch { return LEGACY; }
 };
+/** false when the user opted out of the ling-tiny sidecar: its extensions then do nothing */
+export const sidecarOn = (): boolean => {
+	try { return fs.readFileSync(path.join(getAgentDir(), "harness-sidecar"), "utf8").trim() !== "0"; } catch { return true; } // saved by setup.sh / the wizard; absent = on
+};
 /** true when the session's model is the local engine this harness was set up for (false on cloud hybrid turns) */
 export const isMain = (ctx: any): boolean => ctx?.model?.provider === profile().provider;
 

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- Sidecar opt-out. The wizard asks once whether to run the ling-tiny sidecar (default yes); `./setup.sh --no-sidecar` / `--sidecar` set it without a terminal. The answer lives in `~/.pi/agent/harness-sidecar` (`1`/`0`, absent = on, so existing installs are unchanged). Off: `setup.sh` no longer starts or writes the sidecar unit, stops one that is running (frees ~8 GiB GPU memory), `--doctor` reports it as off, and the four ling-tiny extensions do nothing, so commits and summaries come from the main model. `setup.sh` still starts the sidecar on every run when the answer is on.
+
 ### Fixed
 - Engine switch left the ling-tiny sidecar running. It is a GPU llama-server holding ~8 GiB (measured: GTT 9.68 -> 1.5 GiB within 2 s of stopping it), so halogen's "driver has not released this engine's device memory" warning after exit was mostly the sidecar. Stopping the holder in the switcher now also stops `ling-tiny.service` (confirmed in the same y/N), waits for GPU memory to drop below 3 GiB and prints the figure. The sidecar restarts on demand.
 
