@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.7.0 - 2026-10-18
 
 ### Fixed
 - Script wiring cleanup. "Start LLM servers" (`scripts/start-servers.sh`) always started halogen; it now runs `./harness up` headless, so it starts the engine you picked in setup (asks nothing: an engine holding the GPU memory is left running and the notification says so). `scripts/uninstall.sh` left 7 of the harness's state files behind (`harness-update-check`, `harness-update-stamp`, `harness-hints-shown`, `harness-repo`, `harness-ubatch`, `harness-events.jsonl`, `setup.log`), so a reinstall silently reused old answers; one list now drives both the backup and the removal. `scripts/check-halogen-update.sh` removed: halogen goes through the same update check as the other engines (its pin is read from `start-halogen.sh`), so the ghcr lookup exists once.
