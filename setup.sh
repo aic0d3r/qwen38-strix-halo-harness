@@ -593,6 +593,9 @@ elif [ -n "$HALOGEN_CKPT" ]; then
   # launch it ourselves (new-user path). prompt cache stays ON: never set HALOGEN_PROMPT_CACHE=0.
   if ! command -v docker >/dev/null; then
     fail "docker not found — install docker, re-login, then re-run: ./setup.sh --halogen $HALOGEN_CKPT"
+  elif [ -n "$(docker ps -q --filter publish=8080 2>/dev/null)" ] || pgrep -f 'serve/server.py --engine strata' >/dev/null; then
+    # one big engine at a time: halogen beside gufo/Strata fights over the same GPU heap (device-lost)
+    fail "gufo or Strata holds the GPU memory halogen needs - not launching. stop it first (scripts/stop-all.sh) or switch with ./setup.sh"
   else
     [ "$HALOGEN_CKPT" = "auto" ] && HALOGEN_CKPT=$(find_ckpt)
     if [ -z "$HALOGEN_CKPT" ] || [ ! -f "$HALOGEN_CKPT" ]; then
@@ -633,6 +636,7 @@ echo "done. doctor check any time:  ./setup.sh --doctor"
 if [ "$STRATA" = 1 ] || [ "$GUFO" = 1 ]; then
   echo "use it:  pi --provider $ENG --model <model id above>   (no NPU tools on $ENG, see docs/ENGINES.md)"; exit 0
 fi
+[ "$NO_HALOGEN" = 1 ] && exit 0  # the smoke test below is for halogen
 echo "smoke test:"
 echo "  pi -p --no-skills --no-context-files --provider halogen \\"
 echo "    --model halogen-qwen3.8-flash-next --thinking medium \\"

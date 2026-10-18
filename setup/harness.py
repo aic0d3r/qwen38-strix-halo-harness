@@ -5,6 +5,7 @@
   ./harness use <engine>[/<model>]      switch the active engine/model (no restart of servers you started)
   ./harness tune                        re-run the 1-2 min probe for the active profile
   ./harness status                      what is active, is it answering, last tuning
+  ./harness up                          start.sh's first step: saved engine up, install refreshed, update notice
   ./harness update-check [engine]       one line if the active engine has a newer release (when the check is on)
   ./harness config                      change one saved answer (sidecar, voice, update check, engine, sudo hints)
   ./harness detect                      print what was found (json)
@@ -213,9 +214,10 @@ def apply(engine, model_id, tuned=None):
     return prov, new["models"][0]["id"], ctx
 
 
-def install_extensions(engine, extra=(), verbose=True):
+def install_extensions(engine, extra=(), verbose=True, show_ok=True):
     """Run setup.sh without a terminal on stdin (the wizard already asked everything).
-    verbose=False: full output to setup.log, one line per section on screen, warnings/failures in full."""
+    verbose=False: full output to setup.log, one line per section on screen, warnings/failures in full.
+    show_ok=False (start.sh): sections without problems leave no line at all."""
     args = (["--halogen", "auto"] if engine == "halogen" else ["--no-halogen"]) + list(extra)
     cmd = ["bash", os.path.join(REPO, "setup.sh"), *args]
     if verbose:
@@ -225,7 +227,9 @@ def install_extensions(engine, extra=(), verbose=True):
     sec, issues = None, []
 
     def close():
-        if sec:
+        if sec and not issues and not show_ok:
+            print("\r\033[K", end="", flush=True)
+        elif sec:
             mark = "\033[31m✗\033[0m" if any("✗" in i for i in issues) else "\033[33m!\033[0m" if issues else "\033[32m✓\033[0m"
             print(f"\r\033[K  {mark} {sec}" + "".join(f"\n    {i.strip()}" for i in issues))
 
@@ -378,8 +382,9 @@ def halogen_ckpt():
     return subprocess.run(["bash", os.path.join(REPO, "server", "start-halogen.sh"), "--print-ckpt"], capture_output=True, text=True).stdout.strip()
 
 
-def plan_start(engine, running):
+def plan_start(engine, running, ask_start=True):
     """Ask everything starting engine needs (stop the memory holder, download, start); nothing runs yet.
+    ask_start=False (start.sh): starting the saved engine needs no question, only stopping another one does.
     -> plan dict, or None when there is no launcher or the user declined."""
     c = PROFILES["engines"][engine]
     if not c.get("script"):
@@ -396,7 +401,7 @@ def plan_start(engine, running):
         if not ask_yn(f"No halogen checkpoint on this box. Download it (~124 GB into ~/models, {free} GB free, resumable)?"):
             return None
         plan["download"] = True
-    if not ask_yn(f"Start {engine}? (runs {c['script']} in the background, log /tmp/harness-{engine}.log)", True):
+    if ask_start and not ask_yn(f"Start {engine}? (runs {c['script']} in the background, log /tmp/harness-{engine}.log)", True):
         return None
     return plan
 
@@ -412,13 +417,17 @@ def start_engine(engine, running, plan=None, wait_s=900):
     if plan["download"] and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-halogen.sh"), "--yes"]).returncode:
         return False
     log = open(f"/tmp/harness-{engine}.log", "w")
-    subprocess.Popen(["bash", os.path.join(REPO, c["script"])], stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
+    proc = subprocess.Popen(["bash", os.path.join(REPO, c["script"])], stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
     t0 = time.time()
     try:
         while time.time() - t0 < wait_s:
             if served_models(c["port"], engine):
                 print(f"\n  {engine} is up")
                 return True
+            if proc.poll() is not None:  # launchers exec the server: an exited launcher means the start failed
+                tail = open(f"/tmp/harness-{engine}.log").read().strip().splitlines()[-3:]
+                print(f"\n  {engine} failed to start:" + "".join(f"\n    {l}" for l in tail))
+                return False
             print(f"\r  waiting for {engine} on :{c['port']} ... {int(time.time() - t0)}s (Ctrl-C to stop waiting)", end="", flush=True)
             time.sleep(3)
     except KeyboardInterrupt:
@@ -661,6 +670,26 @@ def update_offer(eng):
     return False
 
 
+def cmd_up(_):
+    """start.sh: bring the saved engine up (start it if we ship a launcher; ask before stopping another engine
+    that holds the GPU memory), refresh the install quietly, then the update notice + upgrade offer."""
+    eng = (active() or {}).get("engine", "halogen")
+    running = {x["engine"]: x for x in detect()["engines"]}
+    if eng not in running:
+        plan = plan_start(eng, running, ask_start=False)
+        if plan is None or not start_engine(eng, running, plan):
+            print(f"! {not_answering(eng)}; pi opens anyway", file=sys.stderr)
+    if not install_extensions(eng, verbose=False, show_ok=False):
+        print(f"! setup.sh reported problems (details: {SETUP_LOG})", file=sys.stderr)
+    if update_pref() == "1":
+        msg = engine_update(eng)
+        if msg:
+            notice(msg)
+            if upgrader(eng) and ask_yn(f"Upgrade {eng} now? (restarts the server, rolls back on failure)"):
+                if subprocess.run(["bash", upgrader(eng)]).returncode:
+                    print("! upgrade failed; continuing on the pinned version", file=sys.stderr)
+
+
 def cmd_update_check(a):
     """start.sh: one line if the active (or named) engine has a newer release; silent when off/offline."""
     if update_pref() == "1":
@@ -831,7 +860,7 @@ def main():
     import argparse
     ap = argparse.ArgumentParser(prog="harness")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for n, f in (("detect", cmd_detect), ("setup", cmd_setup), ("use", cmd_use), ("tune", cmd_tune), ("status", cmd_status), ("config", cmd_config), ("update-check", cmd_update_check)):
+    for n, f in (("detect", cmd_detect), ("setup", cmd_setup), ("use", cmd_use), ("tune", cmd_tune), ("status", cmd_status), ("config", cmd_config), ("update-check", cmd_update_check), ("up", cmd_up)):
         p = sub.add_parser(n)
         p.set_defaults(fn=f)
         if n in ("setup", "use"):

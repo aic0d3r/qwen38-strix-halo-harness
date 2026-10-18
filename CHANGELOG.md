@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- `start.sh` did not start gufo or Strata when they were down (it warned and opened pi), printed the full install log plus a halogen smoke-test hint on every start, and with halogen saved it would launch halogen beside a running gufo/Strata (shared GPU heap, device-lost). It is now `./harness up` + pi: the saved engine is started if down (asks only before stopping another engine), the install check is quiet (only problems print), the update notice and upgrade offer cover every engine. `setup.sh` refuses to launch halogen while gufo or Strata runs, and skips the halogen smoke-test hint on pi-only installs. The wizard's "waiting for <engine>" stops as soon as the launcher exits instead of waiting 15 min.
 - The "Stop LLM servers" shortcut (`scripts/stop-all.sh`) only stopped halogen and the sidecar. It now also stops gufo (containers found by published port: digest-pinned ones show as a bare image id, so the old image-name filter missed them) and Strata (its `serve/server.py --engine strata` process). Ollama, vLLM, LM Studio and your own llama-server are left alone.
 
 ### Added

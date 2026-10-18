@@ -315,10 +315,12 @@ checkpoint; the default stays `v2` — pass the `ht43.hgn` path explicitly to us
 ./start.sh ~/my-project
 ```
 
-On halogen, `start.sh` relaunches a dead halogen server. On other engines it re-checks the install
-and the sidecar, warns if your engine server is not answering (start it yourself, or switch with
-`./setup.sh`), and opens pi on the provider and model from the wizard. `./harness status` shows
-what pi is pointed at.
+`start.sh` (= `./harness up`, then pi) starts the engine you picked if it is down (halogen, gufo,
+Strata; asks first if another one holds the GPU memory, and never launches halogen beside gufo or
+Strata), re-checks the install quietly (only problems print; full log `~/.pi/agent/setup.log`),
+shows the update notice with the upgrade offer, and opens pi on the provider and model from the
+wizard. Engines it has no launcher for (vLLM, Ollama, ...) get a warning and pi opens anyway.
+`./harness status` shows what pi is pointed at.
 
 In the session: `read`/`edit`/`bash` as usual, `mcp__semble__search` for "where is X implemented",
 `commit` for a sidecar-written message, `triage` when a decision is a one-word call, and `/tune`
