@@ -90,9 +90,10 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70
 5. **Extras, asked once and remembered** (`./harness config` changes one; `./harness setup --reconfigure` asks all again): whether to
    run the **ling-tiny sidecar** (default yes; it holds ~8 GiB of GPU memory, and "no" means the
    main model writes commits and summaries, with compaction blocking on it; non-interactive:
-   `./setup.sh --no-sidecar` / `--sidecar`), halogen
-   update check (it runs before engine selection, so it works with no engine running) with an offer
-   to upgrade right away when a newer image exists, and voice. Serena
+   `./setup.sh --no-sidecar` / `--sidecar`), the engine
+   update check (any engine with a known release source: halogen, gufo, Strata, llama.cpp, vLLM,
+   Ollama; on halogen it offers the safe upgrade right away, on the others it prints the upgrade
+   command; `start.sh` repeats the one-line notice, `./harness update-check` on demand), and voice. Serena
    language servers for the languages found in your project are enabled automatically in
    `.serena/project.yml` (restart serena to load them).
 
@@ -405,7 +406,7 @@ this harness was last validated on). One command does it safely:
 ./setup.sh --halogen-upgrade 0.18.0   # or a specific tag
 ```
 
-`setup.sh` asks once whether `start.sh` should print a one-line notice when a newer image exists
+`setup.sh` asks once whether `start.sh` should print a one-line notice when a newer engine release exists
 (`HALOGEN_CHECK_UPDATES=1|0` overrides; answer stored in `~/.pi/agent/harness-update-check`).
 It only upgrades if you answer y.
 

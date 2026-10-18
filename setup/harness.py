@@ -5,6 +5,7 @@
   ./harness use <engine>[/<model>]      switch the active engine/model (no restart of servers you started)
   ./harness tune                        re-run the 1-2 min probe for the active profile
   ./harness status                      what is active, is it answering, last tuning
+  ./harness update-check [engine]       one line if the active engine has a newer release (when the check is on)
   ./harness config                      change one saved answer (sidecar, voice, update check, engine, sudo hints)
   ./harness detect                      print what was found (json)
 
@@ -71,26 +72,25 @@ def identify(name, port):
             return any(m.get("owned_by") == "llamacpp" for m in json.load(http(f"http://127.0.0.1:{port}/v1/models"))["data"])
         except Exception:
             return False
+    if name == "gufo":  # gufo tags its models owned_by=gufo
+        try:
+            return any(m.get("owned_by") == "gufo" for m in json.load(http(f"http://127.0.0.1:{port}/v1/models"))["data"])
+        except Exception:
+            return False
     if name == "strata":
-        return not identify("llamacpp", port)
+        return not identify("llamacpp", port) and not identify("gufo", port)
     return True
 
 
 def detect():
     found = []
     for name, e in PROFILES["engines"].items():
-        if e.get("autodetect") is False:
-            continue
         try:
             http(f"http://127.0.0.1:{e['port']}{e['probe']}")
         except Exception:
             continue
         if identify(name, e["port"]):
             found.append({"engine": name, "port": e["port"], "models": served_models(e["port"], name)})
-    if (active() or {}).get("engine") == "gufo":  # gufo shares :8080, so only the saved choice can name it
-        for x in found:
-            if x["port"] == PROFILES["engines"]["gufo"]["port"]:
-                x["engine"] = "gufo"
     ggufs = []
     for d in MODEL_DIRS:
         ggufs += glob.glob(os.path.join(os.path.expanduser(d), "**", "*.gguf"), recursive=True)[:20]
@@ -126,7 +126,8 @@ def model_profile(model_id):
 
 def server_ctx(port):
     """Real context window from the server, or 0 if it will not say."""
-    for path, pick in (("/props", lambda d: d["default_generation_settings"]["n_ctx"]), ("/v1/models", lambda d: d["data"][0]["meta"]["n_ctx"])):
+    for path, pick in (("/props", lambda d: d["default_generation_settings"]["n_ctx"]), ("/v1/models", lambda d: d["data"][0]["meta"]["n_ctx"]),
+                       ("/v1/models", lambda d: d["data"][0]["context_length"])):  # gufo
         try:
             return int(pick(json.load(http(f"http://127.0.0.1:{port}{path}"))))
         except Exception:
@@ -412,9 +413,7 @@ def bring_up(d, eng, plan, yes, mod=""):
         same = [x for x in d["engines"] if x["port"] == port]
         if not same:
             sys.exit(not_answering(eng))
-        if plan:
-            eng = same[0]["engine"]
-        running[eng] = same[0]
+        running[eng] = same[0]  # we started (or you named) eng: keep it, whatever detect calls that port
     models = running[eng]["models"]
     if not models:
         sys.exit(f"{eng} lists no models")
@@ -531,32 +530,82 @@ def harness_update_offer():
         return
 
 
-def halogen_upgrade_offer(relevant):
-    """Update check + safe-upgrade question; -> True if the user wants the upgrade (run later, after all questions).
-    relevant: halogen is up or this box has an NPU, so asking about halogen makes sense."""
-    path = os.path.join(AGENT, "harness-update-check")  # same answer file setup.sh and start.sh use
+UPDATE_PREF = os.path.join(AGENT, "harness-update-check")  # same answer file setup.sh and start.sh use
+
+
+def update_pref():
+    """'1' / '0' / '' (never asked); HALOGEN_CHECK_UPDATES overrides, as in check-halogen-update.sh."""
     try:
-        pref = open(path).read().strip()
+        return os.environ.get("HALOGEN_CHECK_UPDATES") or open(UPDATE_PREF).read().strip()
     except OSError:
-        pref = ""
-    if not pref and relevant and sys.stdin.isatty():
-        pref = "1" if ask_yn("Check for halogen updates when you run setup/start? (one short network call; asked before anything installs)") else "0"
+        return ""
+
+
+def _ver(s):
+    """'Strata 0.1.44.1' / 'v0.40.6' / 'b6312-abc' -> (kind, numbers) to compare, or None."""
+    m = re.search(r"\bb(\d{3,})\b|(\d+(?:\.\d+)+)", str(s or ""))
+    return None if not m else ("b", (int(m.group(1)),)) if m.group(1) else ("v", tuple(map(int, m.group(2).split("."))))
+
+
+def engine_update(engine):
+    """-> one line if a newer release of engine exists; '' when current, unknown or offline. Never installs."""
+    if engine == "halogen":  # its own check (pin in start-halogen.sh); the upgrade itself is scripts/upgrade-halogen.sh
+        return subprocess.run(["bash", os.path.join(REPO, "scripts", "check-halogen-update.sh")], capture_output=True,
+                              text=True, env={**os.environ, "HALOGEN_CHECK_UPDATES": "1"}).stdout.strip()
+    u = PROFILES["engines"][engine].get("update")
+    if not u:
+        return ""
+    try:
+        kind, *rest = u["have"].split()
+        if kind == "pin":  # version pinned in our launcher: known even while the engine is down
+            have = re.search(rf"^{rest[1]}=([0-9.]+)", open(os.path.join(REPO, rest[0])).read(), re.M).group(1)
+        else:  # what the running server reports
+            have = json.load(http(f"http://127.0.0.1:{PROFILES['engines'][engine]['port']}{kind}"))[rest[0]]
+        src, repo = u["latest"].split(":", 1)
+        if src == "gh":
+            new = json.load(http(f"https://api.github.com/repos/{repo}/releases/latest"))["tag_name"]
+        else:  # ghcr: highest x.y.z tag
+            tok = json.load(http(f"https://ghcr.io/token?scope=repository:{repo}:pull"))["token"]
+            req = urllib.request.Request(f"https://ghcr.io/v2/{repo}/tags/list?n=1000", headers={"Authorization": f"Bearer {tok}"})
+            tags = [t for t in json.load(urllib.request.urlopen(req, timeout=3))["tags"] if re.fullmatch(r"\d+\.\d+\.\d+", t)]
+            new = max(tags, key=_ver)
+    except Exception:
+        return ""
+    a, b = _ver(have), _ver(new)
+    if not a or not b or a[0] != b[0] or b[1] <= a[1]:  # different schemes (llama.cpp b1234 vs v0.7.0): can't tell, stay quiet
+        return ""
+    return f"{engine} {new} available (running {str(have).split()[-1]}): {u['how'].format(new=new.lstrip('v'))}"
+
+
+def update_offer(eng):
+    """Ask once whether to check for engine updates, then check eng. -> True if the user wants the halogen
+    safe upgrade (run later, after all questions); other engines get a notice with the upgrade command."""
+    pref = update_pref()
+    if not pref and sys.stdin.isatty():
+        pref = "1" if ask_yn("Check for engine updates when you run setup/start? (one short network call; never installs without asking)") else "0"
         os.makedirs(AGENT, exist_ok=True)
-        open(path, "w").write(pref + "\n")
+        open(UPDATE_PREF, "w").write(pref + "\n")
     if pref != "1" or not sys.stdin.isatty():
         return False
-    msg = subprocess.run(["bash", os.path.join(REPO, "scripts", "check-halogen-update.sh")], capture_output=True, text=True).stdout.strip()
+    msg = engine_update(eng)
     if msg:
         print(msg)
-        return ask_yn("Upgrade halogen? (restarts the server, rolls back on failure)")
+        return eng == "halogen" and ask_yn("Upgrade halogen? (restarts the server, rolls back on failure)")
     return False
+
+
+def cmd_update_check(a):
+    """start.sh: one line if the active (or named) engine has a newer release; silent when off/offline."""
+    if update_pref() == "1":
+        msg = engine_update(a.engine or (active() or {}).get("engine", "halogen"))
+        if msg:
+            print(msg)
 
 
 def choices_line():
     """One line with every saved answer, for summaries and the config menu."""
-    upd = (lambda p: open(p).read().strip() if os.path.exists(p) else "")(os.path.join(AGENT, "harness-update-check"))
     return (f"sidecar {'off' if sidecar_pref() == '0' else 'on'} · voice {'on' if jget(EXTRAS, {}).get('voice') else 'off'}"
-            f" · halogen update check {'on' if upd == '1' else 'off'}")
+            f" · update check {'on' if update_pref() == '1' else 'off'}")
 
 
 SETUP_LOG = os.path.join(AGENT, "setup.log")
@@ -602,11 +651,10 @@ def cmd_setup(a):
     if not d["pi"]:
         print("! pi not found on PATH - install it first")
     # 1. every question first ...
-    upgrade = False
     if not a.yes:
         harness_update_offer()
-        upgrade = halogen_upgrade_offer(h["npu"] or any(x["engine"] == "halogen" for x in d["engines"]))
     eng, plan = pick_engine(d, a.yes)
+    upgrade = not a.yes and update_offer(eng)
     if not a.yes:
         ask_sidecar(a.reconfigure)
     voice = not a.yes and ask_once("voice", "Set up voice (local STT/TTS via Lemonade)?", a.reconfigure)
@@ -665,18 +713,17 @@ def cmd_config(a):
     """Menu of every saved answer; change one, applied right away."""
     if not sys.stdin.isatty():
         return print(choices_line())
-    upd_path = os.path.join(AGENT, "harness-update-check")
     hints = os.path.join(AGENT, "harness-hints-shown")
     while True:
         p = active() or {}
-        upd = open(upd_path).read().strip() if os.path.exists(upd_path) else ""
+        upd = update_pref()
         sc = sidecar_pref() != "0"
         voice = bool(jget(EXTRAS, {}).get("voice"))
         items = {
             f"engine        {p.get('engine', '-')}/{p.get('model', '-')}": "engine",
             f"sidecar       {'on' if sc else 'off'}  (ling-tiny, ~8 GiB GPU memory)": "sidecar",
             f"voice         {'on' if voice else 'off'}  (Lemonade STT/TTS)": "voice",
-            f"update check  {'on' if upd == '1' else 'off'}  (newer halogen image, asked before installing)": "update",
+            f"update check  {'on' if upd == '1' else 'off'}  (newer engine release, never installs without asking)": "update",
             f"sudo hints    {'hidden after first show' if os.path.exists(hints) else 'shown'}  (fabric clock, vm-compact)": "hints",
             "done": "done"}
         k = items[choose("Change which setting?", list(items), False)]
@@ -701,7 +748,7 @@ def cmd_config(a):
                 install_extensions((active() or {}).get("engine", "halogen"), ["--voice"], verbose=False)
         elif k == "update":
             os.makedirs(AGENT, exist_ok=True)
-            open(upd_path, "w").write("0\n" if upd == "1" else "1\n")
+            open(UPDATE_PREF, "w").write("0\n" if upd == "1" else "1\n")
         elif k == "hints" and os.path.exists(hints):
             os.remove(hints)
             print("  sudo hints will show on the next ./setup.sh run")
@@ -711,7 +758,7 @@ def main():
     import argparse
     ap = argparse.ArgumentParser(prog="harness")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for n, f in (("detect", cmd_detect), ("setup", cmd_setup), ("use", cmd_use), ("tune", cmd_tune), ("status", cmd_status), ("config", cmd_config)):
+    for n, f in (("detect", cmd_detect), ("setup", cmd_setup), ("use", cmd_use), ("tune", cmd_tune), ("status", cmd_status), ("config", cmd_config), ("update-check", cmd_update_check)):
         p = sub.add_parser(n)
         p.set_defaults(fn=f)
         if n in ("setup", "use"):
@@ -721,6 +768,8 @@ def main():
             p.add_argument("--verbose", action="store_true", help="show full setup.sh output (default on the first run only)")
         if n == "use":
             p.add_argument("target", help="engine[/model]")
+        if n == "update-check":
+            p.add_argument("engine", nargs="?", help="default: the active engine")
     a = ap.parse_args()
     a.fn(a)
 

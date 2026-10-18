@@ -169,7 +169,7 @@ fi
 UPD_PREF="${PI_CODING_AGENT_DIR:-$PI_HOME/agent}/harness-update-check"
 # -s: an empty file is not an answer (an older harness-update extension left empty files here)
 if [ "$NO_HALOGEN" = 0 ] && [ ! -s "$UPD_PREF" ] && [ -t 0 ]; then
-  read -r -p "Check for halogen updates each time start.sh runs? (one short network call; you are asked before anything installs) [y/N] " A
+  read -r -p "Check for engine updates each time start.sh runs? (one short network call; never installs without asking) [y/N] " A
   mkdir -p "$(dirname "$UPD_PREF")"; case "$A" in [yY]*) echo 1 ;; *) echo 0 ;; esac > "$UPD_PREF"
 fi
 

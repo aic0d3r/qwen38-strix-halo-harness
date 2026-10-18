@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+- The update check covers every engine with a release source, not just halogen: gufo (the `GUFO_VERSION` pin in `server/start-gufo-flashnext.sh` vs ghcr tags), Strata and llama.cpp (`/props` build_info), vLLM (`/version`), Ollama (`/api/version`), each against its GitHub release. Notice only, with the upgrade command; halogen keeps its safe-upgrade offer. Same saved answer (`harness-update-check`), now asked for any engine; `start.sh` prints the notice on non-halogen engines too; `./harness update-check [engine]` on demand. Different version schemes (llama.cpp `b1234` vs `v0.7.0`) stay silent instead of guessing.
+
+### Fixed
+- Starting gufo from the wizard ended on "engine strata": after the start, detection named the shared :8080 port Strata and replaced the engine you picked. The engine you started is now kept, and gufo is detected by `owned_by: gufo` (so it no longer needs to be the saved choice to be recognised). Its context window is read from `context_length` (was the 32768 fallback).
+
+### Added
 - `./start.sh ~/project` works for every engine: it reads the engine the wizard saved (`harness-profile.json`). Halogen keeps the old path; other engines run the `--no-halogen` install check, warn if the server is not answering, and open pi on the saved provider/model. No profile = halogen, as before. The wizard's start hint is now `./start.sh ~/your-project` for all engines.
 - Setup UX. Fresh box: with no engine running the wizard shows the engine menu instead of exiting (halogen first on NPU boxes); picking halogen without a checkpoint offers the ~124 GB download (now `scripts/download-halogen.sh`, shared with `setup.sh --halogen auto`). All questions are asked up front, then an "about to" summary and one `Continue? [Y/n]`; nothing prompts after that (upgrade, stop, download, start, install run unattended). One prompt style (`gum` when installed, `[Y/n]` default shown otherwise). Later runs are quiet: one line per install step, warnings/failures in full, full output in `~/.pi/agent/setup.log` (first run or `--verbose` shows everything). Sudo hints (fabric clock, vm-compact) show once, then only in `--doctor` until fixed. `./harness config`: menu of saved answers, change one, applied right away. The wizard ends with a choices line and `Start pi in <dir> now?`. Also: `setup.sh` asks before the 4.5 GB sidecar download on a terminal; `./harness status` says "sidecar: off (opted out)" instead of "down"; `--doctor` shows elapsed time during the ready check and skips it when halogen is down.
 

@@ -18,6 +18,7 @@ if [ "$CTX" != "65536" ] && [ -n "$O9" ] && [ "$O9" -lt 1000 ]; then
 fi
 ENGINE_DIR=${ENGINE_DIR:-$HOME/LLMBench/models/qwen38-flash-next}
 # pinned like halogen: the 0.12.0 image, measured in docs/ENGINES.md
+GUFO_VERSION=0.12.0  # the tag the digest below was pulled as; ./harness update-check compares against it
 GUFO_IMAGE=${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime@sha256:25c52218f494f9c35fab96184b813576d4f1e71cbe025631b106360a1d420206}
 PORT=${PORT:-8080}
 RENDER_GID=$(getent group render | cut -d: -f3); VIDEO_GID=$(getent group video | cut -d: -f3)

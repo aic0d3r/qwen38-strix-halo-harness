@@ -13,6 +13,7 @@ if [ "${ENG:-halogen}" != halogen ]; then
   bash "$HERE/setup.sh" --no-halogen || exit 1
   python3 "$HERE/setup/harness.py" status | grep -q ' UP ' \
     || echo "! $ENG is not answering - start it (or switch engine: ./setup.sh); pi opens anyway" >&2
+  python3 "$HERE/setup/harness.py" update-check "$ENG"
   cd "$D"; export PONYTAIL_HIDE_STATUS=1
   exec pi --provider "$PROV" --model "$MID"
 fi

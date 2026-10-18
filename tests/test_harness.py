@@ -12,7 +12,8 @@ class Mock(http.server.BaseHTTPRequestHandler):
     def _j(self, o):
         b = json.dumps(o).encode(); self.send_response(200); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
     def do_GET(self):
-        if self.path == "/v1/models": self._j({"data": [{"id": "Qwen3-8B", **({} if STRATA else {"owned_by": "llamacpp"})}]})
+        if self.path == "/v1/models": self._j({"data": [{"id": "Qwen3-8B", **({"owned_by": "gufo", "context_length": 65536} if GUFO else {} if STRATA else {"owned_by": "llamacpp"})}]})
+        elif self.path == "/props" and GUFO: self.send_response(400); self.end_headers()
         elif self.path == "/props": self._j({"default_generation_settings": {"n_ctx": 32768}})
         else: self._j({"ok": 1})
     def do_POST(self):
@@ -22,7 +23,7 @@ class Mock(http.server.BaseHTTPRequestHandler):
             self.wfile.write(f"data: {c}\n\n".encode())
 
 
-STRATA = False
+STRATA = GUFO = False
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Mock)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 h.PROFILES["engines"]["llamacpp"]["port"] = srv.server_port
@@ -40,11 +41,19 @@ assert "llamacpp-tiny" in json.load(open(f"{AGENT}/models.json"))["providers"]  
 # Strata shares :8080 and also serves /props (seen on Strata 0.1.44) but no owned_by=llamacpp
 STRATA = True
 h.PROFILES["engines"]["strata"]["port"] = srv.server_port
-up = [e["engine"] for e in h.detect()["engines"] if e["engine"] != "halogen"]  # a real halogen on :8731 may also be up
+up = [e["engine"] for e in h.detect()["engines"] if e["port"] == srv.server_port]  # real engines on this box may also be up
 assert up == ["strata"], up
-# gufo shares :8080: never auto-detected, but selectable by name once something answers there
+# gufo shares :8080: selectable by name once something answers there
 h.PROFILES["engines"]["gufo"]["port"] = srv.server_port
 assert h.pick_target(h.detect(), True, "gufo")[0] == "gufo"
+# a real gufo (owned_by=gufo) is detected as gufo, not strata, and its context_length is read
+GUFO = True
+assert [e["engine"] for e in h.detect()["engines"] if e["port"] == srv.server_port] == ["gufo"]
+assert h.server_ctx(srv.server_port) == 65536
+# started gufo but detect names the port something else: keep the engine we started
+d = {"engines": [{"engine": "strata", "port": srv.server_port, "models": ["m"]}]}
+assert h.bring_up(d, "gufo", None, True) == ("gufo", "m")
+GUFO = False
 # halogen's NPU helper models are not offered as chat models
 h.PROFILES["engines"]["vllm"]["hide"] = "^Qwen3"
 assert h.served_models(srv.server_port, "vllm") == []
@@ -80,6 +89,9 @@ real_repo, h.REPO = h.REPO, fake
 assert h.install_extensions("llamacpp", verbose=False) is False
 h.REPO = real_repo
 assert "! careful" in open(h.SETUP_LOG).read()
+# engine update check: versions compare across the formats engines report; different schemes never compare
+assert h._ver("Strata 0.1.44.1") < h._ver("v0.1.45") and h._ver("b6312-abc") == ("b", (6312,)) and h._ver("") is None
+assert h.engine_update("lmstudio") == ""  # no update source: silent
 # status reports an opted-out sidecar as off, not down
 open(f"{AGENT}/harness-sidecar", "w").write("0\n")
 assert "sidecar off" in h.choices_line()
