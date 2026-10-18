@@ -98,6 +98,24 @@ def detect():
 
 
 # ---------- ask ----------
+def cancel():
+    """Esc or Ctrl-C at any prompt: leave cleanly, no traceback."""
+    print("\ncancelled")
+    sys.exit(130)
+
+
+def key():
+    """One keypress without Enter (the no-gum prompts), so Esc works there too."""
+    import termios, tty
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(fd)  # keeps ISIG: Ctrl-C still raises KeyboardInterrupt
+        return os.read(fd, 8).decode(errors="ignore")  # arrow keys arrive as one read ("\x1b[A"), bare Esc as "\x1b"
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
 def choose(question, options, yes):
     if len(options) == 1 or yes or not sys.stdin.isatty():
         return options[0]
@@ -106,9 +124,21 @@ def choose(question, options, yes):
         out = r.stdout.strip()
         if out:  # gum trims the line it prints: map it back to the exact option (labels can start with a space)
             return next((o for o in options if o.strip() == out), out)
+        if r.returncode in (1, 130):  # Esc / Ctrl-C
+            cancel()
     print(question)
     for i, o in enumerate(options, 1):
         print(f"  {i}) {o}")
+    if len(options) <= 9:  # one keypress picks; Esc cancels
+        print("number [1] (Esc cancels): ", end="", flush=True)
+        while True:
+            k = key()
+            if k == "\x1b":
+                cancel()
+            if k in ("\r", "\n") or (k.isdigit() and 0 < int(k) <= len(options)):
+                i = int(k) if k.isdigit() else 1
+                print(i)
+                return options[i - 1]
     a = input("number [1]: ").strip() or "1"
     return options[int(a) - 1] if a.isdigit() and 0 < int(a) <= len(options) else options[0]
 
@@ -459,14 +489,24 @@ def ask_yn(question, default=False):
     if not sys.stdin.isatty():
         return default
     if shutil.which("gum"):
-        r = subprocess.run(["gum", "confirm", question, f"--default={'true' if default else 'false'}"])
-        if r.returncode == 130:
-            sys.exit(130)
-        if r.returncode in (0, 1):
-            print(f"{question} {'yes' if r.returncode == 0 else 'no'}")
-            return r.returncode == 0
-    a = input(f"{question} {'[Y/n]' if default else '[y/N]'} ").strip().lower()
-    return a.startswith("y") if a else default
+        # gum choose, not gum confirm: confirm exits 1 for both "No" and Esc, so Esc could not cancel
+        r = subprocess.run(["gum", "choose", "--header", question, "--selected", "Yes" if default else "No", "Yes", "No"],
+                           stdout=subprocess.PIPE, text=True)
+        out = r.stdout.strip()
+        if out in ("Yes", "No"):
+            print(f"{question} {out.lower()}")
+            return out == "Yes"
+        if r.returncode in (1, 130):
+            cancel()
+    print(f"{question} {'[Y/n]' if default else '[y/N]'} ", end="", flush=True)
+    while True:
+        k = key().lower()
+        if k == "\x1b":
+            cancel()
+        if k in ("\r", "\n", "y", "n"):
+            a = default if k in ("\r", "\n") else k == "y"
+            print("yes" if a else "no")
+            return a
 
 
 def sidecar_pref():
@@ -804,7 +844,10 @@ def main():
         if n == "update-check":
             p.add_argument("engine", nargs="?", help="default: the active engine")
     a = ap.parse_args()
-    a.fn(a)
+    try:
+        a.fn(a)
+    except (KeyboardInterrupt, EOFError):
+        cancel()
 
 
 if __name__ == "__main__":

@@ -74,7 +74,8 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70
    them. To switch later, run `./setup.sh` again.
 
    **All questions come first**, then a summary ("about to: ...") and one `Continue? [Y/n]`; after
-   that the run needs nothing from you. Prompts use `gum` when it is installed.
+   that the run needs nothing from you. Prompts use `gum` when it is installed. **Esc** (or Ctrl-C) at
+   any prompt exits cleanly; before `Continue?` nothing has been installed or started.
    The first run prints the full install output; later runs print one line per install step with
    only warnings and failures in full (everything goes to `~/.pi/agent/setup.log`; `--verbose`
    shows it all). One-time sudo fixes (fabric clock, vm-compact) are shown once, then only by

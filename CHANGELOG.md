@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- Esc exits the wizard and `./harness config` cleanly at any prompt (prints "cancelled", exit 130); so does Ctrl-C, which used to print a traceback. Yes/no prompts use `gum choose Yes/No` instead of `gum confirm`, because confirm exits 1 for both "No" and Esc. Without gum, prompts read single keys (y/n/Enter, a digit for menus up to 9 entries, Esc).
+
 ### Fixed
 - Switching to Strata from the wizard stopped at "install and start Strata per its README": the wizard had no Strata launcher. New `server/start-strata.sh` starts a local Strata the way its own setup left it (newest `run-<model>.sh`, else its `./setup.sh --yes`; folder from `$STRATA_DIR` or ~/coding/Strata, ~/Strata, ...; no browser tab). Strata now counts as a big engine like halogen and gufo: picking it stops whichever of them holds the GPU memory, and switching away from Strata stops its process (it is not a container; was "could not find a container").
 
