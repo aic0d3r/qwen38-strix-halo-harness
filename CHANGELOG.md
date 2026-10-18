@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixed
+- Engine switch left the ling-tiny sidecar running. It is a GPU llama-server holding ~8 GiB (measured: GTT 9.68 -> 1.5 GiB within 2 s of stopping it), so halogen's "driver has not released this engine's device memory" warning after exit was mostly the sidecar. Stopping the holder in the switcher now also stops `ling-tiny.service` (confirmed in the same y/N), waits for GPU memory to drop below 3 GiB and prints the figure. The sidecar restarts on demand.
+
 ### Added
 - `./setup.sh` (wizard) checks whether the harness checkout is behind origin and offers a fast-forward pull, then restarts on the new code. Quiet when offline, when the tree has local edits, or when up to date; skipped with `--yes` and outside a terminal.
 

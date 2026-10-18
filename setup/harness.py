@@ -280,6 +280,15 @@ def stop_engine(engine, running):
         print(f"  could not find a container for {engine} on :{port}; stop it yourself")
         return False
     subprocess.run(["docker", "stop", "-t", "30", *cid], stdout=subprocess.DEVNULL)
+    # the ling-tiny sidecar is a GPU llama-server holding ~8 GiB too (measured: GTT 9.7 -> 1.5 GiB when stopped);
+    # it restarts on demand, so stopping it here frees the memory for the next engine
+    subprocess.run(["systemctl", "--user", "stop", "ling-tiny.service"], stderr=subprocess.DEVNULL)
+    gtt = lambda: sum(int(open(f).read()) for f in glob.glob("/sys/class/drm/card*/device/mem_info_gtt_used")) / 2**30
+    for _ in range(10):
+        if gtt() < 3:
+            break
+        time.sleep(2)
+    print(f"  GPU memory in use now: {gtt():.1f} GiB")
     return True
 
 
@@ -292,7 +301,7 @@ def start_engine(engine, running, wait_s=900):
         return False
     holder = heap_holder(running)
     if holder and holder != engine and engine in ("halogen", "gufo"):
-        if not ask_yn(f"{holder} holds the GPU memory {engine} needs. Stop {holder} now?"):
+        if not ask_yn(f"{holder} holds the GPU memory {engine} needs. Stop {holder} and the ling-tiny sidecar now?"):
             return False
         if not stop_engine(holder, running):
             return False
