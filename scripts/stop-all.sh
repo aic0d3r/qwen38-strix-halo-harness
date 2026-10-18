@@ -12,7 +12,7 @@ if [ "${1:-}" = --install ]; then
     echo "installed: $f"
   }
   mk stop-llm-servers "Stop LLM servers" "Stop halogen, gufo, Strata and the ling-tiny sidecar" "$HERE/stop-all.sh" process-stop
-  mk start-llm-servers "Start LLM servers" "Start halogen and the ling-tiny sidecar (no pi)" "$HERE/start-servers.sh" media-playback-start
+  mk start-llm-servers "Start LLM servers" "Start the engine you picked in setup and the ling-tiny sidecar (no pi)" "$HERE/start-servers.sh" media-playback-start
   exit 0
 fi
 out=""

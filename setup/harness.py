@@ -604,7 +604,7 @@ UPDATE_PREF = os.path.join(AGENT, "harness-update-check")  # same answer file se
 
 
 def update_pref():
-    """'1' / '0' / '' (never asked); HALOGEN_CHECK_UPDATES overrides, as in check-halogen-update.sh."""
+    """'1' / '0' / '' (never asked); HALOGEN_CHECK_UPDATES=1|0 overrides (name kept for old setups)."""
     try:
         return os.environ.get("HALOGEN_CHECK_UPDATES") or open(UPDATE_PREF).read().strip()
     except OSError:
@@ -619,16 +619,14 @@ def _ver(s):
 
 def engine_update(engine):
     """-> one line if a newer release of engine exists; '' when current, unknown or offline. Never installs."""
-    if engine == "halogen":  # its own check (pin in start-halogen.sh); the upgrade itself is scripts/upgrade-halogen.sh
-        return subprocess.run(["bash", os.path.join(REPO, "scripts", "check-halogen-update.sh")], capture_output=True,
-                              text=True, env={**os.environ, "HALOGEN_CHECK_UPDATES": "1"}).stdout.strip()
     u = PROFILES["engines"][engine].get("update")
     if not u:
         return ""
     try:
         kind, *rest = u["have"].split()
         if kind == "pin":  # version pinned in our launcher: known even while the engine is down
-            have = re.search(rf"^{rest[1]}=([0-9.]+)", open(os.path.join(REPO, rest[0])).read(), re.M).group(1)
+            # GUFO_VERSION=0.12.0 / IMAGE_TAG="${HALOGEN_IMAGE_TAG:-0.18.10}"
+            have = re.search(rf"{rest[1]}(?:=|:-)([0-9.]+)", open(os.path.join(REPO, rest[0])).read()).group(1)
         else:  # what the running server reports
             have = json.load(http(f"http://127.0.0.1:{PROFILES['engines'][engine]['port']}{kind}"))[rest[0]]
         src, repo = u["latest"].split(":", 1)

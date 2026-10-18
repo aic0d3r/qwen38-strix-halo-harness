@@ -30,7 +30,10 @@ echo "[1/8] backup -> $BACKUP"
 # one tar call: a second `czf` would truncate the first archive (backup lost)
 TAR_ARGS=(-C "$PI_HOME" agent/extensions agent/prompts agent/skills agent/themes agent/settings.json agent/models.json agent/mcp.json)
 [ -f "$HOME/.config/systemd/user/ling-tiny.service" ] && TAR_ARGS+=(-C "$HOME/.config/systemd/user" ling-tiny.service)
-for f in harness-profile.json harness-tuned.json harness-extras.json harness-sidecar; do [ -f "$AG/$f" ] && TAR_ARGS+=(-C "$PI_HOME" "agent/$f"); done
+# every state file the harness writes into the agent dir (wizard answers, tuning, markers, logs); one list for backup and removal
+STATE=(harness-profile.json harness-tuned.json harness-extras.json harness-sidecar harness-update-check harness-update-stamp
+       harness-hints-shown harness-repo harness-ubatch harness-events.jsonl setup.log)
+for f in "${STATE[@]}"; do [ -f "$AG/$f" ] && TAR_ARGS+=(-C "$PI_HOME" "agent/$f"); done
 [ -f "$AG/rag-index.py" ] && TAR_ARGS+=(-C "$PI_HOME" agent/rag-index.py) # own -C: tar applies earlier -C to later members
 tar czf "$BACKUP" "${TAR_ARGS[@]}" 2>/dev/null
 echo "      $(du -h "$BACKUP" | cut -f1)"
@@ -58,7 +61,7 @@ echo "[3/8] extensions provisioned by the harness"
 for p in "$REPO"/extensions/*.ts "$REPO"/extensions/*/; do
   b=$(basename "$p"); [ -e "$AG/extensions/$b" ] && rm -rf "${AG:?}/extensions/$b"
 done
-rm -f "$AG/harness-profile.json" "$AG/harness-tuned.json" "$AG/harness-extras.json" "$AG/harness-sidecar"  # ./harness wizard state
+for f in "${STATE[@]}"; do rm -f "${AG:?}/$f"; done  # wizard answers, tuning, markers, logs (all in the backup)
 [ -d "$AG/extensions/optional" ] && rm -rf "$AG/extensions/optional"
 [ -f "$AG/rag-index.py" ] && rm -f "$AG/rag-index.py" && echo "      rag-index.py removed (installed by setup)"
 echo "      done (extensions you added yourself are left in place)"

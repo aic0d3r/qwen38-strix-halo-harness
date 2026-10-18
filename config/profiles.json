@@ -3,7 +3,9 @@
   "engines": {
     "halogen":  { "port": 8731,  "probe": "/health",     "provider": "halogen", "npu": true,  "managed": true,  "note": "Strix Halo NPU+GPU engine; provisioned by setup.sh --halogen",
                  "hide": "^(decider|qwen3-embedding|qwen3guard|qwen3-reranker)",
-                 "script": "server/start-halogen.sh", "loses": "nothing" },
+                 "script": "server/start-halogen.sh", "loses": "nothing",
+                 "update": { "have": "pin server/start-halogen.sh HALOGEN_IMAGE_TAG", "latest": "ghcr:peonist-ai/halogen-flash-server",
+                             "how": "./setup.sh --halogen-upgrade (restarts halogen, checks it, pins on success, rolls back on failure)" } },
     "strata":   { "port": 8080,  "probe": "/v1/models",  "provider": "strata",  "npu": false, "managed": false, "loses": "NPU tools (guard, triage, dedup)", "note": "NVIDIA/AMD desktop GPUs",
                  "start": "install Strata per its README (docs/ENGINES.md#strata-the-pick-for-nvidia-and-amd-desktop-gpus), then ./setup.sh can start it",
                  "script": "server/start-strata.sh",
