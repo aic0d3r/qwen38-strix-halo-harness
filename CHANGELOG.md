@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixed
+- The "Stop LLM servers" shortcut (`scripts/stop-all.sh`) only stopped halogen and the sidecar. It now also stops gufo (containers found by published port: digest-pinned ones show as a bare image id, so the old image-name filter missed them) and Strata (its `serve/server.py --engine strata` process). Ollama, vLLM, LM Studio and your own llama-server are left alone.
+
 ### Added
 - Esc exits the wizard and `./harness config` cleanly at any prompt (prints "cancelled", exit 130); so does Ctrl-C, which used to print a traceback. Yes/no prompts use `gum choose Yes/No` instead of `gum confirm`, because confirm exits 1 for both "No" and Esc. Without gum, prompts read single keys (y/n/Enter, a digit for menus up to 9 entries, Esc).
 
