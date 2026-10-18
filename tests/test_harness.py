@@ -73,4 +73,15 @@ assert h.engine_menu(run) == "llamacpp"  # no tty: first entry, which is the sav
 run2 = dict(run)
 assert h.heap_holder({"gufo": 1}) == "gufo" and h.heap_holder(run) is None
 assert h.start_engine("strata", run) is False
+# quiet install: full setup.sh output goes to setup.log, the exit code still decides success
+fake = tempfile.mkdtemp()
+open(f"{fake}/setup.sh", "w").write('echo "== 1. a =="; printf "  \\033[32m✓\\033[0m fine\\n"; echo "== 2. b =="; echo "  ! careful"; exit 3\n')
+real_repo, h.REPO = h.REPO, fake
+assert h.install_extensions("llamacpp", verbose=False) is False
+h.REPO = real_repo
+assert "! careful" in open(h.SETUP_LOG).read()
+# status reports an opted-out sidecar as off, not down
+open(f"{AGENT}/harness-sidecar", "w").write("0\n")
+assert "sidecar off" in h.choices_line()
+os.remove(f"{AGENT}/harness-sidecar")
 print("ok")

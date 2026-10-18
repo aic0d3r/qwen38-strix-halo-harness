@@ -5,6 +5,7 @@
   ./harness use <engine>[/<model>]      switch the active engine/model (no restart of servers you started)
   ./harness tune                        re-run the 1-2 min probe for the active profile
   ./harness status                      what is active, is it answering, last tuning
+  ./harness config                      change one saved answer (sidecar, voice, update check, engine, sudo hints)
   ./harness detect                      print what was found (json)
 
 Profiles live in config/profiles.json. Stdlib only. Never kills or restarts servers it did not launch.
@@ -180,9 +181,35 @@ def apply(engine, model_id, tuned=None):
     return prov, new["models"][0]["id"], ctx
 
 
-def install_extensions(engine, extra=()):
+def install_extensions(engine, extra=(), verbose=True):
+    """Run setup.sh without a terminal on stdin (the wizard already asked everything).
+    verbose=False: full output to setup.log, one line per section on screen, warnings/failures in full."""
     args = (["--halogen", "auto"] if engine == "halogen" else ["--no-halogen"]) + list(extra)
-    return subprocess.run(["bash", os.path.join(REPO, "setup.sh"), *args]).returncode == 0
+    cmd = ["bash", os.path.join(REPO, "setup.sh"), *args]
+    if verbose:
+        return subprocess.run(cmd, stdin=subprocess.DEVNULL).returncode == 0
+    os.makedirs(AGENT, exist_ok=True)
+    p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True)  # stderr stays on screen (download progress)
+    sec, issues = None, []
+
+    def close():
+        if sec:
+            mark = "\033[31m✗\033[0m" if any("✗" in i for i in issues) else "\033[33m!\033[0m" if issues else "\033[32m✓\033[0m"
+            print(f"\r\033[K  {mark} {sec}" + "".join(f"\n    {i.strip()}" for i in issues))
+
+    with open(SETUP_LOG, "w") as log:
+        for line in p.stdout:
+            log.write(line)
+            plain = re.sub(r"\033\[[0-9;]*m", "", line).rstrip()
+            m = re.match(r"== (?:[0-9a-z-]+\. )?(.*) ==$", plain)
+            if m:
+                close()
+                sec, issues = m.group(1), []
+                print(f"  … {sec}", end="", flush=True)
+            elif re.match(r"\s+[!✗] ", plain):
+                issues.append(plain)
+    close()
+    return p.wait() == 0
 
 
 # ---------- tune ----------
@@ -260,7 +287,9 @@ def heap_holder(running):
 def engine_menu(running):
     """One screen: state, model, last speed, what you lose, memory conflicts. -> engine name."""
     cur = (active() or {}).get("engine")
-    order = sorted(PROFILES["engines"], key=lambda e: (e != cur, e not in running, e))
+    npu = hardware()["npu"]  # fresh box: halogen first where it can run, then engines we can start for you
+    order = sorted(PROFILES["engines"], key=lambda e: (e != cur, e not in running, not (npu and e == "halogen"),
+                                                       "script" not in PROFILES["engines"][e], e))
     holder = heap_holder(running)
     labels = {}
     for e in order:
@@ -292,23 +321,45 @@ def stop_engine(engine, running):
     return True
 
 
-def start_engine(engine, running, wait_s=900):
-    """Offer to start an engine we ship a launcher for (halogen, gufo). -> True once it answers."""
+def halogen_ckpt():
+    return subprocess.run(["bash", os.path.join(REPO, "server", "start-halogen.sh"), "--print-ckpt"], capture_output=True, text=True).stdout.strip()
+
+
+def plan_start(engine, running):
+    """Ask everything starting engine needs (stop the memory holder, download, start); nothing runs yet.
+    -> plan dict, or None when there is no launcher or the user declined."""
     c = PROFILES["engines"][engine]
-    script = c.get("script")
-    if not script:
+    if not c.get("script"):
         print(f"{engine}: {c.get('start', 'start it yourself')}")
-        return False
+        return None
+    plan = {"stop": None, "download": False}
     holder = heap_holder(running)
     if holder and holder != engine and engine in ("halogen", "gufo"):
-        if not ask_yn(f"{holder} holds the GPU memory {engine} needs. Stop {holder} and the ling-tiny sidecar now?"):
-            return False
-        if not stop_engine(holder, running):
-            return False
-    if not ask_yn(f"Start {engine} now? (runs {script} in the background, log /tmp/harness-{engine}.log)"):
+        if not ask_yn(f"{holder} holds the GPU memory {engine} needs. Stop {holder} and the ling-tiny sidecar?"):
+            return None
+        plan["stop"] = holder
+    if engine == "halogen" and not os.path.isfile(halogen_ckpt()):
+        free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
+        if not ask_yn(f"No halogen checkpoint on this box. Download it (~124 GB into ~/models, {free} GB free, resumable)?"):
+            return None
+        plan["download"] = True
+    if not ask_yn(f"Start {engine}? (runs {c['script']} in the background, log /tmp/harness-{engine}.log)", True):
+        return None
+    return plan
+
+
+def start_engine(engine, running, plan=None, wait_s=900):
+    """Start an engine we ship a launcher for (halogen, gufo); asks first unless given a plan. -> True once it answers."""
+    plan = plan or plan_start(engine, running)
+    if plan is None:
+        return False
+    c = PROFILES["engines"][engine]
+    if plan["stop"] and not stop_engine(plan["stop"], running):
+        return False
+    if plan["download"] and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-halogen.sh"), "--yes"]).returncode:
         return False
     log = open(f"/tmp/harness-{engine}.log", "w")
-    subprocess.Popen(["bash", os.path.join(REPO, script)], stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
+    subprocess.Popen(["bash", os.path.join(REPO, c["script"])], stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
     t0 = time.time()
     try:
         while time.time() - t0 < wait_s:
@@ -323,41 +374,55 @@ def start_engine(engine, running, wait_s=900):
     return False
 
 
-def pick_target(d, yes, want=None):
+def not_answering(eng):
+    e = PROFILES["engines"][eng]
+    return f"{eng} is not answering on :{e['port']} - {e.get('start', 'start it first')}"
+
+
+def pick_engine(d, yes, want=None):
+    """Questions only: -> (engine, start plan or None if it is already up). Nothing starts here."""
     running = {x["engine"]: x for x in d["engines"]}
-
-    def models_of(eng):
-        e = PROFILES["engines"][eng]
-        if eng in running:
-            return running[eng]["models"]
-        for x in d["engines"]:  # strata / llama.cpp / gufo share :8080: whatever answers there is what you started
-            if x["port"] == e["port"]:
-                return x["models"]
-        sys.exit(f"{eng} is not answering on :{e['port']} - {e.get('start', 'start it first')}")
-
     if want:
-        eng, _, mod = want.partition("/")
+        eng = want.partition("/")[0]
         if eng not in PROFILES["engines"]:
             sys.exit(f"unknown engine {eng}; known: {', '.join(PROFILES['engines'])}")
-        models = models_of(eng)
-        return eng, mod or (models[0] if models else sys.exit("server lists no models"))
-    if not running:
-        sys.exit("no engine answering on the usual ports. Start one (see docs/ENGINES.md, or `./setup.sh --halogen auto`), then re-run.")
+        return eng, None
     if yes or not sys.stdin.isatty():  # unattended: only what is already up, halogen first
-        eng = next(iter(sorted(running, key=lambda e: e != "halogen")))
-    else:
-        eng = engine_menu(running)
-        if eng not in running:
-            if not start_engine(eng, running):
-                sys.exit(f"{eng} is not answering on :{PROFILES['engines'][eng]['port']} - {PROFILES['engines'][eng].get('start', 'start it first')}")
-            d["engines"] = detect()["engines"]
-            running = {x["engine"]: x for x in d["engines"]}
-            if eng not in running:  # shares :8080 with strata / llama.cpp: take what answers there
-                eng = next(x["engine"] for x in d["engines"] if x["port"] == PROFILES["engines"][eng]["port"])
-    models = models_of(eng)
+        if not running:
+            sys.exit("no engine answering on the usual ports. Start one (see docs/ENGINES.md, or `./setup.sh --halogen auto`), then re-run.")
+        return next(iter(sorted(running, key=lambda e: e != "halogen"))), None
+    if not running:
+        print("No engine is running yet. Pick one: halogen and gufo can be started (and halogen downloaded) from here.")
+    eng = engine_menu(running)
+    if eng in running:
+        return eng, None
+    return eng, plan_start(eng, running) or sys.exit(not_answering(eng))
+
+
+def bring_up(d, eng, plan, yes, mod=""):
+    """Run the start plan (if any), then pick the model. -> (engine, model)."""
+    if plan:
+        if not start_engine(eng, {x["engine"]: x for x in d["engines"]}, plan):
+            sys.exit(not_answering(eng))
+        d["engines"] = detect()["engines"]
+    running = {x["engine"]: x for x in d["engines"]}
+    port = PROFILES["engines"][eng]["port"]
+    if eng not in running:  # strata / llama.cpp / gufo share :8080: whatever answers there is what you started
+        same = [x for x in d["engines"] if x["port"] == port]
+        if not same:
+            sys.exit(not_answering(eng))
+        if plan:
+            eng = same[0]["engine"]
+        running[eng] = same[0]
+    models = running[eng]["models"]
     if not models:
         sys.exit(f"{eng} lists no models")
-    return eng, choose("Which model?", models, yes)
+    return eng, mod or choose("Which model?", models, yes)
+
+
+def pick_target(d, yes, want=None):
+    eng, plan = pick_engine(d, yes, want)
+    return bring_up(d, eng, plan, yes, (want or "").partition("/")[2])
 
 
 # ---------- extras (asked once, answers saved) ----------
@@ -368,8 +433,19 @@ LANGS = {".py": "python", ".ts": "typescript", ".tsx": "typescript", ".js": "typ
          ".php": "php", ".swift": "swift", ".c": "cpp", ".cc": "cpp", ".cpp": "cpp", ".h": "cpp"}
 
 
-def ask_yn(question):
-    return input(f"{question} [y/N] ").strip().lower().startswith("y")
+def ask_yn(question, default=False):
+    """Every yes/no in the wizard: gum confirm when installed (same look as choose()), else a plain prompt."""
+    if not sys.stdin.isatty():
+        return default
+    if shutil.which("gum"):
+        r = subprocess.run(["gum", "confirm", question, f"--default={'true' if default else 'false'}"])
+        if r.returncode == 130:
+            sys.exit(130)
+        if r.returncode in (0, 1):
+            print(f"{question} {'yes' if r.returncode == 0 else 'no'}")
+            return r.returncode == 0
+    a = input(f"{question} {'[Y/n]' if default else '[y/N]'} ").strip().lower()
+    return a.startswith("y") if a else default
 
 
 def sidecar_pref():
@@ -384,10 +460,11 @@ def ask_sidecar(reconfigure):
     """Ask once whether to run the ling-tiny sidecar (default yes); setup.sh reads the saved answer."""
     if (sidecar_pref() and not reconfigure) or not sys.stdin.isatty():
         return
-    a = input("Run the ling-tiny sidecar? Faster commits/compaction (~2x) but holds ~8 GiB of GPU memory.\n"
-              "No = the main model writes them instead. [Y/n] ").strip().lower()
+    dl = "" if glob.glob(os.path.expanduser("~/.models/ling3.0-tiny/*.gguf")) + glob.glob(os.path.join(REPO, "models/ling3.0-tiny/*.gguf")) else ", first run downloads 4.5 GB"
+    on = ask_yn(f"Run the ling-tiny sidecar? ~2x faster commits/compaction, holds ~8 GiB GPU memory{dl}. "
+                "(No = the main model writes them)", True)
     os.makedirs(AGENT, exist_ok=True)
-    open(os.path.join(AGENT, "harness-sidecar"), "w").write("0\n" if a.startswith("n") else "1\n")
+    open(os.path.join(AGENT, "harness-sidecar"), "w").write("1\n" if on else "0\n")
 
 
 def ask_once(key, question, reconfigure):
@@ -454,7 +531,7 @@ def harness_update_offer():
 
 
 def halogen_upgrade_offer(relevant):
-    """Update check + safe-upgrade offer. Runs before engine selection: it needs no running engine.
+    """Update check + safe-upgrade question; -> True if the user wants the upgrade (run later, after all questions).
     relevant: halogen is up or this box has an NPU, so asking about halogen makes sense."""
     path = os.path.join(AGENT, "harness-update-check")  # same answer file setup.sh and start.sh use
     try:
@@ -466,15 +543,38 @@ def halogen_upgrade_offer(relevant):
         os.makedirs(AGENT, exist_ok=True)
         open(path, "w").write(pref + "\n")
     if pref != "1" or not sys.stdin.isatty():
-        return
+        return False
     msg = subprocess.run(["bash", os.path.join(REPO, "scripts", "check-halogen-update.sh")], capture_output=True, text=True).stdout.strip()
     if msg:
         print(msg)
-        if ask_yn("Upgrade halogen now? (restarts the server, rolls back on failure)"):
-            subprocess.run(["bash", os.path.join(REPO, "scripts", "upgrade-halogen.sh")])
+        return ask_yn("Upgrade halogen? (restarts the server, rolls back on failure)")
+    return False
 
 
-def finish(eng, mod, no_tune):
+def choices_line():
+    """One line with every saved answer, for summaries and the config menu."""
+    upd = (lambda p: open(p).read().strip() if os.path.exists(p) else "")(os.path.join(AGENT, "harness-update-check"))
+    return (f"sidecar {'off' if sidecar_pref() == '0' else 'on'} · voice {'on' if jget(EXTRAS, {}).get('voice') else 'off'}"
+            f" · halogen update check {'on' if upd == '1' else 'off'}")
+
+
+SETUP_LOG = os.path.join(AGENT, "setup.log")
+
+
+def launch_offer(eng, prov, mid):
+    """End of the wizard: start pi right here instead of printing a command to copy."""
+    if not (sys.stdin.isatty() and shutil.which("pi")):
+        return
+    cwd = os.getcwd()
+    if cwd == REPO:
+        print("  (you are in the harness checkout; cd to a project and run ./start.sh or pi there)")
+        return
+    if ask_yn(f"Start pi in {cwd} now?", True):
+        os.environ["PONYTAIL_HIDE_STATUS"] = "1"  # same as start.sh
+        os.execvp("pi", ["pi", "--provider", prov, "--model", mid])
+
+
+def finish(eng, mod, no_tune, launch=False):
     tuned = jget(os.path.join(AGENT, "harness-tuned.json"), {}).get(hw_key(eng, mod), {}) if no_tune else {}
     if not no_tune:
         print(f"== probing {eng}/{mod} (prefill + decode, <2 min) ==")
@@ -487,28 +587,48 @@ def finish(eng, mod, no_tune):
     speed = f"{tuned['prefill_tps']} t/s prefill, {tuned['decode_tps']} t/s decode" if tuned.get("decode_tps") else "not probed (./harness tune)"
     print(f"\n== ready ==\n  engine   {eng} -> {prov}/{mid}\n  context  {ctx}\n  speed    {speed}")
     print(f"  start    {'./start.sh ~/your-project' if eng == 'halogen' else f'pi --provider {prov} --model {mid}'}")
+    print(f"  choices  {choices_line()}   (change: ./harness config)")
     print("  check    ./setup.sh --doctor   (status: ./harness status)")
+    if launch:
+        launch_offer(eng, prov, mid)
 
 
 def cmd_setup(a):
     d = detect()
     h = d["hardware"]
+    verbose = a.verbose or active() is None  # first run shows everything; later runs only what needs you
     print(f"hardware: {h['ram_gb']} GB RAM, gpu={h['gpu']}, npu={h['npu']}; engines up: {[x['engine'] for x in d['engines']] or 'none'}")
     if not d["pi"]:
         print("! pi not found on PATH - install it first")
+    # 1. every question first ...
+    upgrade = False
     if not a.yes:
         harness_update_offer()
-        halogen_upgrade_offer(h["npu"] or any(x["engine"] == "halogen" for x in d["engines"]))
-    eng, mod = pick_target(d, a.yes)
+        upgrade = halogen_upgrade_offer(h["npu"] or any(x["engine"] == "halogen" for x in d["engines"]))
+    eng, plan = pick_engine(d, a.yes)
     if not a.yes:
         ask_sidecar(a.reconfigure)
     voice = not a.yes and ask_once("voice", "Set up voice (local STT/TTS via Lemonade)?", a.reconfigure)
-    if not install_extensions(eng, ["--voice"] if voice else []):
-        print("! setup.sh reported problems (see above)")
+    if not a.yes and sys.stdin.isatty():
+        steps = (["upgrade halogen (restart, rolls back on failure)"] if upgrade else []) + (
+            [f"stop {plan['stop']} and the ling-tiny sidecar"] if plan and plan["stop"] else []) + (
+            ["download halogen (~124 GB, resumable)"] if plan and plan["download"] else []) + (
+            [f"start {eng} (model asked once it answers, if it serves several)"] if plan else [f"use {eng} (running)"]) + [
+            f"install/update pi extensions, providers, skills{'' if verbose else f' (details: {SETUP_LOG})'}",
+            choices_line()] + ([] if a.no_tune else ["probe speed (<2 min)"])
+        print("\nabout to:\n" + "".join(f"  - {s}\n" for s in steps))
+        if not ask_yn("Continue?", True):
+            sys.exit("nothing changed")
+    # 2. ... then run without stopping
+    if upgrade and subprocess.run(["bash", os.path.join(REPO, "scripts", "upgrade-halogen.sh")]).returncode:
+        print("! upgrade failed; continuing on the pinned version")
+    eng, mod = bring_up(d, eng, plan, a.yes)
+    if not install_extensions(eng, ["--voice"] if voice else [], verbose):
+        print(f"! setup.sh reported problems (see above{'' if verbose else ' and ' + SETUP_LOG})")
     added = serena_languages()
     if added:
         print(f"serena: enabled language servers {added} in .serena/project.yml (restart serena to load them)")
-    finish(eng, mod, a.no_tune)
+    finish(eng, mod, a.no_tune, launch=not a.yes)
 
 
 def cmd_use(a):
@@ -531,6 +651,8 @@ def cmd_status(_):
     print(f"engine {p['engine']} :{port} {'UP' if up else 'DOWN'}  model {p['model']}  npu {p['npu']}")
     t = jget(os.path.join(AGENT, "harness-tuned.json"), {}).get(hw_key(p["engine"], p["model"]))
     print("tuning:", t or "none yet (./harness tune)")
+    if sidecar_pref() == "0":
+        return print("sidecar: off (opted out; ./harness config turns it on)")
     try:
         http(p["sidecarUrl"] + "/health")
         print("sidecar: UP")
@@ -538,17 +660,64 @@ def cmd_status(_):
         print("sidecar: down (starts on demand via ling-tiny.service)")
 
 
+def cmd_config(a):
+    """Menu of every saved answer; change one, applied right away."""
+    if not sys.stdin.isatty():
+        return print(choices_line())
+    upd_path = os.path.join(AGENT, "harness-update-check")
+    hints = os.path.join(AGENT, "harness-hints-shown")
+    while True:
+        p = active() or {}
+        upd = open(upd_path).read().strip() if os.path.exists(upd_path) else ""
+        sc = sidecar_pref() != "0"
+        voice = bool(jget(EXTRAS, {}).get("voice"))
+        items = {
+            f"engine        {p.get('engine', '-')}/{p.get('model', '-')}": "engine",
+            f"sidecar       {'on' if sc else 'off'}  (ling-tiny, ~8 GiB GPU memory)": "sidecar",
+            f"voice         {'on' if voice else 'off'}  (Lemonade STT/TTS)": "voice",
+            f"update check  {'on' if upd == '1' else 'off'}  (newer halogen image, asked before installing)": "update",
+            f"sudo hints    {'hidden after first show' if os.path.exists(hints) else 'shown'}  (fabric clock, vm-compact)": "hints",
+            "done": "done"}
+        k = items[choose("Change which setting?", list(items), False)]
+        if k == "done":
+            return
+        if k == "engine":
+            eng, mod = pick_target(detect(), False)
+            install_extensions(eng, verbose=False)
+            finish(eng, mod, bool(jget(os.path.join(AGENT, "harness-tuned.json"), {}).get(hw_key(eng, mod))))
+        elif k == "sidecar":
+            open(os.path.join(AGENT, "harness-sidecar"), "w").write("0\n" if sc else "1\n")
+            r = subprocess.run(["systemctl", "--user", "stop" if sc else "start", "ling-tiny.service"], capture_output=True)
+            print(f"  sidecar {'off, stopped' if sc else 'on, started'}" if not r.returncode else
+                  f"  saved; {'stop' if sc else 'start'} failed - run ./setup.sh to {'stop' if sc else 'install'} it")
+        elif k == "voice":
+            st = jget(EXTRAS, {})
+            st["voice"] = not voice
+            jput(EXTRAS, st)
+            if voice:
+                print("  voice off (nothing uninstalled; /speak and /talk stay available)")
+            else:
+                install_extensions((active() or {}).get("engine", "halogen"), ["--voice"], verbose=False)
+        elif k == "update":
+            os.makedirs(AGENT, exist_ok=True)
+            open(upd_path, "w").write("0\n" if upd == "1" else "1\n")
+        elif k == "hints" and os.path.exists(hints):
+            os.remove(hints)
+            print("  sudo hints will show on the next ./setup.sh run")
+
+
 def main():
     import argparse
     ap = argparse.ArgumentParser(prog="harness")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for n, f in (("detect", cmd_detect), ("setup", cmd_setup), ("use", cmd_use), ("tune", cmd_tune), ("status", cmd_status)):
+    for n, f in (("detect", cmd_detect), ("setup", cmd_setup), ("use", cmd_use), ("tune", cmd_tune), ("status", cmd_status), ("config", cmd_config)):
         p = sub.add_parser(n)
         p.set_defaults(fn=f)
         if n in ("setup", "use"):
             p.add_argument("--yes", action="store_true")
             p.add_argument("--no-tune", action="store_true")
-            p.add_argument("--reconfigure", action="store_true", help="ask the saved extras again")
+            p.add_argument("--reconfigure", action="store_true", help="ask the saved extras again (one at a time: ./harness config)")
+            p.add_argument("--verbose", action="store_true", help="show full setup.sh output (default on the first run only)")
         if n == "use":
             p.add_argument("target", help="engine[/model]")
     a = ap.parse_args()

@@ -21,7 +21,8 @@ IMAGE="ghcr.io/peonist-ai/halogen-flash-server:${IMAGE_TAG}${IMAGE_DIGEST:+@$IMA
 # locate the main checkpoint at runtime (exclude ngram/vision/mtp/w4b sidecars)
 CKPT="${HALOGEN_CHECKPOINT:-}"
 if [ -z "$CKPT" ]; then
-  CKPT=$(ls "$PWD"/*.hgn /models/*.hgn "$HOME"/models/*.hgn "$HOME"/Downloads/*.hgn \
+  # ~/models/*/ covers scripts/download-halogen.sh's ~/models/halogen-qwen3.8-flash-next
+  CKPT=$(ls "$PWD"/*.hgn /models/*.hgn "$HOME"/models/*.hgn "$HOME"/models/*/*.hgn "$HOME"/Downloads/*.hgn \
     "${LLMBENCH:-$HOME/LLMBench}"/models/*/*.hgn 2>/dev/null \
     | grep -v 'ngram\|vision\|mtp\|w4b' | grep 'v2\.hgn' | head -1)
 fi

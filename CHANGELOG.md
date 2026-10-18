@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Added
+- Setup UX. Fresh box: with no engine running the wizard shows the engine menu instead of exiting (halogen first on NPU boxes); picking halogen without a checkpoint offers the ~124 GB download (now `scripts/download-halogen.sh`, shared with `setup.sh --halogen auto`). All questions are asked up front, then an "about to" summary and one `Continue? [Y/n]`; nothing prompts after that (upgrade, stop, download, start, install run unattended). One prompt style (`gum` when installed, `[Y/n]` default shown otherwise). Later runs are quiet: one line per install step, warnings/failures in full, full output in `~/.pi/agent/setup.log` (first run or `--verbose` shows everything). Sudo hints (fabric clock, vm-compact) show once, then only in `--doctor` until fixed. `./harness config`: menu of saved answers, change one, applied right away. The wizard ends with a choices line and `Start pi in <dir> now?`. Also: `setup.sh` asks before the 4.5 GB sidecar download on a terminal; `./harness status` says "sidecar: off (opted out)" instead of "down"; `--doctor` shows elapsed time during the ready check and skips it when halogen is down.
+
+### Fixed
+- Sidecar opt-out did not hold: the systemd-unit block in `setup.sh` rewrote and started `ling-tiny.service` even with the sidecar off.
+- A downloaded checkpoint was never found: `start-halogen.sh` searched `~/models/*.hgn` but the download lands in `~/models/halogen-qwen3.8-flash-next/`; it now also searches `~/models/*/`.
+- `setup.sh` printed "harness-ubatch: No such file or directory" on installs without a saved batch size (redirect order).
+
+### Added
 - Sidecar opt-out. The wizard asks once whether to run the ling-tiny sidecar (default yes); `./setup.sh --no-sidecar` / `--sidecar` set it without a terminal. The answer lives in `~/.pi/agent/harness-sidecar` (`1`/`0`, absent = on, so existing installs are unchanged). Off: `setup.sh` no longer starts or writes the sidecar unit, stops one that is running (frees ~8 GiB GPU memory), `--doctor` reports it as off, and the four ling-tiny extensions do nothing, so commits and summaries come from the main model. `setup.sh` still starts the sidecar on every run when the answer is on.
 
 ### Fixed

@@ -5,6 +5,7 @@
 #
 #   ./setup.sh                  in a terminal: guided wizard for any engine (= ./harness setup);
 #                               otherwise (scripts, CI): install + verify everything
+#                               (saved answers: ./harness config)
 #   ./setup.sh --halogen [auto|path.hgn]  also provision + start the halogen server
 #   ./setup.sh --doctor         read-only status check
 #   ./setup.sh --no-halogen     pi-only install: skip the halogen provider, the NPU
@@ -51,7 +52,7 @@ SC_PREF="$PI_HOME/agent/harness-sidecar"
 SIDECAR_ON=1; [ "$(cat "$SC_PREF" 2>/dev/null)" = 0 ] && SIDECAR_ON=0
 # sidecar batch size shared with /tune and start-ling-tiny.sh; without this the
 # unit and first-boot spawn ran llama.cpp's 512 default, 8x below the measured 4096
-UB_TINY=$(tr -dc '0-9' < "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/harness-ubatch" 2>/dev/null); UB_TINY=${UB_TINY:-4096}
+UB_TINY=$(tr -dc '0-9' 2>/dev/null < "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/harness-ubatch"); UB_TINY=${UB_TINY:-4096}
 ok(){ printf '  \033[32m✓\033[0m %s\n' "$1"; }
 warn(){ printf '  \033[33m!\033[0m %s\n' "$1"; }
 fail(){ printf '  \033[31m✗\033[0m %s\n' "$1"; }
@@ -81,6 +82,13 @@ LLS="$(command -v llama-server 2>/dev/null || true)"
 done
 # find the main halogen checkpoint: one search, owned by the launcher
 find_ckpt(){ bash "$REPO/server/start-halogen.sh" --print-ckpt; }
+# sudo one-time fixes: full command on the first install run (always in --doctor), then only in the log until fixed
+HINTS="$PI_HOME/agent/harness-hints-shown"
+hint(){ local k=$1; shift
+  if [ "$DOCTOR" = 1 ] || ! grep -qx "$k" "$HINTS" 2>/dev/null; then
+    for l in "$@"; do warn "$l"; done; [ "$DOCTOR" = 1 ] || echo "$k" >> "$HINTS"
+  else echo "  - $1 (fix shown once; ./setup.sh --doctor shows it again)"; fi; }
+hint_fixed(){ [ -f "$HINTS" ] && sed -i "/^$1\$/d" "$HINTS"; return 0; }
 # host hygiene shared by --doctor and install: allocator, fabric clock, vm-compact timer
 host_checks(){
   local o9
@@ -89,13 +97,15 @@ host_checks(){
     && warn "order-9 pages = $o9 (<200): full-ctx halogen (262k) will wedge; 65k/2-slot is fine. reboot before full-ctx." \
     || ok "order-9 pages: ${o9:-n/a}"
   # GPU+NPU together are only safe with the fabric clock held; the container holds it while it runs
-  fclk_held && ok "gpu fabric clock held (GPU+NPU concurrency safe)" || { warn "gpu fabric clock NOT held - NPU beside GPU can hang or corrupt (halogen NPU docs). one-time install (sudo):"; warn "  sudo install -m 755 $REPO/config/systemd/halogen-fabric-clock /usr/local/sbin/ && sudo install -m 644 $REPO/config/systemd/halogen-fabric-clock.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now halogen-fabric-clock.service"; }
+  if fclk_held; then ok "gpu fabric clock held (GPU+NPU concurrency safe)"; hint_fixed fclk
+  else hint fclk "gpu fabric clock NOT held - NPU beside GPU can hang or corrupt (halogen NPU docs). one-time install (sudo):" \
+    "  sudo install -m 755 $REPO/config/systemd/halogen-fabric-clock /usr/local/sbin/ && sudo install -m 644 $REPO/config/systemd/halogen-fabric-clock.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now halogen-fabric-clock.service"; fi
   # list-timers exits 0 even with "0 timers listed"; is-enabled actually checks
   if systemctl is-enabled --quiet vm-compact.timer 2>/dev/null; then
-    ok "vm-compact.timer enabled (15-min allocator hygiene)"
+    ok "vm-compact.timer enabled (15-min allocator hygiene)"; hint_fixed vmcompact
   else
-    warn "vm-compact.timer not installed - big-model days fragment the allocator (order-9 decay). one-time install:"
-    warn "  sudo cp $REPO/config/systemd/vm-compact.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now vm-compact.timer"
+    hint vmcompact "vm-compact.timer not installed - big-model days fragment the allocator (order-9 decay). one-time install:" \
+      "  sudo cp $REPO/config/systemd/vm-compact.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now vm-compact.timer"
   fi
 }
 
@@ -143,8 +153,13 @@ if [ "$DOCTOR" = 1 ]; then
     fi
   done
   host_checks
-  if [ -f "$EXT_DIR/npu-retrieval.ts" ]; then
-    R=$(timeout 120 pi -p --no-skills --no-context-files --provider halogen --model halogen-qwen3.8-flash-next --thinking low "Reply with exactly: OK" 2>/dev/null | grep -c 'OK')
+  if [ -f "$EXT_DIR/npu-retrieval.ts" ] && ! hal_up; then fail "ready check skipped: halogen is down"
+  elif [ -f "$EXT_DIR/npu-retrieval.ts" ]; then
+    RC=$(mktemp); T0=$SECONDS
+    timeout 120 pi -p --no-skills --no-context-files --provider halogen --model halogen-qwen3.8-flash-next --thinking low "Reply with exactly: OK" > "$RC" 2>/dev/null &
+    while kill -0 $! 2>/dev/null; do [ -t 1 ] && printf '\r  … ready check: asking halogen for a reply (%ss, gives up at 120s)' $((SECONDS-T0)); sleep 1; done
+    [ -t 1 ] && printf '\r\033[K'
+    R=$(grep -c 'OK' "$RC"); rm -f "$RC"
     [ "$R" -ge 1 ] && ok "ready check: model answered" || fail "ready check: no reply from halogen"
   fi
   exit 0
@@ -439,7 +454,14 @@ elif [ -f "$HOME/.config/systemd/user/ling-tiny.service" ]; then
 else
   fail "sidecar not running"
   GGUF="$(ls "$HOME"/.models/ling3.0-tiny/*.gguf "$REPO"/models/ling3.0-tiny/*.gguf 2>/dev/null | head -1)"
-  if [ -z "${GGUF:-}" ]; then
+  # a terminal gets asked; no terminal (scripts, the wizard - which already asked) downloads
+  if [ -z "${GGUF:-}" ] && [ -t 0 ]; then
+    read -r -p "  download Ling-3.0-tiny (~4.5 GB) for the sidecar? (n = skip; ./setup.sh --no-sidecar turns it off) [Y/n] " A
+    case "$A" in [nN]*) GGUF=skip ;; esac
+  fi
+  if [ "${GGUF:-}" = skip ]; then
+    GGUF=""; warn "sidecar download skipped - commits/summaries fall back to the main model until it runs"
+  elif [ -z "${GGUF:-}" ]; then
     warn "model not found locally - downloading Ling-3.0-tiny-Q4_K_M.gguf (~4.5 GB, resumable) to ~/.models/ling3.0-tiny/"
     mkdir -p "$HOME/.models/ling3.0-tiny"
     curl -fL -C - -o "$HOME/.models/ling3.0-tiny/Ling-3.0-tiny-Q4_K_M.gguf" \
@@ -472,7 +494,7 @@ else
 fi
 
 # systemd user unit: auto-restart beats watchdog polling (sidecar died silently once)
-if command -v systemctl >/dev/null && systemctl --user status >/dev/null 2>&1; then
+if [ "$SIDECAR_ON" = 1 ] && command -v systemctl >/dev/null && systemctl --user status >/dev/null 2>&1; then
   UNIT_DIR="$HOME/.config/systemd/user"; mkdir -p "$UNIT_DIR"
   UNIT_GGUF="${GGUF:-$(ls "$HOME"/.models/ling3.0-tiny/*.gguf 2>/dev/null | head -1)}"
   if [ -n "$UNIT_GGUF" ] && [ -n "${LLS:-}" ]; then
@@ -575,37 +597,9 @@ elif [ -n "$HALOGEN_CKPT" ]; then
     [ "$HALOGEN_CKPT" = "auto" ] && HALOGEN_CKPT=$(find_ckpt)
     if [ -z "$HALOGEN_CKPT" ] || [ ! -f "$HALOGEN_CKPT" ]; then
       # no checkpoint found: offer to fetch exactly the required file set (~124 GB, resumable)
-      DL_DIR="$HOME/models/halogen-qwen3.8-flash-next"
       echo "  no .hgn checkpoint found (looked in ., /models, ~/models, ~/Downloads, LLMBench/models)."
-      AVAIL=$(df -BG --output=avail "$HOME" 2>/dev/null | tail -1 | tr -dc '0-9')
-      echo "  required download: ~124 GB into $DL_DIR${AVAIL:+ (free: ${AVAIL} GB)}"
-      read -r -p "  download now? [y/N] " A
-      [ "$A" = "y" ] || { fail "aborted - download the files (see README 'Minimum download') or pass a checkpoint: ./setup.sh --halogen /path/to/checkpoint.hgn"; exit 1; }
-      if [ "${AVAIL:-999}" -lt 135 ]; then
-        warn "only ${AVAIL} GB free - the download will likely run out of space. Free up at least 135 GB first."
-        fail "not enough free space"; exit 1
-      fi
-      HF_BIN="$(command -v hf || command -v huggingface-cli || true)"
-      if [ -z "$HF_BIN" ]; then
-        echo "  no hf cli found - bootstrapping a venv (~40 MB) ..."
-        python3 -m venv "$HOME/.hf-venv" 2>/dev/null && "$HOME/.hf-venv/bin/pip" install -q -U huggingface_hub 2>/dev/null \
-          && HF_BIN="$HOME/.hf-venv/bin/hf" || fail "could not bootstrap the hf downloader - install huggingface_hub (pipx or a venv) and re-run"
-      fi
-      mkdir -p "$DL_DIR"
-      echo "  downloading (resumable - re-run this command if interrupted) ..."
-      "$HF_BIN" download peonist-ai/halogen-qwen3.8-flash-next \
-        qwen38-flash-next-v2.hgn qwen38-flash-next-ngram.hgn qwen38-flash-next-vision.hgn tokenizer/ \
-        --local-dir "$DL_DIR" || fail "download failed/incomplete - re-run ./setup.sh --halogen auto to resume"
-      # the NPU models live in four separate repos (they are NOT in the main weights repo)
-      for n in decider-0.8b qwen3-embedding-0.6b qwen3-reranker-0.6b qwen3guard-gen-0.6b; do
-        [ -d "$DL_DIR/npu/$n" ] && continue
-        echo "  downloading NPU model: $n ..."
-        "$HF_BIN" download "peonist-ai/halogen-npu-$n" --local-dir "$DL_DIR/npu/$n" \
-          || fail "NPU model download failed: $n - re-run ./setup.sh --halogen auto to resume"
-      done
-      [ -f "$DL_DIR/qwen38-flash-next-v2.hgn" ] || fail "download finished but v2.hgn is missing from $DL_DIR"
-      HALOGEN_CKPT="$DL_DIR/qwen38-flash-next-v2.hgn"
-      echo "  download complete"
+      bash "$REPO/scripts/download-halogen.sh" || { fail "no checkpoint - re-run ./setup.sh --halogen auto to resume"; exit 1; }
+      HALOGEN_CKPT="$HOME/models/halogen-qwen3.8-flash-next/qwen38-flash-next-v2.hgn"
     fi
     if [ -z "$HALOGEN_CKPT" ] || [ ! -f "$HALOGEN_CKPT" ]; then
       fail "no .hgn checkpoint found (looked in ., /models, ~/models, ~/Downloads, LLMBench/models) - pass it: ./setup.sh --halogen /path/to/checkpoint.hgn"
@@ -631,6 +625,7 @@ else
   warn "halogen down (optional: main model). start with: ./setup.sh --halogen auto"
 fi
 
+echo "== 5. host checks =="
 host_checks
 
 echo
