@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- `./start.sh ~/project` works for every engine: it reads the engine the wizard saved (`harness-profile.json`). Halogen keeps the old path; other engines run the `--no-halogen` install check, warn if the server is not answering, and open pi on the saved provider/model. No profile = halogen, as before. The wizard's start hint is now `./start.sh ~/your-project` for all engines.
 - Setup UX. Fresh box: with no engine running the wizard shows the engine menu instead of exiting (halogen first on NPU boxes); picking halogen without a checkpoint offers the ~124 GB download (now `scripts/download-halogen.sh`, shared with `setup.sh --halogen auto`). All questions are asked up front, then an "about to" summary and one `Continue? [Y/n]`; nothing prompts after that (upgrade, stop, download, start, install run unattended). One prompt style (`gum` when installed, `[Y/n]` default shown otherwise). Later runs are quiet: one line per install step, warnings/failures in full, full output in `~/.pi/agent/setup.log` (first run or `--verbose` shows everything). Sudo hints (fabric clock, vm-compact) show once, then only in `--doctor` until fixed. `./harness config`: menu of saved answers, change one, applied right away. The wizard ends with a choices line and `Start pi in <dir> now?`. Also: `setup.sh` asks before the 4.5 GB sidecar download on a terminal; `./harness status` says "sidecar: off (opted out)" instead of "down"; `--doctor` shows elapsed time during the ready check and skips it when halogen is down.
 
 ### Fixed

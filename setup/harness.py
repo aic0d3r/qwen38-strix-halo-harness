@@ -567,8 +567,7 @@ def launch_offer(eng, prov, mid):
         return
     cwd = os.getcwd()
     if cwd == REPO:
-        print("  (you are in the harness checkout; start it on a project with: "
-              + ("./start.sh ~/your-project)" if eng == "halogen" else f"cd ~/your-project && pi --provider {prov} --model {mid})"))
+        print("  (you are in the harness checkout; start it on a project with: ./start.sh ~/your-project)")
         return
     if ask_yn(f"Start pi in {cwd} now?", True):
         os.environ["PONYTAIL_HIDE_STATUS"] = "1"  # same as start.sh
@@ -587,7 +586,7 @@ def finish(eng, mod, no_tune, launch=False):
     prov, mid, ctx = apply(eng, mod, tuned)
     speed = f"{tuned['prefill_tps']} t/s prefill, {tuned['decode_tps']} t/s decode" if tuned.get("decode_tps") else "not probed (./harness tune)"
     print(f"\n== ready ==\n  engine   {eng} -> {prov}/{mid}\n  context  {ctx}\n  speed    {speed}")
-    print(f"  start    {'./start.sh ~/your-project' if eng == 'halogen' else f'pi --provider {prov} --model {mid}'}")
+    print("  start    ./start.sh ~/your-project")
     print(f"  choices  {choices_line()}   (change: ./harness config)")
     print("  check    ./setup.sh --doctor   (status: ./harness status)")
     if launch:

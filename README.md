@@ -309,15 +309,14 @@ checkpoint; the default stays `v2` — pass the `ht43.hgn` path explicitly to us
 ## Quick start
 
 ```sh
-# halogen daily driver: heals any dead server, then opens the pi TUI
+# daily driver, any engine: heals what it manages, then opens the pi TUI on the engine ./setup.sh picked
 ./start.sh ~/my-project
-
-# any other engine: start your server, then run pi in the project (provider set by setup)
-cd ~/my-project && pi
 ```
 
-`start.sh` is halogen-specific (it relaunches halogen and opens pi on its model). For other
-engines, start the server yourself and use `pi`; `./harness status` shows what pi is pointed at.
+On halogen, `start.sh` relaunches a dead halogen server. On other engines it re-checks the install
+and the sidecar, warns if your engine server is not answering (start it yourself, or switch with
+`./setup.sh`), and opens pi on the provider and model from the wizard. `./harness status` shows
+what pi is pointed at.
 
 In the session: `read`/`edit`/`bash` as usual, `mcp__semble__search` for "where is X implemented",
 `commit` for a sidecar-written message, `triage` when a decision is a one-word call, and `/tune`
