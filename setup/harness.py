@@ -567,7 +567,8 @@ def launch_offer(eng, prov, mid):
         return
     cwd = os.getcwd()
     if cwd == REPO:
-        print("  (you are in the harness checkout; cd to a project and run ./start.sh or pi there)")
+        print("  (you are in the harness checkout; start it on a project with: "
+              + ("./start.sh ~/your-project)" if eng == "halogen" else f"cd ~/your-project && pi --provider {prov} --model {mid})"))
         return
     if ask_yn(f"Start pi in {cwd} now?", True):
         os.environ["PONYTAIL_HIDE_STATUS"] = "1"  # same as start.sh
