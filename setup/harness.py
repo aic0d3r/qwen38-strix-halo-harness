@@ -325,13 +325,18 @@ def serena_languages(root="."):
     return add
 
 
-def halogen_upgrade_offer():
-    """If the update check is on and a newer image exists, offer the safe upgrade."""
-    pref = ""
+def halogen_upgrade_offer(relevant):
+    """Update check + safe-upgrade offer. Runs before engine selection: it needs no running engine.
+    relevant: halogen is up or this box has an NPU, so asking about halogen makes sense."""
+    path = os.path.join(AGENT, "harness-update-check")  # same answer file setup.sh and start.sh use
     try:
-        pref = open(os.path.join(AGENT, "harness-update-check")).read().strip()
+        pref = open(path).read().strip()
     except OSError:
-        pass
+        pref = ""
+    if not pref and relevant and sys.stdin.isatty():
+        pref = "1" if ask_yn("Check for halogen updates when you run setup/start? (one short network call; asked before anything installs)") else "0"
+        os.makedirs(AGENT, exist_ok=True)
+        open(path, "w").write(pref + "\n")
     if pref != "1" or not sys.stdin.isatty():
         return
     msg = subprocess.run(["bash", os.path.join(REPO, "scripts", "check-halogen-update.sh")], capture_output=True, text=True).stdout.strip()
@@ -363,12 +368,12 @@ def cmd_setup(a):
     print(f"hardware: {h['ram_gb']} GB RAM, gpu={h['gpu']}, npu={h['npu']}; engines up: {[x['engine'] for x in d['engines']] or 'none'}")
     if not d["pi"]:
         print("! pi not found on PATH - install it first")
+    if not a.yes:
+        halogen_upgrade_offer(h["npu"] or any(x["engine"] == "halogen" for x in d["engines"]))
     eng, mod = pick_target(d, a.yes)
     voice = not a.yes and ask_once("voice", "Set up voice (local STT/TTS via Lemonade)?", a.reconfigure)
     if not install_extensions(eng, ["--voice"] if voice else []):
         print("! setup.sh reported problems (see above)")
-    if eng == "halogen":
-        halogen_upgrade_offer()
     added = serena_languages()
     if added:
         print(f"serena: enabled language servers {added} in .serena/project.yml (restart serena to load them)")
