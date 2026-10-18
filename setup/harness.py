@@ -595,7 +595,7 @@ def update_offer(eng):
         return False
     msg = engine_update(eng)
     if msg:
-        print(msg)
+        notice(msg)
         return bool(upgrader(eng)) and ask_yn(f"Upgrade {eng}? (restarts the server, rolls back on failure)")
     return False
 
@@ -605,7 +605,12 @@ def cmd_update_check(a):
     if update_pref() == "1":
         msg = engine_update(a.engine or (active() or {}).get("engine", "halogen"))
         if msg:
-            print(msg)
+            notice(msg)
+
+
+def notice(msg):
+    """Update notices in bold yellow on a terminal, plain when piped (start.sh colours its own copy)."""
+    print(f"\033[1;33m{msg}\033[0m" if sys.stdout.isatty() else msg)
 
 
 def choices_line():
