@@ -13,7 +13,14 @@ if [ "${ENG:-halogen}" != halogen ]; then
   bash "$HERE/setup.sh" --no-halogen || exit 1
   python3 "$HERE/setup/harness.py" status | grep -q ' UP ' \
     || echo "! $ENG is not answering - start it (or switch engine: ./setup.sh); pi opens anyway" >&2
-  python3 "$HERE/setup/harness.py" update-check "$ENG"
+  MSG=$(python3 "$HERE/setup/harness.py" update-check "$ENG")
+  if [ -n "$MSG" ]; then
+    echo "$MSG"
+    if [ -t 0 ] && [ -f "$HERE/scripts/upgrade-$ENG.sh" ]; then
+      read -r -p "Upgrade $ENG now? (restarts the server, rolls back on failure) [y/N] " A
+      case "$A" in [yY]*) bash "$HERE/scripts/upgrade-$ENG.sh" || { echo "upgrade failed; continuing on the pinned version" >&2; sleep 3; } ;; esac
+    fi
+  fi
   cd "$D"; export PONYTAIL_HIDE_STATUS=1
   exec pi --provider "$PROV" --model "$MID"
 fi

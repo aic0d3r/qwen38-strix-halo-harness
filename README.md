@@ -92,8 +92,8 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70
    main model writes commits and summaries, with compaction blocking on it; non-interactive:
    `./setup.sh --no-sidecar` / `--sidecar`), the engine
    update check (any engine with a known release source: halogen, gufo, Strata, llama.cpp, vLLM,
-   Ollama; on halogen it offers the safe upgrade right away, on the others it prints the upgrade
-   command; `start.sh` repeats the one-line notice, `./harness update-check` on demand), and voice. Serena
+   Ollama; on halogen and gufo it offers the safe upgrade right away (`scripts/upgrade-gufo.sh`:
+   restart, check, pin, roll back on failure), on the others it prints the upgrade command; `start.sh` repeats the one-line notice, `./harness update-check` on demand), and voice. Serena
    language servers for the languages found in your project are enabled automatically in
    `.serena/project.yml` (restart serena to load them).
 

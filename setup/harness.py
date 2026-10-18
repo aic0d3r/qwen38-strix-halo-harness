@@ -577,9 +577,15 @@ def engine_update(engine):
     return f"{engine} {new} available (running {str(have).split()[-1]}): {u['how'].format(new=new.lstrip('v'))}"
 
 
+def upgrader(eng):
+    """scripts/upgrade-<engine>.sh (halogen, gufo): pull, restart, check, pin, roll back on failure. -> path or None."""
+    p = os.path.join(REPO, "scripts", f"upgrade-{eng}.sh")
+    return p if os.path.exists(p) else None
+
+
 def update_offer(eng):
-    """Ask once whether to check for engine updates, then check eng. -> True if the user wants the halogen
-    safe upgrade (run later, after all questions); other engines get a notice with the upgrade command."""
+    """Ask once whether to check for engine updates, then check eng. -> True if the user wants the safe
+    upgrade (engines with an upgrader; run later, after all questions); others get a notice with the command."""
     pref = update_pref()
     if not pref and sys.stdin.isatty():
         pref = "1" if ask_yn("Check for engine updates when you run setup/start? (one short network call; never installs without asking)") else "0"
@@ -590,7 +596,7 @@ def update_offer(eng):
     msg = engine_update(eng)
     if msg:
         print(msg)
-        return eng == "halogen" and ask_yn("Upgrade halogen? (restarts the server, rolls back on failure)")
+        return bool(upgrader(eng)) and ask_yn(f"Upgrade {eng}? (restarts the server, rolls back on failure)")
     return False
 
 
@@ -659,7 +665,7 @@ def cmd_setup(a):
         ask_sidecar(a.reconfigure)
     voice = not a.yes and ask_once("voice", "Set up voice (local STT/TTS via Lemonade)?", a.reconfigure)
     if not a.yes and sys.stdin.isatty():
-        steps = (["upgrade halogen (restart, rolls back on failure)"] if upgrade else []) + (
+        steps = ([f"upgrade {eng} (restart, rolls back on failure)"] if upgrade else []) + (
             [f"stop {plan['stop']} and the ling-tiny sidecar"] if plan and plan["stop"] else []) + (
             ["download halogen (~124 GB, resumable)"] if plan and plan["download"] else []) + (
             [f"start {eng} (model asked once it answers, if it serves several)"] if plan else [f"use {eng} (running)"]) + [
@@ -669,9 +675,10 @@ def cmd_setup(a):
         if not ask_yn("Continue?", True):
             sys.exit("nothing changed")
     # 2. ... then run without stopping
-    if upgrade and subprocess.run(["bash", os.path.join(REPO, "scripts", "upgrade-halogen.sh")]).returncode:
-        print("! upgrade failed; continuing on the pinned version")
     eng, mod = bring_up(d, eng, plan, a.yes)
+    # after bring_up: a gufo upgrade needs halogen already stopped, and the upgraders restart a running server
+    if upgrade and subprocess.run(["bash", upgrader(eng)]).returncode:
+        print("! upgrade failed; continuing on the pinned version")
     if not install_extensions(eng, ["--voice"] if voice else [], verbose):
         print(f"! setup.sh reported problems (see above{'' if verbose else ' and ' + SETUP_LOG})")
     added = serena_languages()

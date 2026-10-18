@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Safe gufo upgrade, like halogen's: `scripts/upgrade-gufo.sh [tag]` (default: highest x.y.z tag on ghcr) pulls the image, restarts gufo on it, checks it answers and decodes > 15 t/s, then moves the pin (`GUFO_VERSION` + digest in `server/start-gufo-flashnext.sh`); any failed check restarts the old pin. Refuses while halogen runs (shared GPU memory). The wizard and `start.sh` offer it when the update check finds a newer gufo, the same way they offer halogen's (any `scripts/upgrade-<engine>.sh` is picked up). The wizard now runs the upgrade after the engine is up.
 - The update check covers every engine with a release source, not just halogen: gufo (the `GUFO_VERSION` pin in `server/start-gufo-flashnext.sh` vs ghcr tags), Strata and llama.cpp (`/props` build_info), vLLM (`/version`), Ollama (`/api/version`), each against its GitHub release. Notice only, with the upgrade command; halogen keeps its safe-upgrade offer. Same saved answer (`harness-update-check`), now asked for any engine; `start.sh` prints the notice on non-halogen engines too; `./harness update-check [engine]` on demand. Different version schemes (llama.cpp `b1234` vs `v0.7.0`) stay silent instead of guessing.
 
 ### Fixed

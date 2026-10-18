@@ -12,7 +12,7 @@
                  "start": "stop halogen first, then run server/start-gufo-flashnext.sh",
                  "script": "server/start-gufo-flashnext.sh", "loses": "NPU tools (guard, triage, dedup)",
                  "update": { "have": "pin server/start-gufo-flashnext.sh GUFO_VERSION", "latest": "ghcr:gufo-org/toolboxes/gufo-runtime",
-                             "how": "try it: GUFO_IMAGE=ghcr.io/gufo-org/toolboxes/gufo-runtime:{new} server/start-gufo-flashnext.sh (keep it: bump GUFO_VERSION + the digest there)" } },
+                             "how": "scripts/upgrade-gufo.sh (restarts gufo, checks it, pins on success, rolls back on failure)" } },
     "llamacpp": { "port": 8080,  "probe": "/health",     "provider": "llamacpp","npu": false, "managed": false, "loses": "NPU tools (guard, triage, dedup)", "note": "llama-server; see docs/LLAMACPP.md",
                  "update": { "have": "/props build_info", "latest": "gh:ggml-org/llama.cpp", "how": "rebuild or download llama.cpp {new}" } },
     "vllm":     { "port": 8000,  "probe": "/v1/models",  "provider": "vllm",    "npu": false, "managed": false, "loses": "NPU tools (guard, triage, dedup)",
