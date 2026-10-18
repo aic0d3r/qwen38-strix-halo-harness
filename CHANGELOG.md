@@ -8,6 +8,7 @@
 - The "Stop LLM servers" shortcut (`scripts/stop-all.sh`) only stopped halogen and the sidecar. It now also stops gufo (containers found by published port: digest-pinned ones show as a bare image id, so the old image-name filter missed them) and Strata (its `serve/server.py --engine strata` process). Ollama, vLLM, LM Studio and your own llama-server are left alone.
 
 ### Added
+- `image-prune.ts`: every turn re-sends the whole transcript, so each screenshot the agent ever read stayed in the request for the rest of the session - costing prefill every turn and eventually getting refused (DeepInfra: "Too many images in request: 31 > 30"). Only the newest 20 images now go out; older or duplicate ones become a one-line re-read hint. Request-local (session files keep every image), no-op for the default text-only models where pi never sends an image, `PI_MAX_HISTORY_IMAGES` tunes the cap (0 disables).
 - Esc exits the wizard and `./harness config` cleanly at any prompt (prints "cancelled", exit 130); so does Ctrl-C, which used to print a traceback. Yes/no prompts use `gum choose Yes/No` instead of `gum confirm`, because confirm exits 1 for both "No" and Esc. Without gum, prompts read single keys (y/n/Enter, a digit for menus up to 9 entries, Esc).
 
 ### Fixed

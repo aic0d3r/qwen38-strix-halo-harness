@@ -71,6 +71,11 @@ Optional / situational:
   never fire slash commands: 3 measured misses). Offloads commit messages to
   the sidecar; keeps main-model turns free.
 - `ling-tiny-repomap.ts`, `auto-guard.ts` - cheap, fired, benefit unmeasured.
+- `image-prune.ts` - a guardrail, not a saving: every turn re-sends the whole transcript, so
+  each screenshot ever read stays in the request (a provider caps it: DeepInfra 30) and keeps
+  costing prefill. Only the newest 20 images go out; older or duplicate ones become a one-line
+  re-read hint. Request-local: session files keep every image. No-op for the default text-only
+  models, where pi never sends an image. `PI_MAX_HISTORY_IMAGES` (default 20, 0 disables).
 - `context-prune.ts`, `npu-triage.ts`, `ling-tiny-triage.ts` - deleted
   (last in commit `5bc375f` under `extensions/optional/`; 0.0k saved / 0 firings across all in-session A/Bs;
   setup.sh removes stale copies on upgrade). `triage` + `dedup_scan` still
