@@ -3,6 +3,19 @@
 <!-- One block per section per release, in the order Added, Changed, Fixed. Add new entries to the
      existing block instead of opening a second one, so a release never has two "### Fixed" lists. -->
 
+## 1.7.1 - 2026-10-19
+
+### Changed
+- Pins: halogen 0.18.10 -> 0.18.12, gufo 0.17.1 -> 0.19.0 (both validated by their upgrade scripts on Strix Halo; Strata upgraded 0.1.44.1 -> 0.2.1.3 the same way).
+- Wizard order: the engine update check and upgrade offer come right after the engine pick, before any start/stop/download question; then install, free memory / download, upgrade, and the engine starts last. The install no longer launches halogen itself (`setup.sh` says it starts after the install). Upgrade scripts print a live "waiting for <engine> to load ... Ns" line.
+- Speed probe runs only when this engine + model has no saved result or the engine was just upgraded; otherwise the summary shows the saved numbers and `./harness tune` to re-measure.
+
+### Fixed
+- A stopped Strata was never offered its upgrade: the version came from the running server. It now comes from the Strata git checkout (`server/start-strata.sh --print-dir`), and `scripts/upgrade-strata.sh` starts Strata first when it is down.
+- `--doctor` with gufo or Strata active: reported halogen down and the ready check as failures, and showed both gufo and Strata "up" on the shared :8080. It now follows the active engine (`harness-profile.json`), tells gufo and Strata apart, and runs the ready check against the active engine.
+- Host check warned "order-9 pages ... will wedge" while an engine was running; the count is taken after the engine already holds its memory, so it is skipped then.
+- Sidecar left stopped after the wizard switched engines (stopping the old engine also stops the sidecar); the wizard restarts it once the new engine is up.
+
 ## 1.7.0 - 2026-10-18
 
 ### Added
