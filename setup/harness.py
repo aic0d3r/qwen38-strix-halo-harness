@@ -214,16 +214,18 @@ def apply(engine, model_id, tuned=None):
     return prov, new["models"][0]["id"], ctx
 
 
-def install_extensions(engine, extra=(), verbose=True, show_ok=True):
+def install_extensions(engine, extra=(), verbose=True, show_ok=True, launch=True):
     """Run setup.sh without a terminal on stdin (the wizard already asked everything).
     verbose=False: full output to setup.log, one line per section on screen, warnings/failures in full.
-    show_ok=False (start.sh): sections without problems leave no line at all."""
-    args = (["--halogen", "auto"] if engine == "halogen" else ["--no-halogen"]) + list(extra)
-    cmd = ["bash", os.path.join(REPO, "setup.sh"), *args]
+    show_ok=False (start.sh): sections without problems leave no line at all.
+    launch=False (wizard): setup.sh must not start halogen; the wizard starts the engine last itself."""
+    args = (["--halogen", "auto"] if launch else []) if engine == "halogen" else ["--no-halogen"]
+    cmd = ["bash", os.path.join(REPO, "setup.sh"), *args, *extra]
+    env = dict(os.environ, HARNESS_STARTS_ENGINE="" if launch else "1")
     if verbose:
-        return subprocess.run(cmd, stdin=subprocess.DEVNULL).returncode == 0
+        return subprocess.run(cmd, stdin=subprocess.DEVNULL, env=env).returncode == 0
     os.makedirs(AGENT, exist_ok=True)
-    p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True)  # stderr stays on screen (download progress)
+    p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True, env=env)  # stderr stays on screen (download progress)
     sec, issues = None, []
 
     def close():
@@ -406,16 +408,21 @@ def plan_start(engine, running, ask_start=True):
     return plan
 
 
+def prepare_start(plan, running):
+    """The parts of a start plan an upgrade also needs first: stop the memory holder, download. Runs once (clears them)."""
+    stop, dl = plan["stop"], plan["download"]
+    plan["stop"], plan["download"] = None, False
+    if stop and not stop_engine(stop, running):
+        return False
+    return not (dl and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-halogen.sh"), "--yes"]).returncode)
+
+
 def start_engine(engine, running, plan=None, wait_s=900):
     """Start an engine we ship a launcher for (halogen, gufo); asks first unless given a plan. -> True once it answers."""
     plan = plan or plan_start(engine, running)
-    if plan is None:
+    if plan is None or not prepare_start(plan, running):
         return False
     c = PROFILES["engines"][engine]
-    if plan["stop"] and not stop_engine(plan["stop"], running):
-        return False
-    if plan["download"] and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-halogen.sh"), "--yes"]).returncode:
-        return False
     log = open(f"/tmp/harness-{engine}.log", "w")
     proc = subprocess.Popen(["bash", os.path.join(REPO, c["script"])], stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
     t0 = time.time()
@@ -441,8 +448,9 @@ def not_answering(eng):
     return f"{eng} is not answering on :{e['port']} - {e.get('start', 'start it first')}"
 
 
-def pick_engine(d, yes, want=None):
-    """Questions only: -> (engine, start plan or None if it is already up). Nothing starts here."""
+def pick_engine(d, yes, want=None, on_pick=None):
+    """Questions only: -> (engine, start plan or None if it is already up). Nothing starts here.
+    on_pick(engine) runs right after the choice, before any start/stop/download question (the update check)."""
     running = {x["engine"]: x for x in d["engines"]}
     if want:
         eng = want.partition("/")[0]
@@ -456,6 +464,8 @@ def pick_engine(d, yes, want=None):
     if not running:
         print("No engine is running yet. Pick one: halogen, gufo and Strata can be started (and halogen downloaded) from here.")
     eng = engine_menu(running)
+    if on_pick:
+        on_pick(eng)
     if eng in running:
         return eng, None
     return eng, plan_start(eng, running) or sys.exit(not_answering(eng))
@@ -734,6 +744,8 @@ def finish(eng, mod, no_tune, launch=False):
             tuned = {}
     prov, mid, ctx = apply(eng, mod, tuned)
     speed = f"{tuned['prefill_tps']} t/s prefill, {tuned['decode_tps']} t/s decode" if tuned.get("decode_tps") else "not probed (./harness tune)"
+    if no_tune and tuned.get("decode_tps"):
+        speed += f" (saved {tuned.get('when', '')}; re-measure: ./harness tune)"
     print(f"\n== ready ==\n  engine   {eng} -> {prov}/{mid}\n  context  {ctx}\n  speed    {speed}")
     print("  start    ./start.sh ~/your-project")
     print(f"  choices  {choices_line()}   (change: ./harness config)")
@@ -752,32 +764,41 @@ def cmd_setup(a):
     # 1. every question first ...
     if not a.yes:
         harness_update_offer()
-    eng, plan = pick_engine(d, a.yes)
-    upgrade = not a.yes and update_offer(eng)
+    up = []  # the update check runs as soon as the engine is chosen, before "Start <engine>?"
+    eng, plan = pick_engine(d, a.yes, on_pick=None if a.yes else lambda e: up.append(update_offer(e)))
+    upgrade = bool(up and up[0])
     if not a.yes:
         ask_sidecar(a.reconfigure)
     voice = not a.yes and ask_once("voice", "Set up voice (local STT/TTS via Lemonade)?", a.reconfigure)
     if not a.yes and sys.stdin.isatty():
-        steps = ([f"upgrade {eng} (restart, rolls back on failure)"] if upgrade else []) + (
+        steps = [f"install/update pi extensions, providers, skills{'' if verbose else f' (details: {SETUP_LOG})'}",
+                 choices_line()] + (
             [f"stop {plan['stop']} and the ling-tiny sidecar"] if plan and plan["stop"] else []) + (
             ["download halogen (~124 GB, resumable)"] if plan and plan["download"] else []) + (
-            [f"start {eng} (model asked once it answers, if it serves several)"] if plan else [f"use {eng} (running)"]) + [
-            f"install/update pi extensions, providers, skills{'' if verbose else f' (details: {SETUP_LOG})'}",
-            choices_line()] + ([] if a.no_tune else ["probe speed (<2 min)"])
+            [f"upgrade {eng} (restart, rolls back on failure)"] if upgrade else []) + (
+            [f"start {eng} (model asked once it answers, if it serves several)"] if plan else [f"use {eng} (running)"]) + (
+            [] if a.no_tune else ["probe speed (<2 min; skipped if already measured for this model, unless upgraded)"])
         print("\nabout to:\n" + "".join(f"  - {s}\n" for s in steps))
         if not ask_yn("Continue?", True):
             sys.exit("nothing changed")
-    # 2. ... then run without stopping
-    eng, mod = bring_up(d, eng, plan, a.yes)
-    # after bring_up: a gufo upgrade needs halogen already stopped, and the upgraders restart a running server
-    if upgrade and subprocess.run(["bash", upgrader(eng)]).returncode:
-        print("! upgrade failed; continuing on the pinned version")
-    if not install_extensions(eng, ["--voice"] if voice else [], verbose):
+    # 2. ... then run without stopping: install, free memory/download, upgrade, and start the engine last
+    if not install_extensions(eng, ["--voice"] if voice else [], verbose, launch=False):
         print(f"! setup.sh reported problems (see above{'' if verbose else ' and ' + SETUP_LOG})")
     added = serena_languages()
     if added:
         print(f"serena: enabled language servers {added} in .serena/project.yml (restart serena to load them)")
-    finish(eng, mod, a.no_tune, launch=not a.yes)
+    if plan and not prepare_start(plan, {x["engine"]: x for x in d["engines"]}):
+        sys.exit(not_answering(eng))
+    if upgrade:  # a gufo upgrade needs halogen already stopped; the upgraders start/restart the server themselves
+        print(f"\n== upgrading {eng} ==")
+        if subprocess.run(["bash", upgrader(eng)]).returncode:
+            print("! upgrade failed; continuing on the pinned version")
+        d["engines"] = detect()["engines"]
+        if plan and served_models(PROFILES["engines"][eng]["port"], eng):
+            plan = None  # the upgrade left it running: nothing to start
+    eng, mod = bring_up(d, eng, plan, a.yes)
+    saved = jget(os.path.join(AGENT, "harness-tuned.json"), {}).get(hw_key(eng, mod), {}).get("decode_tps")
+    finish(eng, mod, a.no_tune or (bool(saved) and not upgrade), launch=not a.yes)
 
 
 def cmd_use(a):

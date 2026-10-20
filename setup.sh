@@ -622,6 +622,8 @@ elif [ -n "$HALOGEN_CKPT" ]; then
       hal_up || fail "not healthy after 5 min - check $REPO/halogen.log"
     fi
   fi
+elif [ -n "${HARNESS_STARTS_ENGINE:-}" ]; then
+  ok "halogen starts after the install (the wizard's last step)"
 elif [ -n "$(find_ckpt)" ]; then
   warn "halogen down but a checkpoint exists - start it: ./setup.sh --halogen auto"
 else

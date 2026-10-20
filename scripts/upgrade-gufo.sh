@@ -47,7 +47,8 @@ echo "[2/4] restarting on $TAG (first load of the model can take minutes)"
 rm -f "$LOG"
 GUFO_IMAGE="$IMG@$DIGEST" setsid nohup bash "$START" > "$LOG" 2>&1 < /dev/null &
 up(){ curl -sf -m 3 "$URL/v1/models" | grep -q '"owned_by": *"gufo"'; }
-for i in $(seq 1 60); do sleep 15; up && break; done
+for i in $(seq 1 60); do sleep 15; [ -t 1 ] && printf '\r      waiting for gufo to load ... %ss (gives up at 900s)' $((i*15)); up && break; done
+[ -t 1 ] && printf '\r\033[K'
 up || { tail -5 "$LOG"; rollback "not answering after $((i*15))s (log: $LOG)"; }
 echo "      answering on :$PORT"
 

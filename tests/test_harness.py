@@ -96,4 +96,23 @@ assert h.engine_update("lmstudio") == ""  # no update source: silent
 open(f"{AGENT}/harness-sidecar", "w").write("0\n")
 assert "sidecar off" in h.choices_line()
 os.remove(f"{AGENT}/harness-sidecar")
+# setup order: update offered right after the engine pick (before any start question); then install (no launch),
+# free memory, upgrade, start last; an upgrade forces a fresh probe even when a saved result exists
+import argparse, types
+calls, saved = [], {n: getattr(h, n) for n in ("pick_engine", "update_offer", "upgrader", "install_extensions", "prepare_start", "bring_up", "finish", "harness_update_offer", "ask_sidecar", "ask_once", "served_models")}
+h.harness_update_offer = h.ask_sidecar = lambda *a: None
+h.ask_once = lambda *a: False
+h.pick_engine = lambda d, yes, want=None, on_pick=None: (on_pick("gufo"), calls.append("plan_start"), ("gufo", {"stop": "halogen", "download": False}))[2]
+h.update_offer = lambda e: calls.append("update_offer") or True
+h.upgrader = lambda e: "/bin/true"
+h.install_extensions = lambda e, x, v, launch=True: calls.append(f"install launch={launch}") or True
+h.prepare_start = lambda p, r: calls.append("prepare") or True
+h.served_models = lambda *a: []
+h.bring_up = lambda d, e, p, y: calls.append(f"start plan={p is not None}") or (e, "Qwen3-8B")
+h.finish = lambda e, m, no_tune, launch=False: calls.append(f"probe={not no_tune}")
+real_run, h.subprocess.run = h.subprocess.run, lambda *a, **k: calls.append("upgrade") or types.SimpleNamespace(returncode=0)
+h.cmd_setup(argparse.Namespace(yes=False, verbose=False, reconfigure=False, no_tune=False))
+h.subprocess.run = real_run
+for n, f in saved.items(): setattr(h, n, f)
+assert calls == ["update_offer", "plan_start", "install launch=False", "prepare", "upgrade", "start plan=True", "probe=True"], calls
 print("ok")

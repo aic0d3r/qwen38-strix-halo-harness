@@ -66,8 +66,10 @@ HALOGEN_IMAGE_TAG="$TAG" HALOGEN_IMAGE_DIGEST= setsid nohup bash "$START" > "$LO
 
 for i in $(seq 1 18); do
   sleep 20
+  [ -t 1 ] && printf '\r      waiting for halogen to load ... %ss (gives up at 360s)' $((i*20))
   curl -sf -m 3 "$HEALTH" >/dev/null 2>&1 && break
 done
+[ -t 1 ] && printf '\r\033[K'
 curl -sf -m 5 "$HEALTH" >/dev/null || { tail -5 "$LOG"; rollback "not healthy after $((i*20))s (log: $LOG)"; }
 
 V=$(curl -sf -m 5 "$HEALTH" | python3 -c "
