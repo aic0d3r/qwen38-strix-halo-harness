@@ -3,7 +3,7 @@
 <!-- One block per section per release, in the order Added, Changed, Fixed. Add new entries to the
      existing block instead of opening a second one, so a release never has two "### Fixed" lists. -->
 
-## 1.7.1 - 2026-10-19
+## 1.7.1 - 2026-10-20
 
 ### Changed
 - Pins: halogen 0.18.10 -> 0.18.12, gufo 0.17.1 -> 0.19.0 (both validated by their upgrade scripts on Strix Halo; Strata upgraded 0.1.44.1 -> 0.2.1.3 the same way).
