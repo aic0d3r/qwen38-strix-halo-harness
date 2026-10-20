@@ -129,8 +129,15 @@ if [ "$DOCTOR" = 1 ]; then
   [ -f "$PI_HOME/agent/mcp.json" ]  && ok "mcp.json present (serena+jina+semble)" || warn "no mcp.json - serena/jina/semble unavailable (run ./setup.sh)"
   if [ "$SIDECAR_ON" = 0 ]; then ok "sidecar off (opted out; ./setup.sh --sidecar turns it on)"
   else tiny_up                      && ok "sidecar up (:8090)"     || fail "sidecar down - run ./setup.sh (or: systemctl --user enable --now ling-tiny)"; fi
-  if [ -f "$EXT_DIR/npu-retrieval.ts" ]; then
+  # the active engine (what the wizard set pi up for) decides what "down" means; detect tells gufo/Strata apart on :8080
+  read -r ACT ACT_PROV ACT_MID < <(python3 -c 'import json,sys;p=json.load(open(sys.argv[1]));print(p["engine"],p["provider"],p["model"])' \
+    "${PI_CODING_AGENT_DIR:-$PI_HOME/agent}/harness-profile.json" 2>/dev/null)
+  [ -z "${ACT:-}" ] && [ -f "$EXT_DIR/npu-retrieval.ts" ] && { ACT=halogen; ACT_PROV=halogen; ACT_MID=halogen-qwen3.8-flash-next; }
+  RUNNING=" $(python3 "$REPO/setup/harness.py" detect 2>/dev/null | python3 -c 'import json,sys;print(" ".join(e["engine"] for e in json.load(sys.stdin)["engines"]))' 2>/dev/null) "
+  if [ -f "$EXT_DIR/npu-retrieval.ts" ] && [ "${ACT:-}" = halogen ]; then
     hal_up                          && ok "halogen up (:8731)"     || fail "halogen down - run: ./setup.sh --halogen auto   (or existing start-halogen.sh)"
+  elif [ -f "$EXT_DIR/npu-retrieval.ts" ]; then
+    hal_up                          && ok "halogen up (:8731)"     || ok "halogen down (active engine is $ACT; NPU tools idle until you switch back with ./setup.sh)"
   else
     # pi-only install (--no-halogen or extensions never installed): halogen is not ours to manage
     hal_up                          && ok "halogen up (:8731, not managed by this install)" || warn "halogen down (pi-only install - fine unless you want the NPU tools)"
@@ -151,18 +158,21 @@ if [ "$DOCTOR" = 1 ]; then
   [ -f "$REPO/start-halogen.sh" ]   && ok "start-halogen.sh ready" || warn "no start-halogen.sh yet (written on first --halogen launch)"
   for e in strata gufo; do
     if python3 -c "import json;json.load(open('$MODELS_JSON'))['providers']['$e']" 2>/dev/null; then
-      eng_up && ok "$e up ($ENG_URL)" || fail "$e down - start it, or pass its url: ./setup.sh --doctor --$e <url>"
+      if [[ "$RUNNING" == *" $e "* ]]; then ok "$e up (:8080)"
+      elif [ "$e" = "${ACT:-}" ]; then fail "$e down (the active engine) - ./start.sh starts it"
+      else ok "$e configured, not running (not the active engine)"; fi
     fi
   done
   host_checks
-  if [ -f "$EXT_DIR/npu-retrieval.ts" ] && ! hal_up; then fail "ready check skipped: halogen is down"
-  elif [ -f "$EXT_DIR/npu-retrieval.ts" ]; then
+  if [ -z "${ACT:-}" ]; then :
+  elif [[ "$RUNNING" != *" $ACT "* ]]; then fail "ready check skipped: $ACT is down"
+  else
     RC=$(mktemp); T0=$SECONDS
-    timeout 120 pi -p --no-skills --no-context-files --provider halogen --model halogen-qwen3.8-flash-next --thinking low "Reply with exactly: OK" > "$RC" 2>/dev/null &
-    while kill -0 $! 2>/dev/null; do [ -t 1 ] && printf '\r  … ready check: asking halogen for a reply (%ss, gives up at 120s)' $((SECONDS-T0)); sleep 1; done
+    timeout 120 pi -p --no-skills --no-context-files --provider "$ACT_PROV" --model "$ACT_MID" --thinking low "Reply with exactly: OK" > "$RC" 2>/dev/null &
+    while kill -0 $! 2>/dev/null; do [ -t 1 ] && printf '\r  … ready check: asking %s for a reply (%ss, gives up at 120s)' "$ACT" $((SECONDS-T0)); sleep 1; done
     [ -t 1 ] && printf '\r\033[K'
     R=$(grep -c 'OK' "$RC"); rm -f "$RC"
-    [ "$R" -ge 1 ] && ok "ready check: model answered" || fail "ready check: no reply from halogen"
+    [ "$R" -ge 1 ] && ok "ready check: $ACT answered" || fail "ready check: no reply from $ACT"
   fi
   exit 0
 fi

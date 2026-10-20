@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # upgrade-strata.sh - update Strata with its own ./update.sh, restart it exactly the way it was running,
 # run the acceptance battery, and roll back to the previous commit if anything fails.
-#   scripts/upgrade-strata.sh      (Strata must be running: the restart reuses its folder and command line)
+#   scripts/upgrade-strata.sh      (starts Strata first if it is down: the restart reuses its folder and command line)
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 PORT=8080
@@ -9,6 +9,16 @@ URL=http://127.0.0.1:$PORT
 LOG=/tmp/strata-upgrade.log
 
 PID=$(ss -ltnpH "sport = :$PORT" 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
+if [ -z "$PID" ]; then
+  echo "[0/4] Strata is not running - starting it (server/start-strata.sh) so the upgrade can restart it the same way"
+  setsid nohup bash "$REPO/server/start-strata.sh" > "$LOG.start" 2>&1 < /dev/null &
+  for i in $(seq 1 80); do
+    sleep 15; [ -t 1 ] && printf '\r      waiting for Strata to load ... %ss (gives up at 1200s)' $((i*15))
+    curl -sf -m 3 "$URL/v1/models" >/dev/null && break
+  done
+  [ -t 1 ] && printf '\r\033[K'
+  PID=$(ss -ltnpH "sport = :$PORT" 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
+fi
 if [ -z "$PID" ] || ! tr '\0' ' ' < "/proc/$PID/cmdline" 2>/dev/null | grep -q 'serve/server.py'; then
   echo "FAIL: Strata is not running on :$PORT - start it first (the upgrade restarts it the same way)"; exit 1
 fi
@@ -28,7 +38,7 @@ stop(){
 }
 # BROWSER=true: Strata's --open would pop a browser tab on every restart
 start(){ (cd "$DIR" && BROWSER=true setsid nohup "${CMD[@]}" > "$1" 2>&1 < /dev/null &); }
-wait_up(){ for _ in $(seq 1 80); do sleep 15; curl -sf -m 3 "$URL/v1/models" >/dev/null && return 0; done; return 1; }
+wait_up(){ for i in $(seq 1 80); do sleep 15; [ -t 1 ] && printf '\r      waiting for Strata to load ... %ss (gives up at 1200s)' $((i*15)); curl -sf -m 3 "$URL/v1/models" >/dev/null && { [ -t 1 ] && printf '\r\033[K'; return 0; }; done; return 1; }
 rollback(){
   echo "FAIL: $1 - rolling back to $CUR"
   stop

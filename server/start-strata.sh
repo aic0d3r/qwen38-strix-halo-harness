@@ -7,6 +7,7 @@ set -u
 for d in "${STRATA_DIR:-}" "$HOME/coding/Strata" "$HOME/Strata" "$HOME/strata" "$HOME/src/Strata"; do
   [ -n "$d" ] && [ -f "$d/setup.py" ] && [ -f "$d/update.sh" ] && { DIR=$d; break; }
 done
+[ "${1:-}" = --print-dir ] && { echo "${DIR:-}"; exit 0; }  # the update check reads the version from this checkout
 [ -n "${DIR:-}" ] || { echo "Strata not found (looked in \$STRATA_DIR, ~/coding/Strata, ~/Strata, ~/strata, ~/src/Strata): install it per its README, or set STRATA_DIR" >&2; exit 1; }
 export BROWSER=true  # its --open would pop a browser tab on every start
 cd "$DIR" || exit 1

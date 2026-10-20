@@ -9,7 +9,7 @@
     "strata":   { "port": 8080,  "probe": "/v1/models",  "provider": "strata",  "npu": false, "managed": false, "loses": "NPU tools (guard, triage, dedup)", "note": "NVIDIA/AMD desktop GPUs",
                  "start": "install Strata per its README (docs/ENGINES.md#strata-the-pick-for-nvidia-and-amd-desktop-gpus), then ./setup.sh can start it",
                  "script": "server/start-strata.sh",
-                 "update": { "have": "/props build_info", "latest": "gh:Niko1221/Strata", "how": "scripts/upgrade-strata.sh (runs Strata's update.sh, restarts it, checks it, rolls back on failure)" } },
+                 "update": { "have": "dir server/start-strata.sh", "latest": "gh:Niko1221/Strata", "how": "scripts/upgrade-strata.sh (runs Strata's update.sh, restarts it, checks it, rolls back on failure)" } },
     "gufo":     { "port": 8080,  "probe": "/v1/models",  "provider": "gufo",    "npu": false, "managed": false,
                  "note": "shares :8080 with strata/llama.cpp; told apart by owned_by=gufo in /v1/models",
                  "start": "stop halogen first, then run server/start-gufo-flashnext.sh",

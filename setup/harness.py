@@ -637,6 +637,9 @@ def engine_update(engine):
         if kind == "pin":  # version pinned in our launcher: known even while the engine is down
             # GUFO_VERSION=0.12.0 / IMAGE_TAG="${HALOGEN_IMAGE_TAG:-0.18.10}"
             have = re.search(rf"{rest[1]}(?:=|:-)([0-9.]+)", open(os.path.join(REPO, rest[0])).read()).group(1)
+        elif kind == "dir":  # a git checkout our launcher starts (Strata): its tag, known while the engine is down
+            src = subprocess.run(["bash", os.path.join(REPO, rest[0]), "--print-dir"], capture_output=True, text=True).stdout.strip()
+            have = subprocess.run(["git", "-C", src, "describe", "--tags"], capture_output=True, text=True).stdout.strip()
         else:  # what the running server reports
             have = json.load(http(f"http://127.0.0.1:{PROFILES['engines'][engine]['port']}{kind}"))[rest[0]]
         src, repo = u["latest"].split(":", 1)
@@ -797,6 +800,8 @@ def cmd_setup(a):
         if plan and served_models(PROFILES["engines"][eng]["port"], eng):
             plan = None  # the upgrade left it running: nothing to start
     eng, mod = bring_up(d, eng, plan, a.yes)
+    if sidecar_pref() != "0":  # stopping the old engine also stopped the sidecar the install had started
+        subprocess.run(["systemctl", "--user", "start", "ling-tiny.service"], stderr=subprocess.DEVNULL)
     saved = jget(os.path.join(AGENT, "harness-tuned.json"), {}).get(hw_key(eng, mod), {}).get("decode_tps")
     finish(eng, mod, a.no_tune or (bool(saved) and not upgrade), launch=not a.yes)
 

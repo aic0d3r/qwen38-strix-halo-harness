@@ -110,9 +110,9 @@ h.prepare_start = lambda p, r: calls.append("prepare") or True
 h.served_models = lambda *a: []
 h.bring_up = lambda d, e, p, y: calls.append(f"start plan={p is not None}") or (e, "Qwen3-8B")
 h.finish = lambda e, m, no_tune, launch=False: calls.append(f"probe={not no_tune}")
-real_run, h.subprocess.run = h.subprocess.run, lambda *a, **k: calls.append("upgrade") or types.SimpleNamespace(returncode=0)
+real_run, h.subprocess.run = h.subprocess.run, lambda *a, **k: calls.append("upgrade" if a[0][0] == "bash" else " ".join(a[0][:3])) or types.SimpleNamespace(returncode=0)
 h.cmd_setup(argparse.Namespace(yes=False, verbose=False, reconfigure=False, no_tune=False))
 h.subprocess.run = real_run
 for n, f in saved.items(): setattr(h, n, f)
-assert calls == ["update_offer", "plan_start", "install launch=False", "prepare", "upgrade", "start plan=True", "probe=True"], calls
+assert calls == ["update_offer", "plan_start", "install launch=False", "prepare", "upgrade", "start plan=True", "systemctl --user start", "probe=True"], calls
 print("ok")
