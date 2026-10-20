@@ -18,8 +18,8 @@ if [ "$CTX" != "65536" ] && [ -n "$O9" ] && [ "$O9" -lt 1000 ]; then
 fi
 ENGINE_DIR=${ENGINE_DIR:-$HOME/LLMBench/models/qwen38-flash-next}
 # pinned like halogen (0.12.0 measured in docs/ENGINES.md); scripts/upgrade-gufo.sh moves both lines
-GUFO_VERSION=0.17.1  # the tag the digest below was pulled as; ./harness update-check compares against it
-GUFO_IMAGE=${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime@sha256:cd509a010995c90a7a8de5806f0c5fd77f2d50fa210b2d99356cb60cc56cb8bc}
+GUFO_VERSION=0.19.0  # the tag the digest below was pulled as; ./harness update-check compares against it
+GUFO_IMAGE=${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime@sha256:51be93845170ce3ce441c7399b5b2eba942baf7f3e6c9a4a3333fccecc27d190}
 PORT=${PORT:-8080}
 RENDER_GID=$(getent group render | cut -d: -f3); VIDEO_GID=$(getent group video | cut -d: -f3)
 exec docker run --rm -i \

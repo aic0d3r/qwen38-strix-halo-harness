@@ -93,8 +93,8 @@ hint_fixed(){ [ -f "$HINTS" ] && sed -i "/^$1\$/d" "$HINTS"; return 0; }
 host_checks(){
   local o9
   o9=$(awk '$4=="Normal"{u=0; for(i=14;i<=NF;i++) u+=$(i)*2**(i-14); print u}' /proc/buddyinfo 2>/dev/null | head -1)
-  # a running halogen already holds its pinned memory, so the count only means something before a launch
-  if hal_up; then ok "order-9 pages: n/a while halogen runs (it already has its memory)"
+  # a running engine (halogen :8731, gufo/Strata :8080) holds the GPU heap, so the count only means something before a launch
+  if hal_up || curl -sf -m 3 localhost:8080/v1/models >/dev/null 2>&1; then ok "order-9 pages: n/a while an engine holds the GPU memory"
   else [ -n "$o9" ] && [ "$o9" -lt 200 ] \
     && warn "order-9 pages = $o9 (<200): full-ctx halogen (262k) will wedge; 65k/2-slot is fine. reboot before full-ctx." \
     || ok "order-9 pages: ${o9:-n/a}"; fi
