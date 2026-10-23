@@ -3,7 +3,7 @@
 <!-- One block per section per release, in the order Added, Changed, Fixed. Add new entries to the
      existing block instead of opening a second one, so a release never has two "### Fixed" lists. -->
 
-## Unreleased
+## 1.8.0 - 2026-10-23
 
 ### Added
 - `scripts/set-image-limits.py`, run by `setup.sh`: caps image resolution at 450×1000 on every image-capable model pi lists (own providers via `inputLimits`, built-ins via `modelOverrides`), so a 1080×2400 phone screenshot costs ~600 instead of ~1,500 Claude tokens. `PI_IMAGE_MAX=WxH` changes it, `off` skips it; the first run backs up `models.json.pre-image-limits`.
