@@ -115,4 +115,14 @@ h.cmd_setup(argparse.Namespace(yes=False, verbose=False, reconfigure=False, no_t
 h.subprocess.run = real_run
 for n, f in saved.items(): setattr(h, n, f)
 assert calls == ["update_offer", "plan_start", "install launch=False", "prepare", "upgrade", "start plan=True", "systemctl --user start", "probe=True"], calls
+# upgrade chosen: pick_engine must not ask "Start <engine>?" (declining it used to exit setup); without one it does
+asked, saved = [], {n: getattr(h, n) for n in ("engine_menu", "plan_start")}
+h.engine_menu = lambda r: "halogen"
+h.plan_start = lambda e, r, ask_start=True: asked.append(ask_start) or {"stop": None, "download": False}
+real_stdin, h.sys.stdin = h.sys.stdin, types.SimpleNamespace(isatty=lambda: True)
+for want in (True, False):
+    h.pick_engine({"engines": []}, False, on_pick=lambda e: want)
+h.sys.stdin = real_stdin
+for n, f in saved.items(): setattr(h, n, f)
+assert asked == [False, True], asked
 print("ok")

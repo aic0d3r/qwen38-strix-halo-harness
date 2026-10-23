@@ -3,6 +3,14 @@
 <!-- One block per section per release, in the order Added, Changed, Fixed. Add new entries to the
      existing block instead of opening a second one, so a release never has two "### Fixed" lists. -->
 
+## 1.8.1 - 2026-10-23
+
+### Changed
+- Pin: halogen 0.18.12 -> 0.18.14 (validated by `scripts/upgrade-halogen.sh`).
+
+### Fixed
+- Wizard exited when you chose an engine upgrade and then answered no to "Start <engine>?". Every upgrader (halogen, gufo, Strata) starts the engine itself, so once an upgrade is chosen the start question is skipped; stop/download questions are still asked.
+
 ## 1.8.0 - 2026-10-23
 
 ### Added

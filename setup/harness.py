@@ -464,11 +464,12 @@ def pick_engine(d, yes, want=None, on_pick=None):
     if not running:
         print("No engine is running yet. Pick one: halogen, gufo and Strata can be started (and halogen downloaded) from here.")
     eng = engine_menu(running)
-    if on_pick:
-        on_pick(eng)
+    upgrading = on_pick(eng) if on_pick else False
     if eng in running:
         return eng, None
-    return eng, plan_start(eng, running) or sys.exit(not_answering(eng))
+    if upgrading:  # every upgrader starts the engine itself: "Start?" would be a question with only one answer
+        print(f"  the {eng} upgrade starts it")
+    return eng, plan_start(eng, running, ask_start=not upgrading) or sys.exit(not_answering(eng))
 
 
 def bring_up(d, eng, plan, yes, mod=""):
@@ -768,7 +769,7 @@ def cmd_setup(a):
     if not a.yes:
         harness_update_offer()
     up = []  # the update check runs as soon as the engine is chosen, before "Start <engine>?"
-    eng, plan = pick_engine(d, a.yes, on_pick=None if a.yes else lambda e: up.append(update_offer(e)))
+    eng, plan = pick_engine(d, a.yes, on_pick=None if a.yes else lambda e: up.append(update_offer(e)) or up[0])
     upgrade = bool(up and up[0])
     if not a.yes:
         ask_sidecar(a.reconfigure)
