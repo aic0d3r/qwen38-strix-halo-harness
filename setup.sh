@@ -322,6 +322,11 @@ else fail "could not parse $MODELS_JSON or settings.json - fix the JSON and re-r
 fi
 fi
 
+# screenshots cost tokens by pixel size: cap every image-capable model (re-run covers new models)
+if command -v pi >/dev/null && command -v python3 >/dev/null; then
+  python3 "$REPO/scripts/set-image-limits.py" || warn "image cap not applied (PI_IMAGE_MAX=off skips it)"
+fi
+
 echo "== 2a-2. prompt templates =="
 # pi loads personal prompt templates from agent/prompts/; older installs copied to
 # ~/.pi/templates, which pi never reads - drop those stale copies

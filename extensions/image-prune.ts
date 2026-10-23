@@ -4,16 +4,16 @@
 // newest images in the request and swap older or duplicate ones for a text stub. The session file
 // keeps every image: `context` is request-local and restored after, and re-reading a file adds one
 // fresh image, not another permanent one. No-op for the default text-only models, where pi never
-// puts an image in the request at all. Tune with PI_MAX_HISTORY_IMAGES (0 disables); 20 leaves
-// headroom under the 30 cap. Savings are logged to harness-events.jsonl (c: "image-prune").
-// shortcut: the cap is a total, so one message with more than 20 images keeps only its newest;
+// puts an image in the request at all. Tune with PI_MAX_HISTORY_IMAGES (0 disables); 4 is
+// enough for phone/browser automation, which only needs the last few screens. Savings are logged to harness-events.jsonl (c: "image-prune").
+// shortcut: the cap is a total, so one message with more than 4 images keeps only its newest;
 // raise the cap if a provider with a bigger image budget needs them.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 
-const MAX_IMAGES = Number(process.env.PI_MAX_HISTORY_IMAGES ?? 20);
+const MAX_IMAGES = Number(process.env.PI_MAX_HISTORY_IMAGES ?? 4);
 const STUB = "[image omitted from history: re-read the file if you need to see it again]";
 
 type Block = { type?: string; data?: string; [key: string]: unknown };
