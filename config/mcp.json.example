@@ -31,6 +31,20 @@
       },
       "description": "Serena LSP toolbox: symbol-precise code navigation, diagnostics, and edits (activate_project first)"
     },
+    "ddg": {
+      "command": "uvx",
+      "args": ["--with", "duckduckgo-mcp-server[browser]", "duckduckgo-mcp-server"],
+      "enabled": true,
+      "exposure": "hidden",
+      "toolExposure": {
+        "search": "direct",
+        "fetch_content": "direct",
+        "expand_link": "direct",
+        "*": "hidden"
+      },
+      "env": { "DDG_PARSE_MODE": "markdown" },
+      "description": "DuckDuckGo web search + page reading (no API key; lightweight Jina alternative)"
+    },
     "jina": {
       "url": "https://mcp.jina.ai/v1",
       "headers": { "Authorization": "${JINA_API_KEY}" },

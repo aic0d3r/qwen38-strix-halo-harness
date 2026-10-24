@@ -21,10 +21,15 @@ file whole only when you need most of it; otherwise use `offset`/`limit`. Serena
 language server for the file's language (`.serena/project.yml` `language_servers`); if a tool
 reports none, fall back to semble + `read` with `offset`/`limit`.
 
-## Web search — jina
+## Web search — DuckDuckGo
 
 If an answer depends on knowledge likely newer than your training (recent packages/tools,
-releases, maintenance status, current docs, "best X" questions) and Jina is enabled, search with
-it first (`tools.mcp__jina__*` via codemode), then answer. Check `~/.pi/agent/mcp.json`
-(`enabled: false` = off) or just try the call before telling the user a tool is unavailable.
-Jina ships disabled in the example config: enable it with `/mcp`.
+releases, maintenance status, current docs, "best X" questions), search with the DuckDuckGo MCP
+server first (`mcp__ddg__search`), then read the sources with `mcp__ddg__fetch_content`. It ships
+enabled, needs no API key, and returns Markdown (`max_length` / `start_index` paginate long pages).
+Long URLs may come back as `ref://` tokens; `fetch_content` accepts them directly, and
+`mcp__ddg__expand_link` resolves them.
+
+Jina ships disabled: enable it with `/mcp` when you need academic search (arXiv/SSRN), images, or
+reranking. Check `~/.pi/agent/mcp.json` (`enabled: false` = off) before telling the user a tool is
+unavailable.

@@ -55,6 +55,7 @@ the dashboards are yours to build; these two scripts exist because they cost no 
 | `triage` / `dedup_scan` return an error | halogen down, or the model missing from `HALOGEN_NPU_MODELS` — check the `npu` field of `curl -s localhost:8731/health` |
 | hangs or garbage when GPU and NPU work at once | GPU fabric clock not held — `./setup.sh --doctor` prints the one-time unit install |
 | semantic search unavailable | `uvx` missing (install uv) or `mcp.json` lacks the semble entry — rerun `./setup.sh` and check `pi mcp list` |
+| web search unavailable | `uvx` missing or `mcp.json` lacks the ddg entry — rerun `./setup.sh`; DDG rate-limits searches to 30/min by default |
 | stale task on resume | checkpoint from a previous task — `rm PROGRESS.md`, restart |
 | want zero-touch sidecar after reboot | `systemctl --user enable ling-tiny` (off by default on purpose) |
 

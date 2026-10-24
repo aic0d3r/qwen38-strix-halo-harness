@@ -8,7 +8,7 @@
 #                               (saved answers: ./harness config)
 #   ./setup.sh --halogen [auto|path.hgn]  also provision + start the halogen server
 #   ./setup.sh --doctor         read-only status check
-#   ./setup.sh --refresh-mcp    reset serena/semble MCP exposure to the shipped config (backs up mcp.json first)
+#   ./setup.sh --refresh-mcp    reset serena/semble MCP exposure and ensure ddg (backs up mcp.json first)
 #   ./setup.sh --no-halogen     pi-only install: skip the halogen provider, the NPU
 #                               extensions and all container management (for boxes that
 #                               run pi without a local halogen, e.g. a laptop against a
@@ -128,7 +128,7 @@ if [ "$DOCTOR" = 1 ]; then
   # halogen provider is only ours on NPU installs (--no-halogen skips it and the NPU extensions)
   python3 -c "import json,os;p=json.load(open('$MODELS_JSON'))['providers'];p['llamacpp-tiny'];os.path.exists('$EXT_DIR/npu-retrieval.ts') and p['halogen']" 2>/dev/null \
                                     && ok "providers configured"   || fail "providers missing - run ./setup.sh"
-  [ -f "$PI_HOME/agent/mcp.json" ]  && ok "mcp.json present (serena+jina+semble)" || warn "no mcp.json - serena/jina/semble unavailable (run ./setup.sh)"
+  [ -f "$PI_HOME/agent/mcp.json" ]  && ok "mcp.json present (serena+ddg+jina+semble)" || warn "no mcp.json - serena/ddg/jina/semble unavailable (run ./setup.sh)"
   if [ -f "$PI_HOME/agent/mcp.json" ]; then
     MCP_DRIFT=$(python3 "$REPO/setup/mcp.py" check "$PI_HOME/agent/mcp.json" 2>/dev/null)
     [ -n "$MCP_DRIFT" ] && warn "$MCP_DRIFT"
@@ -347,7 +347,7 @@ for f in "$REPO"/templates/*.md; do
 done
 ok "prompt templates current ($T updated, $(ls "$PROMPTS" 2>/dev/null | wc -l) total)"
 # codebase search is the semble MCP server (mcp.json): verify its runtime is available
-if command -v uvx >/dev/null; then ok "uvx found (semble MCP runnable)"; else warn "uvx not found - semantic search (semble) unavailable; install uv (https://docs.astral.sh/uv)"; fi
+if command -v uvx >/dev/null; then ok "uvx found (semble + ddg MCP runnable)"; else warn "uvx not found - semantic search and web search (semble/ddg) unavailable; install uv (https://docs.astral.sh/uv)"; fi
 
 echo "== 2a. skills + pi packages =="
 SKILL_DIR="$PI_HOME/agent/skills"; mkdir -p "$SKILL_DIR"
@@ -401,13 +401,13 @@ MCP_JSON="$PI_HOME/agent/mcp.json"
 if [ -f "$MCP_JSON" ]; then
   if [ "$REFRESH_MCP" = 1 ]; then
     if python3 "$REPO/setup/mcp.py" refresh "$MCP_JSON"; then
-      ok "mcp.json refreshed (serena + semble; other servers untouched)"
+      ok "mcp.json refreshed (serena/semble exposure; ddg ensured; other servers untouched)"
     else
       warn "could not refresh $MCP_JSON (left untouched)"
     fi
   else
     if python3 "$REPO/setup/mcp.py" migrate "$MCP_JSON"; then
-      ok "mcp.json exists (serena/semble migrated when they match an old layout)"
+      ok "mcp.json exists (serena/semble migrated, ddg added when missing)"
     else
       warn "could not update $MCP_JSON (left untouched)"
     fi

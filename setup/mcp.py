@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Canonical pi MCP configuration: fresh write, stale-layout migration, explicit refresh, doctor check.
 
-  python3 setup/mcp.py write    PATH   # no mcp.json yet: write serena + jina + semble
-  python3 setup/mcp.py migrate  PATH   # existing: add --project-from-cwd/semble; upgrade an exact stale layout
-  python3 setup/mcp.py refresh  PATH   # existing: reset serena/semble exposure (backup first; other servers untouched)
+  python3 setup/mcp.py write    PATH   # no mcp.json yet: write serena + ddg + jina + semble
+  python3 setup/mcp.py migrate  PATH   # existing: add --project-from-cwd/ddg/semble; upgrade an exact stale layout
+  python3 setup/mcp.py refresh  PATH   # existing: reset serena/semble exposure and ensure ddg (backup first)
   python3 setup/mcp.py check    PATH   # print drift lines for --doctor, or nothing
 
 Stdlib only. Only exact-match stale layouts are migrated; customized exposure is left alone.
@@ -49,6 +49,12 @@ SEMBLE_ARGS = ["--from", "semble[mcp]==0.6.2", "semble"]
 SEMBLE_DESC = ("Semble instant semantic code search (local or remote git repos; replaced the NPU rag "
                "pipeline - A/B 17/18 vs 13/18, 2026-10-10)")
 SEMBLE_EXPOSURE = {"search": "direct", "find_related": "direct", "*": "hidden"}
+
+DDG_COMMAND = "uvx"
+DDG_ARGS = ["--with", "duckduckgo-mcp-server[browser]", "duckduckgo-mcp-server"]
+DDG_DESC = "DuckDuckGo web search + page reading (no API key; lightweight Jina alternative)"
+DDG_EXPOSURE = {"search": "direct", "fetch_content": "direct", "expand_link": "direct", "*": "hidden"}
+DDG_ENV = {"DDG_PARSE_MODE": "markdown"}
 
 JINA_DESC = "Jina web search and page reading (enable via /mcp; needs the key file)"
 JINA_KEY = "~/.config/opencode/jina.key"
@@ -100,6 +106,28 @@ def backup_once(path, suffix):
     return bak
 
 
+def semble_server():
+    return {
+        "command": SEMBLE_COMMAND,
+        "args": list(SEMBLE_ARGS),
+        "exposure": "hidden",
+        "toolExposure": dict(SEMBLE_EXPOSURE),
+        "description": SEMBLE_DESC,
+    }
+
+
+def ddg_server():
+    return {
+        "command": DDG_COMMAND,
+        "args": list(DDG_ARGS),
+        "enabled": True,
+        "exposure": "hidden",
+        "toolExposure": dict(DDG_EXPOSURE),
+        "env": dict(DDG_ENV),
+        "description": DDG_DESC,
+    }
+
+
 def canonical_servers():
     servers = {
         "serena": {
@@ -109,19 +137,14 @@ def canonical_servers():
             "toolExposure": serena_exposure(),
             "description": SERENA_DESC,
         },
+        "ddg": ddg_server(),
         "jina": {
             "url": "https://mcp.jina.ai/v1",
             "headers": {"Authorization": "!echo Bearer $(cat %s)" % JINA_KEY},
             "enabled": False,
             "description": JINA_DESC,
         },
-        "semble": {
-            "command": SEMBLE_COMMAND,
-            "args": list(SEMBLE_ARGS),
-            "exposure": "hidden",
-            "toolExposure": dict(SEMBLE_EXPOSURE),
-            "description": SEMBLE_DESC,
-        },
+        "semble": semble_server(),
     }
     if not os.path.exists(os.path.expanduser(JINA_KEY)):
         servers["jina"]["headers"] = {"Authorization": "${JINA_API_KEY}"}
@@ -130,7 +153,7 @@ def canonical_servers():
 
 def cmd_write(path):
     save(path, {"mcpServers": canonical_servers()})
-    print("  wrote mcp.json (serena direct x9, jina disabled, semble direct x2)")
+    print("  wrote mcp.json (serena direct x9, ddg direct x3, jina disabled, semble direct x2)")
 
 
 def cmd_migrate(path):
@@ -147,24 +170,23 @@ def cmd_migrate(path):
             print("  serena: added --project-from-cwd (auto-activates the cwd project)")
         te = s.get("toolExposure")
         if s.get("exposure") == "hidden" and (te == OLD_GENERATED or te == OLD_16):
-            backup_once(path, ".pre-mcp-migration")
             s["exposure"] = "codemode"
             s["toolExposure"] = serena_exposure()
             changed = True
             print("  serena: migrated stale %d-direct hidden layout to 9 direct + codemode tail" % (len(te) - 1))
 
+    if "ddg" not in servers:
+        servers["ddg"] = ddg_server()
+        changed = True
+        print("  ddg: added to existing mcp.json (search + fetch, no key)")
+
     if "semble" not in servers:
-        servers["semble"] = {
-            "command": SEMBLE_COMMAND,
-            "args": list(SEMBLE_ARGS),
-            "exposure": "hidden",
-            "toolExposure": dict(SEMBLE_EXPOSURE),
-            "description": SEMBLE_DESC,
-        }
+        servers["semble"] = semble_server()
         changed = True
         print("  semble: added to existing mcp.json")
 
     if changed:
+        backup_once(path, ".pre-mcp-migration")
         save(path, m)
 
 
@@ -172,6 +194,10 @@ def cmd_refresh(path):
     m = load(path)
     servers = m.setdefault("mcpServers", {})
     bak = backup_once(path, ".pre-refresh")
+
+    if "ddg" not in servers:
+        servers["ddg"] = ddg_server()
+        print("  ddg: added to existing mcp.json (search + fetch, no key)")
 
     s = servers.setdefault("serena", {})
     s.setdefault("command", SERENA_COMMAND)
@@ -190,7 +216,7 @@ def cmd_refresh(path):
     sm.setdefault("description", SEMBLE_DESC)
 
     save(path, m)
-    print("  refreshed serena + semble exposure (backup: %s)" % bak)
+    print("  refreshed serena + semble exposure; ddg ensured (backup: %s)" % bak)
 
 
 def cmd_check(path):
@@ -211,6 +237,8 @@ def cmd_check(path):
         elif te.get("*") != "codemode" or direct != len(CORE_DIRECT):
             print("serena MCP exposure differs from the shipped config (%d direct, %s tail) - ./setup.sh --refresh-mcp"
                   % (direct, te.get("*") or "no wildcard"))
+    if "ddg" not in servers:
+        print("ddg MCP server missing - ./setup.sh")
     if "semble" not in servers:
         print("semble MCP server missing - ./setup.sh")
 
