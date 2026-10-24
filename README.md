@@ -1,5 +1,7 @@
 # Local AI Coding Agent Harness for AMD Strix Halo (Ryzen AI Max+ 395)
 
+![A 125B coding agent on your own desk: Qwen3.8 Flash-Next on the iGPU, NPU screening and routing, a sidecar for commits and summaries](docs/brand/hero.png)
+
 **A local coding agent that runs a 125B model on your own box.** Guided setup for any engine,
 tuned for Strix Halo. Built on [pi](https://github.com/earendil-works/pi).
 

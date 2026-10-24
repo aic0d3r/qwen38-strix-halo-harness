@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8">
+<title>qwen38-strix-halo-harness banner</title>
+<style>
+:root{
+  --bg:#100d0b; --panel:#191512; --line:#3a2f27; --ink:#f4ede6; --mute:#b3a597;
+  --acc:#ff7a1a; --cool:#6fb6c4;
+  --mono:"Adwaita Mono","DejaVu Sans Mono",monospace;
+}
+*{box-sizing:border-box;margin:0}
+html,body{width:100%;height:100%;background:var(--bg);color:var(--ink);
+  font-family:"Fira Sans",sans-serif;-webkit-font-smoothing:antialiased}
+body{display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,1fr);gap:4vw;
+  padding:6.4vh 5vw;overflow:hidden;position:relative}
+body::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(60% 90% at 88% 50%,rgba(255,122,26,.13),transparent 70%)}
+.copy{display:flex;flex-direction:column;justify-content:space-between;position:relative}
+.mark{font:500 22px var(--mono);color:var(--mute);letter-spacing:.01em}
+.mark b{color:var(--acc);font-weight:600}
+h1{font:800 clamp(56px,7.2vw,92px)/.98 "Fira Sans Condensed",sans-serif;letter-spacing:-.015em;
+  text-wrap:balance;margin-top:3vh}
+h1 em{font-style:normal;color:var(--acc)}
+.sub{font:400 clamp(22px,2.15vw,29px)/1.4 "Fira Sans",sans-serif;color:var(--mute);margin-top:3.2vh;max-width:30ch}
+.sub strong{color:var(--ink);font-weight:500}
+.cmd{display:inline-flex;gap:14px;align-items:center;align-self:flex-start;
+  font:500 24px var(--mono);
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 22px;
+  box-shadow:0 14px 30px -12px rgba(0,0,0,.7)}
+.cmd i{color:var(--acc);font-style:normal}
+.die{position:relative;align-self:center;border:1.5px solid var(--line);border-radius:22px;
+  padding:34px 30px 30px;background:linear-gradient(180deg,#1b1613,#14100e);
+  box-shadow:0 30px 60px -24px rgba(0,0,0,.85)}
+.die-h{display:flex;justify-content:space-between;font:500 17px var(--mono);
+  color:var(--mute);margin-bottom:22px}
+.blk{border-radius:14px;padding:22px 26px}
+.blk .t{font:600 16px var(--mono);letter-spacing:.04em;text-transform:uppercase}
+.blk .n{font:700 clamp(30px,3.3vw,44px)/1.1 "Fira Sans Condensed",sans-serif;margin-top:8px}
+.blk .d{font:400 20px/1.35 "Fira Sans",sans-serif;margin-top:6px}
+.gpu{background:var(--acc);color:#1a0d03;padding:28px 26px}
+.gpu .t,.gpu .d{color:#3b1d0a}
+.gpu .n{font-size:clamp(38px,4.4vw,58px)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.npu,.side{background:#221b16;border:1px solid var(--line)}
+.npu .t{color:var(--cool)} .side .t{color:var(--mute)}
+.npu .d,.side .d{color:var(--mute)}
+.npu .n,.side .n{font-size:clamp(24px,2.5vw,33px)}
+</style>
+<body>
+<section class="copy">
+  <div>
+    <div class="mark"><b>pi</b> · strix halo harness</div>
+    <h1>A 125B coding agent on <em>your&nbsp;own&nbsp;desk.</em></h1>
+    <p class="sub"><strong>262k context</strong>, no API key, nothing leaves the box.</p>
+  </div>
+  <div class="cmd"><i>$</i> ./setup.sh</div>
+</section>
+<section class="die" aria-label="Where each job runs">
+  <div class="die-h"><span>Ryzen AI Max+ 395</span><span>128 GB unified</span></div>
+  <div class="blk gpu"><div class="t">iGPU · Radeon 8060S</div><div class="n">Qwen3.8 Flash-Next 125B</div><div class="d">the model you talk to</div></div>
+  <div class="row">
+    <div class="blk npu"><div class="t">NPU</div><div class="n">Screens &amp; routes</div><div class="d">every prompt, fast</div></div>
+    <div class="blk side"><div class="t">Sidecar</div><div class="n">Commits &amp; summaries</div><div class="d">cache stays warm</div></div>
+  </div>
+</section>
+</body></html>
