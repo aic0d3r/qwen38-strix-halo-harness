@@ -5,9 +5,14 @@
 
 ## 1.8.1 - 2026-10-23
 
+### Added
+- `./setup.sh --refresh-mcp` resets the serena/semble MCP exposure to the shipped config, preserving other servers and Jina auth; the first refresh backs up `mcp.json.pre-refresh`. `./setup.sh --doctor` now reports MCP exposure drift and a missing semble entry.
+- `setup/mcp.py` owns the canonical MCP config (fresh write, exact-match migration, refresh, doctor check), replacing the duplicated heredocs in `setup.sh`.
+
 ### Changed
 - Pin: halogen 0.18.12 -> 0.18.14 (validated by `scripts/upgrade-halogen.sh`).
 - Serena MCP: the server is now `codemode` instead of `hidden`, so the non-core tools (`insert_before_symbol`, `replace_content`, `replace_in_files`, `find_declaration`, memory writes) are reachable from codemode scripts once codemode is active. Destructive, shell and native-duplicate tools stay explicitly `hidden`.
+- Existing `mcp.json` files with the old 9- or 16-tool `hidden` serena layout are upgraded automatically on the next `./setup.sh` (exact match only; customized exposure is left alone; first migration backs up `mcp.json.pre-mcp-migration`).
 
 ### Fixed
 - `config/mcp.json.example` now matches what `setup.sh` writes (9 direct Serena tools, `codemode` tail, and the semble entry); the example still listed the old 16-tool `hidden` layout.

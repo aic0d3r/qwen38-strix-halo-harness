@@ -115,6 +115,7 @@ Servers you started yourself are never restarted. Run non-interactively (scripts
 | `./harness config` | menu of saved answers (engine, sidecar, voice, update check, sudo hints); change one, applied right away |
 | `./harness tune` | re-run the speed probe and re-size the limits |
 | `./setup.sh --doctor` | read-only health check of the whole install |
+| `./setup.sh --refresh-mcp` | reset the serena/semble MCP exposure to the shipped config (backs up `mcp.json` first) |
 
 ## Efficiency
 
@@ -158,6 +159,8 @@ from; locally they cut prefill time.
   `~/.local/bin/serena`); it also needs a language server for your language. Measured: a function body in ~820 chars instead of reading a ~14,000-char file. In real
   sessions the agent reached for `read` far more often, so `tool-trim` now hints at serena or
   `offset`/`limit` after a big whole-file source read, and the installed `AGENTS.md` says the same.
+  Nine core tools are `direct`; the long tail stays script-reachable through `codemode` when it is
+  active (`./setup.sh --refresh-mcp` restores the shipped exposure).
 - **Semantic code search** — the pinned [semble](https://pypi.org/project/semble/) MCP server
   (`search` + `find_related`), wired into `mcp.json` by setup. A/B on 18 ground-truth queries
   against the NPU RAG pipeline it replaced: 17/18 vs 13/18 top-3 hits, 2-3x faster queries, ~40x

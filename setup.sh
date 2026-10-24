@@ -8,6 +8,7 @@
 #                               (saved answers: ./harness config)
 #   ./setup.sh --halogen [auto|path.hgn]  also provision + start the halogen server
 #   ./setup.sh --doctor         read-only status check
+#   ./setup.sh --refresh-mcp    reset serena/semble MCP exposure to the shipped config (backs up mcp.json first)
 #   ./setup.sh --no-halogen     pi-only install: skip the halogen provider, the NPU
 #                               extensions and all container management (for boxes that
 #                               run pi without a local halogen, e.g. a laptop against a
@@ -25,7 +26,7 @@
 set -u
 # bare invocation in a terminal = the guided wizard (flags below stay for scripts/CI)
 if [ $# -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then exec python3 -u "$(dirname "$(readlink -f "$0")")/setup/harness.py" setup; fi
-HALOGEN_CKPT=""; SIDECAR_SET=""; DOCTOR=0; VOICE=0; NO_HALOGEN=0; STRATA=0; GUFO=0; ENG=strata; ENG_URL=http://127.0.0.1:8080
+HALOGEN_CKPT=""; SIDECAR_SET=""; DOCTOR=0; REFRESH_MCP=0; VOICE=0; NO_HALOGEN=0; STRATA=0; GUFO=0; ENG=strata; ENG_URL=http://127.0.0.1:8080
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-halogen)  NO_HALOGEN=1; shift ;;
@@ -33,6 +34,7 @@ while [ $# -gt 0 ]; do
     --strata|--gufo) [ "$1" = --gufo ] && { GUFO=1; ENG=gufo; } || STRATA=1; NO_HALOGEN=1
                case "${2:-}" in http*) ENG_URL="${2%/}"; shift 2 ;; *) shift ;; esac ;;
     --doctor)  DOCTOR=1; shift ;;
+    --refresh-mcp) REFRESH_MCP=1; shift ;;
     --voice)   VOICE=1; shift ;;
     --sidecar|--no-sidecar) SIDECAR_SET=$([ "$1" = --sidecar ] && echo 1 || echo 0); shift ;;
     --halogen-upgrade) case "${2:-}" in ""|-*) HALOGEN_UPGRADE=latest; shift ;; *) HALOGEN_UPGRADE="$2"; shift 2 ;; esac ;;
@@ -127,6 +129,10 @@ if [ "$DOCTOR" = 1 ]; then
   python3 -c "import json,os;p=json.load(open('$MODELS_JSON'))['providers'];p['llamacpp-tiny'];os.path.exists('$EXT_DIR/npu-retrieval.ts') and p['halogen']" 2>/dev/null \
                                     && ok "providers configured"   || fail "providers missing - run ./setup.sh"
   [ -f "$PI_HOME/agent/mcp.json" ]  && ok "mcp.json present (serena+jina+semble)" || warn "no mcp.json - serena/jina/semble unavailable (run ./setup.sh)"
+  if [ -f "$PI_HOME/agent/mcp.json" ]; then
+    MCP_DRIFT=$(python3 "$REPO/setup/mcp.py" check "$PI_HOME/agent/mcp.json" 2>/dev/null)
+    [ -n "$MCP_DRIFT" ] && warn "$MCP_DRIFT"
+  fi
   if [ "$SIDECAR_ON" = 0 ]; then ok "sidecar off (opted out; ./setup.sh --sidecar turns it on)"
   else tiny_up                      && ok "sidecar up (:8090)"     || fail "sidecar down - run ./setup.sh (or: systemctl --user enable --now ling-tiny)"; fi
   # the active engine (what the wizard set pi up for) decides what "down" means; detect tells gufo/Strata apart on :8080
@@ -393,63 +399,25 @@ fi
 echo "== 2b. MCP servers (mcp.json) =="
 MCP_JSON="$PI_HOME/agent/mcp.json"
 if [ -f "$MCP_JSON" ]; then
-  # existing file: only add --project-from-cwd so serena activates the cwd project at startup
-  python3 - "$MCP_JSON" <<'PYF' || warn "could not update serena args in $MCP_JSON"
-import json, sys
-p = sys.argv[1]; m = json.load(open(p))
-s = m.get("mcpServers", {}).get("serena")
-if s is not None and "--project-from-cwd" not in s.get("args", []):
-    s["args"] = s.get("args", []) + ["--project-from-cwd"]
-    json.dump(m, open(p, "w"), indent=2)
-    print("  serena: added --project-from-cwd (auto-activates the cwd project)")
-if "semble" not in m.get("mcpServers", {}):
-    m.setdefault("mcpServers", {})["semble"] = {
-        "command": "uvx", "args": ["--from", "semble[mcp]==0.6.2", "semble"], "exposure": "hidden",
-        "toolExposure": {"search": "direct", "find_related": "direct", "*": "hidden"},
-        "description": "Semble instant semantic code search (local or remote git repos)"}
-    json.dump(m, open(p, "w"), indent=2)
-    print("  semble: added to existing mcp.json")
-PYF
-  ok "mcp.json exists (otherwise left untouched)"
+  if [ "$REFRESH_MCP" = 1 ]; then
+    if python3 "$REPO/setup/mcp.py" refresh "$MCP_JSON"; then
+      ok "mcp.json refreshed (serena + semble; other servers untouched)"
+    else
+      warn "could not refresh $MCP_JSON (left untouched)"
+    fi
+  else
+    if python3 "$REPO/setup/mcp.py" migrate "$MCP_JSON"; then
+      ok "mcp.json exists (serena/semble migrated when they match an old layout)"
+    else
+      warn "could not update $MCP_JSON (left untouched)"
+    fi
+  fi
 elif command -v pi >/dev/null; then
-  python3 - "$MCP_JSON" <<'PYM'
-import json, os, sys
-path = sys.argv[1]
-servers = {
-    "serena": {
-        "command": "~/.local/bin/serena", "args": ["start-mcp-server", "--project-from-cwd"],
-        "exposure": "codemode",
-        "toolExposure": {"activate_project": "direct", "find_symbol": "direct",
-            "get_symbols_overview": "direct", "find_referencing_symbols": "direct",
-            "search_for_pattern": "direct", "get_diagnostics_for_file": "direct",
-            "replace_symbol_body": "direct", "insert_after_symbol": "direct",
-            "rename_symbol": "direct",
-            "safe_delete_symbol": "hidden", "delete_memory": "hidden",
-            "rename_memory": "hidden", "edit_memory": "hidden",
-            "execute_shell_command": "hidden", "create_text_file": "hidden",
-            "read_file": "hidden", "list_dir": "hidden", "find_file": "hidden",
-            "open_dashboard": "hidden", "get_current_config": "hidden",
-            "onboarding": "hidden", "initial_instructions": "hidden",
-            "*": "codemode"},
-        "description": "Serena LSP toolbox: symbol-precise code navigation, diagnostics, and edits (activate_project first)"},
-    "jina": {
-        "url": "https://mcp.jina.ai/v1",
-        "headers": {"Authorization": "!echo Bearer $(cat ~/.config/opencode/jina.key)"},
-        "enabled": False,
-        "description": "Jina web search and page reading (enable via /mcp; needs the key file)"},
-    "semble": {
-        "command": "uvx", "args": ["--from", "semble[mcp]==0.6.2", "semble"],
-        "exposure": "hidden",
-        "toolExposure": {"search": "direct", "find_related": "direct", "*": "hidden"},
-        "description": "Semble instant semantic code search (local or remote git repos; replaced the NPU rag pipeline - A/B 17/18 vs 13/18, 2026-10-10)"},
-}
-key = os.path.expanduser("~/.config/opencode/jina.key")
-if not os.path.exists(key):
-    servers["jina"]["headers"] = {"Authorization": "${JINA_API_KEY}"}
-json.dump({"mcpServers": servers}, open(path, "w"), indent=2)
-print("  wrote mcp.json (serena direct x9, jina disabled, semble direct x2)")
-PYM
-  ok "MCP servers configured (pi mcp list to inspect)"
+  if python3 "$REPO/setup/mcp.py" write "$MCP_JSON"; then
+    ok "MCP servers configured (pi mcp list to inspect)"
+  else
+    warn "could not write $MCP_JSON"
+  fi
 else
   warn "pi not found - skipped mcp.json"
 fi
