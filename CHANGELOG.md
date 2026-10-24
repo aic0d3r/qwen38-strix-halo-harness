@@ -7,8 +7,10 @@
 
 ### Changed
 - Pin: halogen 0.18.12 -> 0.18.14 (validated by `scripts/upgrade-halogen.sh`).
+- Serena MCP: the server is now `codemode` instead of `hidden`, so the non-core tools (`insert_before_symbol`, `replace_content`, `replace_in_files`, `find_declaration`, memory writes) are reachable from codemode scripts once codemode is active. Destructive, shell and native-duplicate tools stay explicitly `hidden`.
 
 ### Fixed
+- `config/mcp.json.example` now matches what `setup.sh` writes (9 direct Serena tools, `codemode` tail, and the semble entry); the example still listed the old 16-tool `hidden` layout.
 - Wizard exited when you chose an engine upgrade and then answered no to "Start <engine>?". Every upgrader (halogen, gufo, Strata) starts the engine itself, so once an upgrade is chosen the start question is skipped; stop/download questions are still asked.
 
 ## 1.8.0 - 2026-10-23

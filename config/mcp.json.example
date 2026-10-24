@@ -2,8 +2,8 @@
   "mcpServers": {
     "serena": {
       "command": "~/.local/bin/serena",
-      "args": ["start-mcp-server"],
-      "exposure": "hidden",
+      "args": ["start-mcp-server", "--project-from-cwd"],
+      "exposure": "codemode",
       "toolExposure": {
         "activate_project": "direct",
         "find_symbol": "direct",
@@ -14,14 +14,20 @@
         "replace_symbol_body": "direct",
         "insert_after_symbol": "direct",
         "rename_symbol": "direct",
-        "onboarding": "direct",
-        "list_memories": "direct",
-        "read_memory": "direct",
-        "write_memory": "direct",
-        "replace_content": "direct",
-        "find_declaration": "direct",
-        "find_implementations": "direct",
-        "*": "hidden"
+        "safe_delete_symbol": "hidden",
+        "delete_memory": "hidden",
+        "rename_memory": "hidden",
+        "edit_memory": "hidden",
+        "execute_shell_command": "hidden",
+        "create_text_file": "hidden",
+        "read_file": "hidden",
+        "list_dir": "hidden",
+        "find_file": "hidden",
+        "open_dashboard": "hidden",
+        "get_current_config": "hidden",
+        "onboarding": "hidden",
+        "initial_instructions": "hidden",
+        "*": "codemode"
       },
       "description": "Serena LSP toolbox: symbol-precise code navigation, diagnostics, and edits (activate_project first)"
     },
@@ -29,7 +35,14 @@
       "url": "https://mcp.jina.ai/v1",
       "headers": { "Authorization": "${JINA_API_KEY}" },
       "enabled": false,
-      "description": "Jina web search, page reading, and extraction (enable via /mcp when needed; requires JINA_API_KEY in env)"
+      "description": "Jina web search and page reading (enable via /mcp; needs the key file)"
+    },
+    "semble": {
+      "command": "uvx",
+      "args": ["--from", "semble[mcp]==0.6.2", "semble"],
+      "exposure": "hidden",
+      "toolExposure": { "search": "direct", "find_related": "direct", "*": "hidden" },
+      "description": "Semble instant semantic code search (local or remote git repos; replaced the NPU rag pipeline - A/B 17/18 vs 13/18, 2026-10-10)"
     }
   }
 }

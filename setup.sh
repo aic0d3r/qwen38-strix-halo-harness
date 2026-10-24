@@ -418,12 +418,19 @@ path = sys.argv[1]
 servers = {
     "serena": {
         "command": "~/.local/bin/serena", "args": ["start-mcp-server", "--project-from-cwd"],
-        "exposure": "hidden",
+        "exposure": "codemode",
         "toolExposure": {"activate_project": "direct", "find_symbol": "direct",
             "get_symbols_overview": "direct", "find_referencing_symbols": "direct",
             "search_for_pattern": "direct", "get_diagnostics_for_file": "direct",
             "replace_symbol_body": "direct", "insert_after_symbol": "direct",
-            "rename_symbol": "direct", "*": "hidden"},
+            "rename_symbol": "direct",
+            "safe_delete_symbol": "hidden", "delete_memory": "hidden",
+            "rename_memory": "hidden", "edit_memory": "hidden",
+            "execute_shell_command": "hidden", "create_text_file": "hidden",
+            "read_file": "hidden", "list_dir": "hidden", "find_file": "hidden",
+            "open_dashboard": "hidden", "get_current_config": "hidden",
+            "onboarding": "hidden", "initial_instructions": "hidden",
+            "*": "codemode"},
         "description": "Serena LSP toolbox: symbol-precise code navigation, diagnostics, and edits (activate_project first)"},
     "jina": {
         "url": "https://mcp.jina.ai/v1",
