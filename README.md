@@ -1,9 +1,9 @@
 # Local AI Coding Agent Harness for AMD Strix Halo (Ryzen AI Max+ 395)
 
-![A 125B coding agent on your own desk: Qwen3.8 Flash-Next on the iGPU, NPU screening and routing, a sidecar for commits and summaries](docs/brand/hero.png)
-
-**A local coding agent that runs a 125B model on your own box.** Guided setup for any engine,
-tuned for Strix Halo. Built on [pi](https://github.com/earendil-works/pi).
+**Run a 125B-parameter coding agent locally.** Qwen3.8 Flash-Next on the Ryzen AI Max+ 395 iGPU
+with **262k context**, NPU models screening and routing prompts, and a sidecar writing commits and
+summaries. Guided setup for llama.cpp, vLLM, Ollama, LM Studio and more. Built on
+[pi](https://github.com/earendil-works/pi).
 
 <div align="center">
 
@@ -12,24 +12,27 @@ tuned for Strix Halo. Built on [pi](https://github.com/earendil-works/pi).
 [![Cloud](https://img.shields.io/badge/cloud-optional-blueviolet)](docs/ENGINES.md#cloud-models-are-a-supported-hybrid)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+**Get started:**
 [Guided setup](#guided-setup) •
+[Install](#install) •
+[Model files](#model-files) •
+[Quick start](#quick-start)<br>
+**Why it works:**
 [Efficiency](#efficiency) •
 [What you get](#what-you-get) •
 [The stack](#the-stack) •
-[Evidence](#evidence) •
-[Install](#install) •
-[Model files](#model-files) •
-[Quick start](#quick-start) •
+[Evidence](#evidence)<br>
+**Running it:**
 [The NPU](#the-npu) •
 [Crash recovery](#crash-recovery) •
-[Upgrading halogen](#upgrading-halogen) •
+[Upgrading halogen](#upgrading-halogen)<br>
+**More:**
 [Documentation](#documentation) •
 [License](#license)
 
 </div>
 
-Qwen3.8 Flash-Next (125B) on the Ryzen AI Max+ 395 iGPU, **262k context**, small NPU models
-screening prompts and routing decisions, a sidecar writing commits and compaction summaries.
+![Local AI coding agent on AMD Strix Halo: Qwen3.8 Flash-Next 125B runs on the Ryzen AI Max+ 395 iGPU, the NPU screens and routes prompts, a sidecar writes commits and summaries](docs/brand/hero.png)
 
 - **Guided setup:** `./setup.sh` detects your engine (halogen, llama.cpp, Strata, vLLM, Ollama,
   LM Studio) and wires pi to it. The NPU tools are Strix Halo only.
