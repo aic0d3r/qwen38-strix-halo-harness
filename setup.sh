@@ -134,7 +134,9 @@ if [ "$DOCTOR" = 1 ]; then
     [ -n "$MCP_DRIFT" ] && warn "$MCP_DRIFT"
   fi
   if [ "$SIDECAR_ON" = 0 ]; then ok "sidecar off (opted out; ./setup.sh --sidecar turns it on)"
-  else tiny_up                      && ok "sidecar up (:8090)"     || fail "sidecar down - run ./setup.sh (or: systemctl --user enable --now ling-tiny)"; fi
+  elif tiny_up;                     then ok "sidecar up (:8090)"
+  elif [ -f "$HOME/.config/systemd/user/ling-tiny.service" ]; then ok "sidecar idle (starts on first use)"
+  else fail "sidecar not installed - run ./setup.sh"; fi
   # the active engine (what the wizard set pi up for) decides what "down" means; detect tells gufo/Strata apart on :8080
   read -r ACT ACT_PROV ACT_MID < <(python3 -c 'import json,sys;p=json.load(open(sys.argv[1]));print(p["engine"],p["provider"],p["model"])' \
     "${PI_CODING_AGENT_DIR:-$PI_HOME/agent}/harness-profile.json" 2>/dev/null)
@@ -439,10 +441,9 @@ elif tiny_up; then
   ok "sidecar is up"
   [ -f "$SC_PREF" ] || warn "sidecar is on by default (~8 GiB GPU memory); opt out with ./setup.sh --no-sidecar"
 elif [ -f "$HOME/.config/systemd/user/ling-tiny.service" ]; then
-  # unit exists from a previous setup: start it (supervised + keep-alive) instead of raw-spawning
-  systemctl --user daemon-reload 2>/dev/null; systemctl --user start ling-tiny.service 2>/dev/null
-  for _ in $(seq 1 12); do sleep 5; tiny_up && break; done
-  if tiny_up; then ok "sidecar started via systemd unit (supervised, auto-restart)"; else fail "unit failed to start - check: journalctl --user -u ling-tiny"; fi
+  # unit exists from a previous setup: leave it down; the commit tool starts it on first use (cloud-only sessions never load it)
+  systemctl --user daemon-reload 2>/dev/null
+  ok "sidecar idle: starts on first use, unloads after 10 min idle"
 else
   fail "sidecar not running"
   GGUF="$(ls "$HOME"/.models/ling3.0-tiny/*.gguf "$REPO"/models/ling3.0-tiny/*.gguf 2>/dev/null | head -1)"
@@ -496,7 +497,7 @@ Description=Ling-3.0-tiny sidecar (llama.cpp)
 After=network.target
 
 [Service]
-ExecStart=$LLS -a ling3.0-tiny -m $UNIT_GGUF -ngl 99 -c 131072 -b $UB_TINY -ub $UB_TINY --jinja --host 127.0.0.1 --port $TINY_PORT --metrics
+ExecStart=$LLS -a ling3.0-tiny -m $UNIT_GGUF -ngl 99 -c 131072 -b $UB_TINY -ub $UB_TINY --jinja --host 127.0.0.1 --port $TINY_PORT --metrics --sleep-idle-seconds 600
 Restart=always
 RestartSec=5
 
@@ -505,9 +506,7 @@ WantedBy=default.target
 UNIT
     systemctl --user daemon-reload
     if ! tiny_up; then
-      systemctl --user start ling-tiny.service 2>/dev/null \
-        && ok "sidecar started as systemd user unit (auto-restart on death, NOT enabled at boot)" \
-        || warn "unit written but not started - run: systemctl --user start ling-tiny"
+      ok "sidecar unit installed (starts on first use, unloads after 10 min idle, NOT enabled at boot)"
     else
       ok "sidecar running; keep-alive unit installed (dies -> systemd restarts it; nothing starts at boot)"
     fi

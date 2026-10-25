@@ -4,6 +4,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { profile, sidecarOn } from "../harness-profile/index.ts";
 
 const BASE = process.env.HALOGEN_URL || "http://127.0.0.1:8731";
 // setup.sh writes the repo path to <agent dir>/harness-repo
@@ -54,7 +55,26 @@ export default function harnessStatus(pi: ExtensionAPI) {
 		timer = setInterval(() => void poll(ctx), 5000);
 		timer.unref?.();
 	};
-	pi.on("session_start", async (_e: any, ctx: any) => sync(ctx.model?.provider, ctx));
+	// sidecar badge, any provider: llama-server sleeps (model unloaded) after 10 min idle, wakes on the next request
+	let scTimer: ReturnType<typeof setInterval> | undefined;
+	const scPoll = async (ctx: any) => {
+		let s = "off";
+		try {
+			const p: any = await (await fetch(`${profile().sidecarUrl}/props`, { signal: AbortSignal.timeout(2000) })).json();
+			s = p.is_sleeping ? "asleep" : "on";
+		} catch {}
+		ctx.ui.setStatus("sidecar", ctx.ui.theme.fg("muted", `sidecar ${s}`));
+	};
+	const scStop = (ctx: any) => { clearInterval(scTimer); scTimer = undefined; ctx.ui.setStatus("sidecar", undefined); };
+
+	pi.on("session_start", async (_e: any, ctx: any) => {
+		sync(ctx.model?.provider, ctx);
+		scStop(ctx);
+		if (!sidecarOn()) return;
+		void scPoll(ctx);
+		scTimer = setInterval(() => void scPoll(ctx), 10_000);
+		scTimer.unref?.();
+	});
 	pi.on("model_select", async (e: any, ctx: any) => sync(e.model?.provider, ctx));
-	pi.on("session_shutdown", async (_e: any, ctx: any) => stop(ctx));
+	pi.on("session_shutdown", async (_e: any, ctx: any) => { stop(ctx); scStop(ctx); });
 }

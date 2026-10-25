@@ -801,8 +801,6 @@ def cmd_setup(a):
         if plan and served_models(PROFILES["engines"][eng]["port"], eng):
             plan = None  # the upgrade left it running: nothing to start
     eng, mod = bring_up(d, eng, plan, a.yes)
-    if sidecar_pref() != "0":  # stopping the old engine also stopped the sidecar the install had started
-        subprocess.run(["systemctl", "--user", "start", "ling-tiny.service"], stderr=subprocess.DEVNULL)
     saved = jget(os.path.join(AGENT, "harness-tuned.json"), {}).get(hw_key(eng, mod), {}).get("decode_tps")
     finish(eng, mod, a.no_tune or (bool(saved) and not upgrade), launch=not a.yes)
 

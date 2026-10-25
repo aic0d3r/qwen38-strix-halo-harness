@@ -122,6 +122,9 @@ export default function (pi: ExtensionAPI) {
 		}
 		const fullDiff = [stat, untrackedBlock, diff].join("\n").slice(0, 24000);
 		if (!fullDiff.trim()) return notify("Nothing to commit: no diff, staged changes, or untracked files.", "warning");
+		// cloud model: never load the local sidecar for a commit; the calling model writes the message
+		if (!message && !isMain(ctx))
+			return notify("Not using the local sidecar with a cloud model. Retry with the `message` parameter to commit with your own message.", "warning");
 		if (!message && !(await ensureSidecar(notify)))
 			return notify("commit failed: ling-tiny sidecar is down and could not be started (journalctl --user -u ling-tiny). Retry with the `message` parameter to commit with your own message.", "error");
 
