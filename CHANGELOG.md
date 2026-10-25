@@ -3,6 +3,16 @@
 <!-- One block per section per release, in the order Added, Changed, Fixed. Add new entries to the
      existing block instead of opening a second one, so a release never has two "### Fixed" lists. -->
 
+## 1.8.2 - 2026-10-25
+
+### Added
+- Footer badge `sidecar off | asleep | on` (`harness-status`), shown on every provider.
+
+### Changed
+- The ling-tiny sidecar no longer starts with `setup.sh`, `start.sh` or `./harness up`; the `commit` tool starts it on first use, so cloud-only sessions never load it.
+- The sidecar unit runs `--sleep-idle-seconds 600`: the model unloads from GPU memory after 10 minutes idle and reloads on the next request.
+- `commit` with a cloud model no longer touches the sidecar; it asks the calling model to pass its own `message`.
+
 ## 1.8.1 - 2026-10-23
 
 ### Added
