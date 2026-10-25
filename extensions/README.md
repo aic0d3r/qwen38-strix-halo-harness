@@ -142,6 +142,15 @@ Copilot and Gemini - not for pi - so this is the pi wiring for the same check.
   `IMPECCABLE_BIN` to point it somewhere else. One-shot disable:
   `IMPECCABLE_HOOK_DISABLED=1`.
 
+## syntax-guard.ts (deterministic syntax gate, no model)
+
+After every `edit`/`write`, runs a single-file syntax check and appends the error to
+that tool result, so a broken edit is fixed on the next turn. Checkers: `python3` ast
+(`.py`), `bash -n` (`.sh .bash`), `bun build --no-bundle` (`.ts .tsx .js .jsx .mjs .cjs`),
+`JSON.parse` (`.json`). Syntax only, by design: no type/lint pass, so no project config
+and no false positives from missing deps. A missing checker is silent. Cost: one
+subprocess per edit. Off switch: `SYNTAX_GUARD_DISABLED=1`.
+
 ## Other extensions
 
 - `harness-profile/` - shared helper, not a feature: loads the active engine profile from `<agent dir>/harness-profile.json` (legacy halogen defaults if absent) and registers nothing; imported by the ling-tiny-*, harness-tune, auto-guard and npu-retrieval extensions.
