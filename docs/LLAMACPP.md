@@ -1,6 +1,6 @@
 # llama.cpp (Vulkan) Setup for Qwen3.8 on Strix Halo
 
-The alternative engine: Nathan's Vulkan llama.cpp builds instead of the halogen container.
+The alternative engine for Strix Halo: Nathan's Vulkan llama.cpp builds instead of the halogen container.
 Full control over flags, drafter and GGUF quant, **256k ctx** max, and the way to go for the
 **27B** runs. You lose every NPU feature — see [Engines](ENGINES.md).
 
@@ -61,7 +61,8 @@ cp -r extensions/* ~/.pi/agent/extensions/              # dirs too: the .ts file
 
 Two numbers in the snippet you must understand, not copy: `reserveTokens` ships **10240**
 because that is right for a 65536 window (halogen's launcher rescales it to match its own ctx); on the 27B's 262144 window use
-**60000** instead (what the halogen launcher sets at 262k; it resets any reserve of half the window or more). `thinkingBudgets` (per-request budgets pi sends) are what actually govern
+**60000** instead (what the halogen launcher sets at 262k; it resets any reserve of half the window or more).
+`thinkingBudgets` (per-request budgets pi sends) are what actually govern
 pi sessions; the server's `--reasoning-budget` flag is only a default for clients that do not
 send one. On this path the NPU extensions are inert — there is no halogen to serve them.
 

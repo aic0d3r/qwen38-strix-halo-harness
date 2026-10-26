@@ -38,7 +38,7 @@ summaries. Guided setup for llama.cpp, vLLM, Ollama, LM Studio and more. Built o
 
 </div>
 
-![Local AI coding agent on AMD Strix Halo: Qwen3.8 Flash-Next 125B runs on the Ryzen AI Max+ 395 iGPU, the NPU screens and routes prompts, a sidecar writes commits and summaries](docs/brand/hero.png)
+![AI coding agent harness for any hardware, local or cloud, tuned for AMD Strix Halo: Qwen3.8 Flash-Next 125B runs on the Ryzen AI Max+ 395 iGPU, the NPU screens and routes prompts, a sidecar writes commits and summaries](docs/brand/hero.png)
 
 - **Guided setup:** `./setup.sh` detects your engine (halogen, llama.cpp, Strata, vLLM, Ollama,
   LM Studio) and wires pi to it. The NPU tools are Strix Halo only.
@@ -214,8 +214,8 @@ generates on the iGPU with its prompt cache warm; side jobs that need a judgemen
 milliseconds (is this an injection, which of these three is it, which files are near-duplicates) go
 to the NPU instead of the 125B model; sidecars read diffs and transcripts directly so they never
 evict the cached prefix; and search runs on CPU against an index built at first query. Halogen is
-the only engine `setup.sh` launches and manages; every other engine is detected and wired but you
-run it yourself ([what breaks on another engine](docs/ENGINES.md) is measured, too).
+the only engine `setup.sh` launches and manages (`start.sh` can also start gufo and Strata); every
+other engine is detected and wired but you run it yourself ([what breaks on another engine](docs/ENGINES.md) is measured, too).
 
 ### Halogen vs gufo (the best engines for Strix Halo)
 
@@ -230,7 +230,7 @@ Which engine for which hardware:
 | your hardware | engine | why |
 |---|---|---|
 | **Strix Halo** (Ryzen AI Max, 128 GB unified) | **halogen** | fastest measured, plus the NPU tools (guard, triage, dedup) |
-| Strix Halo, want open source | gufo, or Strata | both open, both lose the NPU tools; Strata decodes faster, gufo prefills faster (table below) |
+| Strix Halo, want open source | gufo or Strata | both open, both lose the NPU tools; Strata decodes faster, gufo prefills faster (table below) |
 | **NVIDIA RTX 20-50 / AMD RX 7000-9000, 12 GB+ VRAM** | **[Strata](docs/ENGINES.md#strata-the-pick-for-nvidia-and-amd-desktop-gpus)** | built for it; not measured here, see Strata's own benchmarks |
 | Apple Silicon, anything else | llama.cpp / MLX / Ollama / LM Studio | not measured here |
 

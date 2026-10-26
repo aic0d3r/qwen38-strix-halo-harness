@@ -155,13 +155,13 @@ if [ "$DOCTOR" = 1 ]; then
     lem_up                          && ok "lemonade up (:13305, voice)" || fail "lemonade down - sudo pacman -S lemonade-server, then: systemctl --user start lemond"
     command -v arecord >/dev/null   && ok "mic capture (arecord)"       || fail "arecord missing (alsa-utils)"
   fi
-  # non-halogen engine detection: the harness contract (NPU guard/search/decide,
+  # non-halogen engine detection: the harness contract (NPU guard/triage/dedup,
   # vision tower, /health cache+vision fields) exists only on halogen. Other
   # engines degrade gracefully (extensions fail open) but the user should know.
   if curl -sf --max-time 3 http://127.0.0.1:8731/health 2>/dev/null | grep -qv 'prompt_cache'; then
     warn "something that is not halogen is answering on :8731 (no prompt_cache in /health)."
     warn "  auto-guard, the NPU tools (triage, dedup_scan) and image input will not work; /tune knobs partly inert."
-    warn "  supported main engine: halogen only (see README 'Using another engine')."
+    warn "  supported main engine: halogen only (see docs/ENGINES.md)."
   fi
   [ -f "$REPO/start-halogen.sh" ]   && ok "start-halogen.sh ready" || warn "no start-halogen.sh yet (written on first --halogen launch)"
   for e in strata gufo; do

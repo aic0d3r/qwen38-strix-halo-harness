@@ -1,6 +1,6 @@
 # Inference Engines: Halogen vs gufo vs llama.cpp (NVIDIA, Apple, Strix Halo)
 
-Any OpenAI-compatible server works with pi, so on other hardware (NVIDIA, Apple Silicon) use
+Any OpenAI-compatible server (or cloud provider) works with pi, so on other hardware (NVIDIA, Apple Silicon) use
 whatever engine fits: llama.cpp CUDA/Metal, vLLM, Ollama, LM Studio, MLX, or gufo where it
 supports your GPU. Only Strix Halo was measured here. On Strix Halo, **halogen and gufo are the
 best options**. Halogen is the only engine this harness provisions and verifies — by design: the
@@ -122,8 +122,8 @@ kernels and holds the NPU path on quality/stability ([gufo#558](https://github.c
 `./setup.sh --doctor` tells you when a non-halogen engine is answering on `:8731`.
 
 > [!WARNING]
-> **Never run two of these engines at once** — they fight over the same unified-memory heap and
-> device-lost follows.
+> **On Strix Halo, never run two of these engines at once** — they fight over the same
+> unified-memory heap and device-lost follows.
 
 ## Sidecar isolation (ling-tiny-commit and friends)
 
@@ -133,12 +133,12 @@ A side call can therefore never evict the active session's cached prefix (an evi
 ~150-190 s of re-prefill; the sidecar call costs ~0.5-2.5 s).
 
 ling3.0-tiny runs with thinking disabled at the template level (`enable_thinking: false`): the
-think pass ate token budget and 8.6x'd latency, and the rule-retention canary stays 10/10
+think pass ate token budget and raised latency 8.6x, and the rule-retention canary stays 10/10
 without it.
 
 ## Cloud models are a supported hybrid
 
-Point pi at any cloud provider and keep halogen running, and the NPU tools plus the whole
+Point pi at any cloud provider and keep halogen running (the NPU tools need Strix Halo), and the NPU tools plus the whole
 ling-tiny sidecar suite stay on-device: screening, search and compaction never follow your code
 to the cloud. `compaction.reserveTokens` carries over as-is — it is a space reserve, not a
 trigger point, so a 1M-context cloud model simply compacts later. The one cost is switching

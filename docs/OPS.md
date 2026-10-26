@@ -1,5 +1,8 @@
 # Operations: 262k Context, Memory Fragmentation and Troubleshooting
 
+This page covers the halogen path (Strix Halo). On other hardware or with cloud models, see
+[Engines](ENGINES.md); most of it does not apply.
+
 ## Context size and memory fragmentation
 
 The default launch is halogen's native max: **262,144 ctx x 4 slots**. Memory is not the
