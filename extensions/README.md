@@ -29,13 +29,13 @@ longer launched by default), and a Ling-3.0-tiny sidecar on :8090.
    serving Ling-3.0-tiny-Q4_K_M.gguf:
 
        llama-server -a ling3.0-tiny -m Ling-3.0-tiny-Q4_K_M.gguf -ngl 99 \
-         -c 32768 --jinja --host 127.0.0.1 --port 8090
+         -c 131072 --jinja --host 127.0.0.1 --port 8090
        curl -sf localhost:8090/health   # every sidecar extension no-ops without it
 
 4. pi providers in ~/.pi/agent/models.json:
 
        "halogen":      { "baseUrl": "http://127.0.0.1:8731/v1", "api": "openai-completions", "apiKey": "dummy", "models": [ { "id": "halogen-qwen3.8-flash-next", "contextWindow": 65536, "maxTokens": 8192, ... } ] },
-       "llamacpp-tiny":{ "baseUrl": "http://127.0.0.1:8090/v1", "api": "openai-completions", "apiKey": "dummy", "models": [ { "id": "ling3.0-tiny", "contextWindow": 32768, "maxTokens": 8192, ... } ] }
+       "llamacpp-tiny":{ "baseUrl": "http://127.0.0.1:8090/v1", "api": "openai-completions", "apiKey": "dummy", "models": [ { "id": "ling3.0-tiny", "contextWindow": 131072, "maxTokens": 8192, ... } ] }
 
    maxTokens 8192, not 32768: the server hard-rejects requests once
    context + max_tokens crosses the 65,536 window (~32.7k context trips it).

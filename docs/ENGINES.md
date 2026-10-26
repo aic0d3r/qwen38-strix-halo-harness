@@ -54,7 +54,7 @@ Default setup config vs the tuned one below (own A/B script, greedy, thinking of
 10-prompt battery: decode median 43 t/s (range 38-59; 55-59 on short code, 38-41 on prose), ttft about
 0.5 s. Depth sweep, prompt tokens as Strata counts them: 2.3k 717 t/s prefill / 34 t/s decode; 9.7k
 942 / 36; 19.5k 915 / 33; 39.3k 1,015 / 32; 118.9k 990 / 32 (cold prefill 120 s). Raw rows:
-`battery|depth|depth131k-strata-iq4xs.jsonl` in `LLMBench/results/halogen-cmp/`. Decode here is
+`battery-strata-iq4xs.jsonl`, `depth-strata-iq4xs.jsonl` and `depth131k-strata-iq4xs.jsonl` in `LLMBench/results/halogen-cmp/`. Decode here is
 below the live-session range in the next paragraph because the battery is long prose at greedy.
 
 Live agent session (2026-10-14, `scripts/halogen-top.sh --strata`, 100k+ contexts): cold prefill
@@ -95,7 +95,7 @@ cd Strata && ROCM_PATH=/nonexistent ./setup.sh --yes --family unsloth --model UD
   (`/opt/rocm/llvm/bin/clang++` missing; the compiler is in `lib/llvm`).
 - `--yes` picked a 32k context here; pass `--context` for more.
 - The 94 GB download can come from an existing copy: put the three `UD-IQ4_XS-0000N-of-00003.gguf`
-  shards in `Strata-data/models/unsloth-UD-IQ4_XS/` (a hardlink works) before step 5, and setup
+  shards in `Strata-data/models/unsloth-UD-IQ4_XS/` (a hardlink works) before running setup, and setup
   verifies them by size and SHA-256.
 - `--no-start` leaves the server down. Start it without opening a browser:
   `.venv/bin/python serve/server.py --engine strata --config strata-<model>.json --port 8080`.

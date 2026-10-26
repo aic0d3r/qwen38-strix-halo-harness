@@ -5,7 +5,7 @@ Eight runs, one real prompt, ground truth verified on the box. Same task given t
 z.ai's GLM 5.3 tiers through two different coding clients. Every answer below was checked
 against a root-cause forensics pass done on the machine before any rating.
 
-This is the detailed companion to the Reddit post. All numbers here are from logged runs on
+This is the detailed companion to the [Reddit posts](../README.md#posts). All numbers here are from logged runs on
 2026-10-07, 2026-10-08 and 2026-10-10.
 
 ![Flash-Next vs GLM 5.3 tiers: time to first token and decode rate](charts/local-vs-cloud.png)
@@ -91,11 +91,11 @@ flashx rate both pi-harness answers; it picked Qwen's.
    verdict, same PR, 8m31s instead of 2m55s. The extra effort bought source-level receipts
    (tarball, exact lines, local repro), not a better answer. The chat template's default
    effort is the maximum, so bare-API users get run-8 depth on every question.
-7. **The clock was a tie where it was matched.** The only runs that beat the local box on
-   wall time were the two opencode runs: 1m8s (wrong mechanism) and 1m30s (shallow, no
-   repro, no PR) at flashx's ~151 t/s decode. In the same harness, with GLM at max effort, the
-   gaps were 14 seconds (flashx over the local medium run) and one second (the 753B over
-   the local max rerun). Decode rate predicted nothing (#5); neither did the cloud.
+7. **The clock was a tie where it was matched.** Cloud runs that beat the local box on wall
+   time: the two fast opencode runs, 1m8s (wrong mechanism) and 1m30s (shallow, no repro, no
+   PR) at flashx's ~151 t/s decode, and the opencode 753B at 6m15s against the local max
+   rerun's 8m31s (no PR found). In the same harness (pi) the gaps were 14 seconds (flashx
+   over the local medium run) and one second (the 753B over the local max rerun). Decode rate predicted nothing (#5); neither did the cloud.
 
 ## Caveats
 

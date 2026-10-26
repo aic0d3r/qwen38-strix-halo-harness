@@ -600,7 +600,7 @@ elif [ -n "$HALOGEN_CKPT" ]; then
     else
       IMG=$(bash "$REPO/server/start-halogen.sh" --print-image)
       docker image inspect "$IMG" >/dev/null 2>&1 \
-        || { echo "  pulling halogen image (first run, ~GB) ..."; docker pull "$IMG"; }
+        || { echo "  pulling halogen image (first run, ~4.6 GB) ..."; docker pull "$IMG"; }
       W=$(dirname "$HALOGEN_CKPT")
       RENDER_GID=$(getent group render | cut -d: -f3); VIDEO_GID=$(getent group video | cut -d: -f3)
       echo "  launching halogen ($HALOGEN_CKPT, cache ON) ..."

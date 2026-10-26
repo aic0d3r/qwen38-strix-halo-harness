@@ -42,7 +42,7 @@ summaries. Guided setup for llama.cpp, vLLM, Ollama, LM Studio and more. Built o
 
 - **Guided setup:** `./setup.sh` detects your engine (halogen, llama.cpp, Strata, vLLM, Ollama,
   LM Studio) and wires pi to it. The NPU tools are Strix Halo only.
-- **Private by default:** no API key, no outbound calls. Cloud models are a supported
+- **Private by default:** no API key. The halogen engine makes no outbound calls; only the DuckDuckGo web-search tool reaches the internet. Cloud models are a supported
   [hybrid](docs/ENGINES.md#cloud-models-are-a-supported-hybrid); screening, search and compaction
   stay on-device either way.
 - **Lean by design:** every layer keeps tokens and calls off the main model. [rtk](https://npm.im/@estebanforge/pi-rtk-optimizer)
@@ -238,7 +238,7 @@ On Strix Halo, matched measurements on this box (halogen and gufo A/B in one ses
 held; Strata re-run 2026-10-14 with the same `halogen-cmp.py` battery and depth prompts, greedy,
 thinking off, nonce-tagged so nothing is cached; UD-IQ4_XS, 256k ctx):
 
-| | halogen 0.18.5 (default) | Strata 0.1.44.1 (tuned) | gufo 0.12.0 |
+| | halogen 0.18.14 (default; measured on 0.18.5) | Strata 0.1.44.1 (tuned) | gufo 0.12.0 |
 |---|---|---|---|
 | decode, 10-prompt battery (median) | **65 t/s** | 43 t/s | 40 t/s |
 | decode, 2k to 119k context | **47-50 t/s** | 32-36 t/s | 29-32 t/s |
@@ -429,7 +429,7 @@ this harness was last validated on). One command does it safely:
 
 ```sh
 ./setup.sh --halogen-upgrade          # default: latest
-./setup.sh --halogen-upgrade 0.18.0   # or a specific tag
+./setup.sh --halogen-upgrade 0.18.14  # or a specific tag
 ```
 
 `setup.sh` asks once whether `start.sh` should print a one-line notice when a newer engine release exists

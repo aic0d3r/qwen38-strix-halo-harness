@@ -2,7 +2,7 @@
 
 ![halogen 0.16.2 to 0.17.1: NPU call latency and decode rate](charts/halogen-0171-upgrade.png)
 
-Rig: ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB unified, Linux), benches at 70 W sustained. NPU driver needs IOMMU on. NPU numbers below are halogen 0.17.1 (the image pin has since moved to 0.18.0, which refreshed the NPU device files); ling3.0-tiny sidecar on a llama.cpp 0.7.6.1-era build.
+Rig: ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB unified, Linux), benches at 70 W sustained. NPU driver needs IOMMU on. NPU numbers below are halogen 0.17.1 (the image pin has since moved to 0.18.14, and 0.18.0 refreshed the NPU device files); ling3.0-tiny sidecar on a llama.cpp 0.7.6.1-era build.
 
 **NPU microbench (0.17.1, four models resident):**
 
@@ -10,7 +10,7 @@ Rig: ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB unified, Linux),
 - (on 0.16.2 every NPU call carried ~4s of fixed overhead - 0.16.3's batching fix removed it. If you're on an older release, your NPU numbers are 30x worse than they should be.)
 - Decider (binary): 118ms, 78% accuracy (18 realistic prompts) - ships as the `triage` tool
 - Decider (3-option, free-form output): 925ms, 40% accuracy (too biased toward "keep"). The shipped `triage` constrains the answer with a `json_schema` enum + logprobs instead; multi-option accuracy has not been re-measured since, so treat its output as a hint.
-- Moderation: 42% recall / 0% fp on a 30-prompt canary (ships as tripwire)
+- Moderation: 42% recall / 0% fp on a 30-prompt canary (ships as `auto-guard`)
 - Text gen (qwen3.5-2b): 16.6 tok/s decode (removed - slower than the sidecar)
 - LLM decode while NPU works: unchanged (separate silicon)
 

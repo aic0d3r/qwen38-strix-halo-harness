@@ -636,7 +636,7 @@ def engine_update(engine):
     try:
         kind, *rest = u["have"].split()
         if kind == "pin":  # version pinned in our launcher: known even while the engine is down
-            # GUFO_VERSION=0.12.0 / IMAGE_TAG="${HALOGEN_IMAGE_TAG:-0.18.10}"
+            # GUFO_VERSION=0.12.0 / IMAGE_TAG="${HALOGEN_IMAGE_TAG:-0.18.14}"
             have = re.search(rf"{rest[1]}(?:=|:-)([0-9.]+)", open(os.path.join(REPO, rest[0])).read()).group(1)
         elif kind == "dir":  # a git checkout our launcher starts (Strata): its tag, known while the engine is down
             src = subprocess.run(["bash", os.path.join(REPO, rest[0]), "--print-dir"], capture_output=True, text=True).stdout.strip()
