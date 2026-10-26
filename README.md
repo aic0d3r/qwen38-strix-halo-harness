@@ -1,14 +1,20 @@
-# Local AI Coding Agent Harness for AMD Strix Halo (Ryzen AI Max+ 395)
+# AI Coding Agent Harness for Any Hardware (Tuned for Strix Halo)
 
-**Run a 125B-parameter coding agent locally.** Qwen3.8 Flash-Next on the Ryzen AI Max+ 395 iGPU
+**Run a coding agent on whatever you have, tuned for AMD Strix Halo.** Works with any OpenAI-compatible engine or cloud
+model. On a Ryzen AI Max+ 395 (Strix Halo) it runs a 125B Qwen3.8 Flash-Next on the iGPU
 with **262k context**, NPU models screening and routing prompts, and a sidecar writing commits and
 summaries. Guided setup for llama.cpp, vLLM, Ollama, LM Studio and more. Built on
 [pi](https://github.com/earendil-works/pi).
 
+> **Not only for Strix Halo, and not only local.** The harness (token-saving extensions, context
+> management, guards, sidecar) runs on any machine, with any OpenAI-compatible engine or a cloud
+> model. Only the NPU tools need Strix Halo, and they're optional. Strix Halo is just the
+> reference setup.
+
 <div align="center">
 
 [![Release](https://img.shields.io/github/v/release/aic0d3r/qwen38-strix-halo-harness)](https://github.com/aic0d3r/qwen38-strix-halo-harness/releases/latest)
-[![Hardware](https://img.shields.io/badge/hardware-Strix%20Halo-orange)](#install)
+[![Hardware](https://img.shields.io/badge/hardware-any%20%7C%20Strix%20Halo%20tuned-orange)](#install)
 [![Cloud](https://img.shields.io/badge/cloud-optional-blueviolet)](docs/ENGINES.md#cloud-models-are-a-supported-hybrid)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
