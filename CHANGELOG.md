@@ -3,6 +3,17 @@
 <!-- One block per section per release, in the order Added, Changed, Fixed. Add new entries to the
      existing block instead of opening a second one, so a release never has two "### Fixed" lists. -->
 
+## Unreleased
+
+### Changed
+- Pin: halogen 0.18.14 -> 0.18.17 (validated by `scripts/upgrade-halogen.sh`).
+
+### Removed
+- `scripts/cache-gaps.py`: a personal Anthropic cache-cost analysis, not used by the harness.
+
+### Fixed
+- `tests/test_harness.py` still expected setup to start the sidecar unit, which 1.8.2 removed.
+
 ## 1.8.2 - 2026-10-25
 
 ### Added

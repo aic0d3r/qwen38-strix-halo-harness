@@ -114,7 +114,7 @@ real_run, h.subprocess.run = h.subprocess.run, lambda *a, **k: calls.append("upg
 h.cmd_setup(argparse.Namespace(yes=False, verbose=False, reconfigure=False, no_tune=False))
 h.subprocess.run = real_run
 for n, f in saved.items(): setattr(h, n, f)
-assert calls == ["update_offer", "plan_start", "install launch=False", "prepare", "upgrade", "start plan=True", "systemctl --user start", "probe=True"], calls
+assert calls == ["update_offer", "plan_start", "install launch=False", "prepare", "upgrade", "start plan=True", "probe=True"], calls
 # upgrade chosen: pick_engine must not ask "Start <engine>?" (declining it used to exit setup); without one it does
 asked, saved = [], {n: getattr(h, n) for n in ("engine_menu", "plan_start")}
 h.engine_menu = lambda r: "halogen"
