@@ -100,6 +100,39 @@ cd Strata && ROCM_PATH=/nonexistent ./setup.sh --yes --family unsloth --model UD
 - `--no-start` leaves the server down. Start it without opening a browser:
   `.venv/bin/python serve/server.py --engine strata --config strata-<model>.json --port 8080`.
 
+## Abliterated models
+
+Refusal-removed builds, all derived from `orcarouter/Qwen3.8-Flash-Next-Uncensored` (BF16 rev
+`8336e613`), so the engines behave alike.
+
+**Plug and play:** `./setup.sh` asks "Default model weights?" after you pick halogen or gufo
+(change it later with `./harness config` -> weights). The answer is saved in
+`~/.pi/agent/harness-weights` (`stock` or `abliterated`). Both launchers read it, the wizard and
+`start.sh` offer the download when the file is missing (`scripts/download-abliterated.sh
+halogen|gufo`), and a running engine is restarted on the new weights if you say yes. The model id is
+unchanged, so pi needs no other change. `HALOGEN_WEIGHTS` / `GUFO_WEIGHTS` override the saved
+answer for one launch.
+
+Checked against
+halogen 0.18.23, gufo 0.29.0 and Strata 0.2.10 docs and changelogs (2026-11); none of these
+combinations has been run here.
+
+The shared GGUF has to be the UD-Q4_K_XL tensor layout, because that is the only layout gufo
+qualifies. `brainnxdomain/Qwen3.8-Flash-Next-Uncensored-Gufo-GGUF` (gated, ~104 GiB, 5 shards)
+reproduces it tensor for tensor and was tested on gufo with the shared-Q8 MTP head and the BF16
+mmproj.
+
+| engine | file | how |
+|---|---|---|
+| halogen (default pick) | `Quat3rnion/halogen-qwen3.8-flash-next-v2-abliterated`, file `qwen38-flash-next-v2-abliterated.hgn` at rev `e7783c5822dfda2785a0f5b435abf54df89fe8ee` (r2: PPL 3.134 vs stock 3.144, stock speed; the newer `main` file is not inference-validated) | Weights choice `abliterated`. The file goes beside the stock `.hgn` (~89 GB). Tokenizer, vision, n-gram table and npu/ come from the stock folder. `HALOGEN_CHECKPOINT=<path>` still loads any other file. |
+| halogen (one file for all engines) | the shared GGUF | `HALOGEN_CHECKPOINT=/path/…-00001-of-00005.gguf`. Needs `qwen38-flash-next-mtp.hgn` in the stock folder. The launcher forces 1 slot (halogen #172: K-quant GGUFs return empty replies on overlapping requests). Expect ~28% slower decode than `.hgn` and ~80 GiB resident. |
+| gufo | the shared GGUF | Weights choice `abliterated`. The file goes into `ENGINE_DIR/orca-uncensored/` (~112 GB, gated: accept the terms on the model page, then `hf auth login`). The existing shared-Q8 MTP head works, and the download hardlinks `mmproj-BF16.gguf` in for vision. `GUFO_MODEL=<subdir>/<shard1>` names any other file. |
+| Strata | the shared GGUF, unofficial | Strata loads only its listed packs, which are checked by SHA-256. A third-party GGUF goes through `tools/iq_pack.py --compat-bf16` and a hand-written run config (Strata issue #2783, closed as unsupported). |
+
+r2 was built against the stock n-gram table at peonist rev `5cc17cea`. If your table is from
+another revision, check that the stock `qwen38-flash-next-ngram.hgn` sha matches before you trust
+its output.
+
 ## What breaks on another engine
 
 | feature | on gufo 0.12.0 / plain llama.cpp |

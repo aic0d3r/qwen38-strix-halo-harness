@@ -95,6 +95,15 @@ assert h.engine_update("lmstudio") == ""  # no update source: silent
 # status reports an opted-out sidecar as off, not down
 open(f"{AGENT}/harness-sidecar", "w").write("0\n")
 assert "sidecar off" in h.choices_line()
+# weights: stock until answered; the launchers resolve the saved answer to the file they load; tuning is keyed per weights
+assert h.weights_pref() == "stock" and h.ask_weights("halogen") is False and "weights stock" in h.choices_line()
+k_stock = h.hw_key("gufo", "m")
+open(h.WEIGHTS, "w").write("abliterated\n")
+assert h.weights_file("gufo").endswith("orca-uncensored/Qwen3.8-Flash-Next-Uncensored-Gufo-00001-of-00005.gguf")
+assert h.weights_file("halogen").endswith("/qwen38-flash-next-v2-abliterated.hgn")
+assert h.hw_key("gufo", "m") != k_stock and h.hw_key("strata", "m") == h.hw_key("strata", "m")
+os.remove(h.WEIGHTS)
+assert h.hw_key("gufo", "m") == k_stock
 os.remove(f"{AGENT}/harness-sidecar")
 # setup order: update offered right after the engine pick (before any start question); then install (no launch),
 # free memory, upgrade, start last; an upgrade forces a fresh probe even when a saved result exists
@@ -116,12 +125,20 @@ h.subprocess.run = real_run
 for n, f in saved.items(): setattr(h, n, f)
 assert calls == ["update_offer", "plan_start", "install launch=False", "prepare", "upgrade", "start plan=True", "probe=True"], calls
 # upgrade chosen: pick_engine must not ask "Start <engine>?" (declining it used to exit setup); without one it does
-asked, saved = [], {n: getattr(h, n) for n in ("engine_menu", "plan_start")}
+asked, saved = [], {n: getattr(h, n) for n in ("engine_menu", "plan_start", "ask_weights", "ask_yn")}
 h.engine_menu = lambda r: "halogen"
+h.ask_weights = lambda e: False
 h.plan_start = lambda e, r, ask_start=True: asked.append(ask_start) or {"stop": None, "download": False}
 real_stdin, h.sys.stdin = h.sys.stdin, types.SimpleNamespace(isatty=lambda: True)
 for want in (True, False):
     h.pick_engine({"engines": []}, False, on_pick=lambda e: want)
+# new weights default while halogen runs: restart = a start plan that stops halogen first; declined = keep it running
+h.ask_weights, h.ask_yn = (lambda e: True), (lambda q, d=False: True)
+hal = {"engines": [{"engine": "halogen", "port": 8731, "models": ["m"]}]}
+assert h.pick_engine(hal, False)[1]["stop"] == "halogen" and asked[-1] is False
+h.ask_yn = lambda q, d=False: False
+assert h.pick_engine(hal, False) == ("halogen", None)
+asked.pop()
 h.sys.stdin = real_stdin
 for n, f in saved.items(): setattr(h, n, f)
 assert asked == [False, True], asked

@@ -253,7 +253,8 @@ def install_extensions(engine, extra=(), verbose=True, show_ok=True, launch=True
 # ---------- tune ----------
 def hw_key(engine, model_id):
     h = hardware()
-    return hashlib.sha1(f"{engine}|{model_id}|{h['gpu']}|{h['ram_gb']}".encode()).hexdigest()[:12]
+    w = "|abliterated" if engine in WEIGHTS_ENGINES and weights_pref() == "abliterated" else ""  # stock keeps its old key
+    return hashlib.sha1(f"{engine}|{model_id}|{h['gpu']}|{h['ram_gb']}{w}".encode()).hexdigest()[:12]
 
 
 def stream_once(port, model_id, prompt, max_tokens):
@@ -381,7 +382,40 @@ def stop_engine(engine, running):
 
 
 def halogen_ckpt():
-    return subprocess.run(["bash", os.path.join(REPO, "server", "start-halogen.sh"), "--print-ckpt"], capture_output=True, text=True).stdout.strip()
+    """The stock checkpoint: its folder also holds what every halogen checkpoint needs (tokenizer, n-gram, npu/)."""
+    return subprocess.run(["bash", os.path.join(REPO, "server", "start-halogen.sh"), "--print-stock"], capture_output=True, text=True).stdout.strip()
+
+
+# ---------- weights (stock / abliterated), one saved answer the halogen and gufo launchers read ----------
+WEIGHTS = os.path.join(AGENT, "harness-weights")
+WEIGHTS_ENGINES = {"halogen": ("--print-ckpt", 89), "gufo": ("--print-model", 112)}  # launcher flag, download GB
+WEIGHTS_LABELS = {"stock": "stock Qwen3.8-Flash-Next (default)",
+                  "abliterated": "abliterated (refusals removed; orcarouter edit, see docs/ENGINES.md#abliterated-models)"}
+
+
+def weights_pref():
+    try:
+        return open(WEIGHTS).read().strip() or "stock"
+    except OSError:
+        return "stock"
+
+
+def weights_file(engine):
+    """The main weights file the engine's launcher will load with the saved answer (it may not exist yet)."""
+    c = PROFILES["engines"][engine]
+    return subprocess.run(["bash", os.path.join(REPO, c["script"]), WEIGHTS_ENGINES[engine][0]], capture_output=True, text=True).stdout.strip()
+
+
+def ask_weights(engine):
+    """Which weights halogen/gufo load by default; current answer first. -> True if the answer changed."""
+    if engine not in WEIGHTS_ENGINES or not sys.stdin.isatty():
+        return False
+    cur = weights_pref()
+    opts = sorted(WEIGHTS_LABELS, key=lambda k: k != cur)
+    pick = {WEIGHTS_LABELS[k]: k for k in opts}[choose("Default model weights? (halogen and gufo load these)", [WEIGHTS_LABELS[k] for k in opts], False)]
+    os.makedirs(AGENT, exist_ok=True)
+    open(WEIGHTS, "w").write(pick + "\n")
+    return pick != cur
 
 
 def plan_start(engine, running, ask_start=True):
@@ -392,7 +426,7 @@ def plan_start(engine, running, ask_start=True):
     if not c.get("script"):
         print(f"{engine}: {c.get('start', 'start it yourself')}")
         return None
-    plan = {"stop": None, "download": False}
+    plan = {"stop": None, "download": False, "weights": None}
     holder = heap_holder(running)
     if holder and holder != engine and engine in BIG:
         if not ask_yn(f"{holder} holds the GPU memory {engine} needs. Stop {holder} and the ling-tiny sidecar?"):
@@ -403,6 +437,11 @@ def plan_start(engine, running, ask_start=True):
         if not ask_yn(f"No halogen checkpoint on this box. Download it (~124 GB into ~/models, {free} GB free, resumable)?"):
             return None
         plan["download"] = True
+    if engine in WEIGHTS_ENGINES and weights_pref() != "stock" and not os.path.isfile(weights_file(engine)):
+        free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
+        if not ask_yn(f"The {weights_pref()} {engine} weights are not on this box. Download them (~{WEIGHTS_ENGINES[engine][1]} GB, {free} GB free, resumable)?"):
+            return None
+        plan["weights"] = engine
     if ask_start and not ask_yn(f"Start {engine}? (runs {c['script']} in the background, log /tmp/harness-{engine}.log)", True):
         return None
     return plan
@@ -410,11 +449,13 @@ def plan_start(engine, running, ask_start=True):
 
 def prepare_start(plan, running):
     """The parts of a start plan an upgrade also needs first: stop the memory holder, download. Runs once (clears them)."""
-    stop, dl = plan["stop"], plan["download"]
-    plan["stop"], plan["download"] = None, False
+    stop, dl, wd = plan["stop"], plan["download"], plan.get("weights")
+    plan["stop"], plan["download"], plan["weights"] = None, False, None
     if stop and not stop_engine(stop, running):
         return False
-    return not (dl and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-halogen.sh"), "--yes"]).returncode)
+    if dl and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-halogen.sh"), "--yes"]).returncode:
+        return False
+    return not (wd and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-abliterated.sh"), wd, "--yes"]).returncode)
 
 
 def start_engine(engine, running, plan=None, wait_s=900):
@@ -465,11 +506,17 @@ def pick_engine(d, yes, want=None, on_pick=None):
         print("No engine is running yet. Pick one: halogen, gufo and Strata can be started (and halogen downloaded) from here.")
     eng = engine_menu(running)
     upgrading = on_pick(eng) if on_pick else False
-    if eng in running:
+    # the server keeps what it loaded at start: a new default needs a restart (an upgrade restarts it anyway)
+    restart = ask_weights(eng) and eng in running and not upgrading and ask_yn(
+        f"{eng} is running the {'stock' if weights_pref() != 'stock' else 'abliterated'} weights. Restart it on the new default?", True)
+    if eng in running and not restart:
         return eng, None
     if upgrading:  # every upgrader starts the engine itself: "Start?" would be a question with only one answer
         print(f"  the {eng} upgrade starts it")
-    return eng, plan_start(eng, running, ask_start=not upgrading) or sys.exit(not_answering(eng))
+    plan = plan_start(eng, {k: v for k, v in running.items() if k != eng}, ask_start=not (upgrading or restart)) or sys.exit(not_answering(eng))
+    if restart:
+        plan["stop"] = eng  # prepare_start stops it, start_engine brings it back on the new weights
+    return eng, plan
 
 
 def bring_up(d, eng, plan, yes, mod=""):
@@ -717,7 +764,7 @@ def notice(msg):
 
 def choices_line():
     """One line with every saved answer, for summaries and the config menu."""
-    return (f"sidecar {'off' if sidecar_pref() == '0' else 'on'} · voice {'on' if jget(EXTRAS, {}).get('voice') else 'off'}"
+    return (f"weights {weights_pref()} · sidecar {'off' if sidecar_pref() == '0' else 'on'} · voice {'on' if jget(EXTRAS, {}).get('voice') else 'off'}"
             f" · update check {'on' if update_pref() == '1' else 'off'}")
 
 
@@ -779,6 +826,7 @@ def cmd_setup(a):
                  choices_line()] + (
             [f"stop {plan['stop']} and the ling-tiny sidecar"] if plan and plan["stop"] else []) + (
             ["download halogen (~124 GB, resumable)"] if plan and plan["download"] else []) + (
+            [f"download the abliterated {eng} weights (~{WEIGHTS_ENGINES[eng][1]} GB, resumable)"] if plan and plan.get("weights") else []) + (
             [f"upgrade {eng} (restart, rolls back on failure)"] if upgrade else []) + (
             [f"start {eng} (model asked once it answers, if it serves several)"] if plan else [f"use {eng} (running)"]) + (
             [] if a.no_tune else ["probe speed (<2 min; skipped if already measured for this model, unless upgraded)"])
@@ -846,6 +894,7 @@ def cmd_config(a):
         voice = bool(jget(EXTRAS, {}).get("voice"))
         items = {
             f"engine        {p.get('engine', '-')}/{p.get('model', '-')}": "engine",
+            f"weights       {weights_pref()}  (default for halogen and gufo)": "weights",
             f"sidecar       {'on' if sc else 'off'}  (ling-tiny, ~8 GiB GPU memory)": "sidecar",
             f"voice         {'on' if voice else 'off'}  (Lemonade STT/TTS)": "voice",
             f"update check  {'on' if upd == '1' else 'off'}  (newer engine release, never installs without asking)": "update",
@@ -858,6 +907,16 @@ def cmd_config(a):
             eng, mod = pick_target(detect(), False)
             install_extensions(eng, verbose=False)
             finish(eng, mod, bool(jget(os.path.join(AGENT, "harness-tuned.json"), {}).get(hw_key(eng, mod))))
+        elif k == "weights":
+            eng = p.get("engine", "halogen")
+            if not ask_weights(eng if eng in WEIGHTS_ENGINES else "halogen") or eng not in WEIGHTS_ENGINES:
+                continue
+            running = {x["engine"]: x for x in detect()["engines"]}
+            if ask_yn(f"Restart {eng} on the {weights_pref()} weights now?", True):
+                if eng in running and not stop_engine(eng, running):
+                    continue
+                running.pop(eng, None)
+                start_engine(eng, running)
         elif k == "sidecar":
             open(os.path.join(AGENT, "harness-sidecar"), "w").write("0\n" if sc else "1\n")
             r = subprocess.run(["systemctl", "--user", "stop" if sc else "start", "ling-tiny.service"], capture_output=True)

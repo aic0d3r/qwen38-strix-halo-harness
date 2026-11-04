@@ -18,23 +18,57 @@ IMAGE_DIGEST="${HALOGEN_IMAGE_DIGEST-sha256:e30d6bf9a325d75fb4904c108745df7d77dc
 IMAGE="ghcr.io/peonist-ai/halogen-flash-server:${IMAGE_TAG}${IMAGE_DIGEST:+@$IMAGE_DIGEST}"
 [ "${1:-}" = --print-image ] && { echo "$IMAGE"; exit 0; }
 
-# locate the main checkpoint at runtime (exclude ngram/vision/mtp/w4b sidecars)
-CKPT="${HALOGEN_CHECKPOINT:-}"
-if [ -z "$CKPT" ]; then
-  # ~/models/*/ covers scripts/download-halogen.sh's ~/models/halogen-qwen3.8-flash-next
-  CKPT=$(ls "$PWD"/*.hgn /models/*.hgn "$HOME"/models/*.hgn "$HOME"/models/*/*.hgn "$HOME"/Downloads/*.hgn \
-    "${LLMBENCH:-$HOME/LLMBench}"/models/*/*.hgn 2>/dev/null \
-    | grep -v 'ngram\|vision\|mtp\|w4b' | grep 'v2\.hgn' | head -1)
-fi
+# locate the stock v2 checkpoint (exclude ngram/vision/mtp/w4b sidecars); its folder also holds
+# the tokenizer, vision tower, n-gram table, MTP head and npu/ that every checkpoint here uses
+# ~/models/*/ covers scripts/download-halogen.sh's ~/models/halogen-qwen3.8-flash-next
+STOCK=$(ls "$PWD"/*.hgn /models/*.hgn "$HOME"/models/*.hgn "$HOME"/models/*/*.hgn "$HOME"/Downloads/*.hgn \
+  "${LLMBENCH:-$HOME/LLMBench}"/models/*/*.hgn 2>/dev/null \
+  | grep -v 'ngram\|vision\|mtp\|w4b' | grep 'v2\.hgn' | head -1)
+[ "${1:-}" = --print-stock ] && { echo "$STOCK"; exit 0; }
+# default weights: the wizard's saved answer (stock|abliterated); HALOGEN_WEIGHTS overrides it.
+# the abliterated .hgn sits beside the stock one (scripts/download-abliterated.sh halogen puts it there)
+WEIGHTS="${HALOGEN_WEIGHTS:-$(cat "${PI_CODING_AGENT_DIR:-${PI_HOME:-$HOME/.pi}/agent}/harness-weights" 2>/dev/null)}"
+DEF=$STOCK
+[ "$WEIGHTS" = abliterated ] && DEF=$(dirname "${STOCK:-$HOME/models/halogen-qwen3.8-flash-next/x}")/qwen38-flash-next-v2-abliterated.hgn
+# HALOGEN_CHECKPOINT: any other main checkpoint, e.g. a GGUF (docs/ENGINES.md#abliterated-models)
+CKPT="${HALOGEN_CHECKPOINT:-$DEF}"
 # the one checkpoint search: setup.sh and upgrade-halogen.sh ask here instead of copying it
 [ "${1:-}" = --print-ckpt ] && { echo "$CKPT"; exit 0; }
+if [ -n "$CKPT" ] && [ ! -f "$CKPT" ] && [ "$CKPT" = "$DEF" ] && [ "$WEIGHTS" = abliterated ]; then
+  echo "abliterated checkpoint missing: $CKPT" >&2
+  echo "get it: scripts/download-abliterated.sh halogen   (or run stock: HALOGEN_WEIGHTS=stock $0)" >&2
+  exit 1
+fi
 if [ -z "$CKPT" ] || [ ! -f "$CKPT" ]; then
   echo "no main checkpoint found (looked in ., /models, ~/models, ~/Downloads, LLMBench/models)" >&2
   echo "pass one: HALOGEN_CHECKPOINT=/path/qwen38-flash-next-v2.hgn $0" >&2
   exit 1
 fi
-W=$(dirname "$CKPT")
-# vision tower is enabled by default (HALOGEN_VISION_TOWER=1; file must sit beside the checkpoint)
+C=$(dirname "$CKPT")
+W=$(dirname "${STOCK:-$CKPT}")  # mounted at /models: tokenizer, vision, ngram, mtp head, npu/
+ALT=()  # extra mounts/env for a checkpoint that is not the stock v2 in $W
+[ "$C" != "$W" ] && ALT+=(-v "$C":/ckpt:ro)
+CK_IN=$([ "$C" = "$W" ] && echo /models || echo /ckpt)/$(basename "$CKPT")
+case "$CKPT" in
+  *.gguf)
+    # a GGUF carries no head this engine runs: it needs halogen's own (1.4 GiB, same repo as v2)
+    if [ ! -f "$W/qwen38-flash-next-mtp.hgn" ]; then
+      echo "GGUF checkpoint needs $W/qwen38-flash-next-mtp.hgn:" >&2
+      echo "  hf download peonist-ai/halogen-qwen3.8-flash-next qwen38-flash-next-mtp.hgn --local-dir $W" >&2
+      exit 1
+    fi
+    ALT+=(-e HALOGEN_MTP_HEAD=/models/qwen38-flash-next-mtp.hgn -e HALOGEN_TOKENIZER=/models/tokenizer)
+    # shortcut: K-quant GGUFs return empty replies on overlapping requests (halogen #172, open as of
+    # 0.18.23), so one slot; drop this when the halogen changelog closes #172
+    if [ "$SLOTS" != 1 ]; then echo "GGUF checkpoint: HALOGEN_KV_SLOTS $SLOTS -> 1 (halogen #172)"; SLOTS=1; fi ;;
+  *)
+    # a non-stock .hgn (the abliterated v2) does not find the stock n-gram table by name
+    [ "$CKPT" != "$STOCK" ] && [ -f "$W/qwen38-flash-next-ngram.hgn" ] \
+      && ALT+=(-e HALOGEN_NGRAM_TABLE=/models/qwen38-flash-next-ngram.hgn -e HALOGEN_TOKENIZER=/models/tokenizer) ;;
+esac
+# any other checkpoint answers under the stock id, so pi's halogen provider works unchanged
+[ "$CKPT" != "$STOCK" ] && ALT+=(-e HALOGEN_MODEL_ID=halogen-qwen3.8-flash-next)
+# vision tower is enabled by default (HALOGEN_VISION_TOWER=1; file must sit beside the stock checkpoint)
 VISION="${VISION:-1}"
 if [ "$VISION" = 1 ] && [ ! -f "$W/qwen38-flash-next-vision.hgn" ]; then
   echo "vision tower missing: $W/qwen38-flash-next-vision.hgn" >&2
@@ -117,8 +151,8 @@ exec docker run --rm -i \
   -v /usr/lib/libxrt_driver_xdna.so.2:/usr/lib/libxrt_driver_xdna.so.2:ro \
   -e HALOGEN_CTX=$CTX -e HALOGEN_KV_SLOTS=$SLOTS \
   -e HALOGEN_NPU_MODELS=${HALOGEN_NPU_MODELS:-decider-0.8b,qwen3-embedding-0.6b,qwen3guard-gen-0.6b} \
-  -e HALOGEN_VISION_TOWER=$VISION \
-  -e HALOGEN_CHECKPOINT=/models/$(basename "$CKPT") \
+  -e HALOGEN_VISION_TOWER=$([ "$VISION" = 1 ] && [[ $CK_IN != /models/* ]] && echo /models/qwen38-flash-next-vision.hgn || echo "$VISION") \
+  -e HALOGEN_CHECKPOINT="$CK_IN" "${ALT[@]}" \
   --group-add "${RENDER_GID:-44}" --group-add "${VIDEO_GID:-99}" \
   --security-opt seccomp=unconfined --ipc=host --ulimit memlock=-1:-1 \
   -v "$W":/models:ro -p 127.0.0.1:8731:8731 \

@@ -41,7 +41,7 @@ rollback(){
 
 # new images can need new NPU device files (0.18 added embedding u10.elf); the
 # launcher mounts /models read-only, so refresh them here. hf only fetches changes.
-CKPT=$(bash "$START" --print-ckpt)
+CKPT=$(bash "$START" --print-stock)  # npu/ lives beside the stock checkpoint whatever weights are loaded
 NPU="$(dirname "${CKPT:-/nonexistent/x}")/npu"
 HF_BIN=$(command -v hf || ls "$HOME/.hf-venv/bin/hf" 2>/dev/null)
 if [ -d "$NPU" ] && [ -n "$HF_BIN" ]; then

@@ -588,12 +588,15 @@ elif [ -n "$HALOGEN_CKPT" ]; then
     # one big engine at a time: halogen beside gufo/Strata fights over the same GPU heap (device-lost)
     fail "gufo or Strata holds the GPU memory halogen needs - not launching. stop it first (scripts/stop-all.sh) or switch with ./setup.sh"
   else
-    [ "$HALOGEN_CKPT" = "auto" ] && HALOGEN_CKPT=$(find_ckpt)
-    if [ -z "$HALOGEN_CKPT" ] || [ ! -f "$HALOGEN_CKPT" ]; then
-      # no checkpoint found: offer to fetch exactly the required file set (~124 GB, resumable)
-      echo "  no .hgn checkpoint found (looked in ., /models, ~/models, ~/Downloads, LLMBench/models)."
-      bash "$REPO/scripts/download-halogen.sh" || { fail "no checkpoint - re-run ./setup.sh --halogen auto to resume"; exit 1; }
-      HALOGEN_CKPT="$HOME/models/halogen-qwen3.8-flash-next/qwen38-flash-next-v2.hgn"
+    if [ "$HALOGEN_CKPT" = "auto" ]; then
+      if [ -z "$(bash "$REPO/server/start-halogen.sh" --print-stock)" ]; then
+        # no checkpoint found: offer to fetch exactly the required file set (~124 GB, resumable)
+        echo "  no .hgn checkpoint found (looked in ., /models, ~/models, ~/Downloads, LLMBench/models)."
+        bash "$REPO/scripts/download-halogen.sh" || { fail "no checkpoint - re-run ./setup.sh --halogen auto to resume"; exit 1; }
+      fi
+      HALOGEN_CKPT=$(find_ckpt)  # the saved weights choice (harness-weights): stock or the abliterated .hgn
+      [ -f "$HALOGEN_CKPT" ] || bash "$REPO/scripts/download-abliterated.sh" halogen \
+        || { fail "abliterated checkpoint missing - scripts/download-abliterated.sh halogen, or ./harness config -> weights stock"; exit 1; }
     fi
     if [ -z "$HALOGEN_CKPT" ] || [ ! -f "$HALOGEN_CKPT" ]; then
       fail "no .hgn checkpoint found (looked in ., /models, ~/models, ~/Downloads, LLMBench/models) - pass it: ./setup.sh --halogen /path/to/checkpoint.hgn"
@@ -608,7 +611,7 @@ elif [ -n "$HALOGEN_CKPT" ]; then
       # launches need a fresh allocator - see README. 65k/2-slot is the safe default below.)
       # a link, not a copy: a copy kept the old image pin after upgrade-halogen.sh moved it
       ln -sfn server/start-halogen.sh "$REPO/start-halogen.sh"; ok "linked $REPO/start-halogen.sh (restart any time)"
-      setsid nohup "$REPO/start-halogen.sh" > "$REPO/halogen.log" 2>&1 < /dev/null &
+      HALOGEN_CHECKPOINT="$HALOGEN_CKPT" setsid nohup "$REPO/start-halogen.sh" > "$REPO/halogen.log" 2>&1 < /dev/null &
       for i in $(seq 1 30); do sleep 10; hal_up && { ok "halogen up (~${i}0s)"; break; }; done
       hal_up || fail "not healthy after 5 min - check $REPO/halogen.log"
     fi
