@@ -238,7 +238,7 @@ On Strix Halo, matched measurements on this box (halogen and gufo A/B in one ses
 held; Strata re-run 2026-10-14 with the same `halogen-cmp.py` battery and depth prompts, greedy,
 thinking off, nonce-tagged so nothing is cached; UD-IQ4_XS, 256k ctx):
 
-| | halogen 0.18.17 (default; measured on 0.18.5) | Strata 0.1.44.1 (tuned) | gufo 0.12.0 |
+| | halogen 0.19.1 (default; measured on 0.18.5) | Strata 0.1.44.1 (tuned) | gufo 0.12.0 |
 |---|---|---|---|
 | decode, 10-prompt battery (median) | **65 t/s** | 43 t/s | 40 t/s |
 | decode, 2k to 119k context | **47-50 t/s** | 32-36 t/s | 29-32 t/s |

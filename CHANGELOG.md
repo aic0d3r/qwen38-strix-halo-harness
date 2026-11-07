@@ -3,14 +3,14 @@
 <!-- One block per section per release, in the order Added, Changed, Fixed. Add new entries to the
      existing block instead of opening a second one, so a release never has two "### Fixed" lists. -->
 
-## Unreleased
+## 1.9.0 - 2026-11-07
 
 ### Added
 - Default model weights for halogen and gufo: the wizard asks stock or abliterated after the engine pick (`./harness config` -> weights changes it later; docs/ENGINES.md#abliterated-models). Both launchers load the saved answer, the wizard and `start.sh` offer the download (`scripts/download-abliterated.sh`), a running engine restarts on the new weights if you agree, and the pi model id stays the same. Speed probes are saved per weights.
 - `start-halogen.sh` loads any other `HALOGEN_CHECKPOINT` (another `.hgn`, or a GGUF with halogen's MTP head, forced to 1 slot for halogen #172) and still reads tokenizer, vision, n-gram table and npu/ from the stock folder; `start-gufo-flashnext.sh` takes `GUFO_MODEL`.
 
 ### Changed
-- Pin: halogen 0.18.14 -> 0.18.17 (validated by `scripts/upgrade-halogen.sh`).
+- Pin: halogen 0.18.14 -> 0.19.1 (validated by `scripts/upgrade-halogen.sh`).
 
 ### Removed
 - `scripts/cache-gaps.py`: a personal Anthropic cache-cost analysis, not used by the harness.
