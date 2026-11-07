@@ -15,11 +15,14 @@ case "$ENG" in
           --revision e7783c5822dfda2785a0f5b435abf54df89fe8ee) ;;
   gufo)
     WANT=$(GUFO_WEIGHTS=abliterated bash "$REPO/server/start-gufo-flashnext.sh" --print-model)
-    DIR=$(dirname "$WANT"); GB=112
-    ARGS=(brainnxdomain/Qwen3.8-Flash-Next-Uncensored-Gufo-GGUF --include '*.gguf') ;;
+    DIR=$(dirname "$WANT"); GB=117  # 112 weights + the MTP head and vision projector if missing
+    ARGS=(brainnxdomain/Qwen3.8-Flash-Next-Uncensored-Gufo-GGUF --include '*.gguf')
+    ROOT=$(dirname "$DIR"); MTP=mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf ;;
   *) echo "usage: $0 halogen|gufo [--yes]" >&2; exit 1 ;;
 esac
-[ -f "$WANT" ] && { echo "  already there: $WANT"; exit 0; }
+# gufo also needs the shared MTP head beside the weights folder (the launcher's --mtp-model)
+[ -f "$WANT" ] && { [ "$ENG" != gufo ] || [ -f "$ROOT/$MTP" ]; } && { echo "  already there: $WANT"; exit 0; }
+[ -f "$WANT" ] && GB=5  # weights there, only the gufo sidecars left
 mkdir -p "$DIR"
 AVAIL=$(df -BG --output=avail "$DIR" 2>/dev/null | tail -1 | tr -dc '0-9')
 echo "  required download: ~$GB GB into $DIR${AVAIL:+ (free: ${AVAIL} GB)}"
@@ -38,6 +41,15 @@ echo "  downloading (resumable - re-run if interrupted) ..."
 if ! "$HF_BIN" download "${ARGS[@]}" --local-dir "$DIR"; then
   [ "$ENG" = gufo ] && echo "  the gufo repo is gated: accept its terms on huggingface.co/brainnxdomain/Qwen3.8-Flash-Next-Uncensored-Gufo-GGUF, then: $HF_BIN auth login" >&2
   echo "  download failed/incomplete - re-run to resume" >&2; exit 1
+fi
+# gufo sidecars from the stock repo when this box never had the stock gufo setup: MTP head + vision projector
+if [ "$ENG" = gufo ]; then
+  if [ ! -f "$ROOT/$MTP" ]; then
+    "$HF_BIN" download unsloth/Qwen3.8-Flash-Next-GGUF "MTP/$MTP" --local-dir "$ROOT" && mv "$ROOT/MTP/$MTP" "$ROOT/$MTP" \
+      || { echo "  MTP head download failed - re-run to resume" >&2; exit 1; }
+  fi
+  [ -f "$ROOT/mmproj-BF16.gguf" ] || "$HF_BIN" download unsloth/Qwen3.8-Flash-Next-GGUF mmproj-BF16.gguf --local-dir "$ROOT" \
+    || echo "  vision projector download failed (text still works) - re-run to retry" >&2
 fi
 # gufo finds the vision projector beside the target: link the stock one in (same disk, no copy)
 if [ "$ENG" = gufo ] && [ -f "$DIR/../mmproj-BF16.gguf" ] && [ ! -e "$DIR/mmproj-BF16.gguf" ]; then

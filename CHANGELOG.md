@@ -16,6 +16,7 @@
 - `scripts/cache-gaps.py`: a personal Anthropic cache-cost analysis, not used by the harness.
 
 ### Fixed
+- Abliterated gufo on a box without the stock gufo files: the download skipped the shared MTP head the launcher loads, so gufo never answered (900 s wait, failed upgrade). `scripts/download-abliterated.sh gufo` now also fetches it and `mmproj-BF16.gguf` from unsloth, the wizard and `start.sh` offer that ~5 GB download when only the head is missing, and the launcher exits at once with the fix when it is.
 - `./setup.sh --halogen <path>` launched whatever checkpoint the launcher found on its own, not `<path>`.
 - `tests/test_harness.py` still expected setup to start the sidecar unit, which 1.8.2 removed.
 

@@ -406,6 +406,15 @@ def weights_file(engine):
     return subprocess.run(["bash", os.path.join(REPO, c["script"]), WEIGHTS_ENGINES[engine][0]], capture_output=True, text=True).stdout.strip()
 
 
+def weights_download_gb(engine):
+    """GB scripts/download-abliterated.sh still has to fetch: 0 when complete; gufo also needs the stock MTP head."""
+    f = weights_file(engine)
+    if not os.path.isfile(f):
+        return WEIGHTS_ENGINES[engine][1]
+    mtp = os.path.join(os.path.dirname(os.path.dirname(f)), "mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf")
+    return 5 if engine == "gufo" and not os.path.isfile(mtp) else 0
+
+
 def ask_weights(engine):
     """Which weights halogen/gufo load by default; current answer first. -> True if the answer changed."""
     if engine not in WEIGHTS_ENGINES or not sys.stdin.isatty():
@@ -437,11 +446,12 @@ def plan_start(engine, running, ask_start=True):
         if not ask_yn(f"No halogen checkpoint on this box. Download it (~124 GB into ~/models, {free} GB free, resumable)?"):
             return None
         plan["download"] = True
-    if engine in WEIGHTS_ENGINES and weights_pref() != "stock" and not os.path.isfile(weights_file(engine)):
+    gb = weights_download_gb(engine) if engine in WEIGHTS_ENGINES and weights_pref() != "stock" else 0
+    if gb:
         free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
-        if not ask_yn(f"The {weights_pref()} {engine} weights are not on this box. Download them (~{WEIGHTS_ENGINES[engine][1]} GB, {free} GB free, resumable)?"):
+        if not ask_yn(f"The {weights_pref()} {engine} weights (or their MTP head) are not on this box. Download them (~{gb} GB, {free} GB free, resumable)?"):
             return None
-        plan["weights"] = engine
+        plan["weights"], plan["weights_gb"] = engine, gb
     if ask_start and not ask_yn(f"Start {engine}? (runs {c['script']} in the background, log /tmp/harness-{engine}.log)", True):
         return None
     return plan
@@ -826,7 +836,7 @@ def cmd_setup(a):
                  choices_line()] + (
             [f"stop {plan['stop']} and the ling-tiny sidecar"] if plan and plan["stop"] else []) + (
             ["download halogen (~124 GB, resumable)"] if plan and plan["download"] else []) + (
-            [f"download the abliterated {eng} weights (~{WEIGHTS_ENGINES[eng][1]} GB, resumable)"] if plan and plan.get("weights") else []) + (
+            [f"download the abliterated {eng} weights (~{plan.get('weights_gb')} GB, resumable)"] if plan and plan.get("weights") else []) + (
             [f"upgrade {eng} (restart, rolls back on failure)"] if upgrade else []) + (
             [f"start {eng} (model asked once it answers, if it serves several)"] if plan else [f"use {eng} (running)"]) + (
             [] if a.no_tune else ["probe speed (<2 min; skipped if already measured for this model, unless upgraded)"])

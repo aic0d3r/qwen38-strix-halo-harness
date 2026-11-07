@@ -18,6 +18,13 @@ if [ ! -f "$ENGINE_DIR/$GUFO_MODEL" ]; then
     && echo "get it: scripts/download-abliterated.sh gufo   (or run stock: GUFO_WEIGHTS=stock $0)" >&2
   exit 1
 fi
+MTP=mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf  # without it gufo fails the load but never exits (port stays dark)
+if [ ! -f "$ENGINE_DIR/$MTP" ]; then
+  echo "gufo MTP head missing: $ENGINE_DIR/$MTP" >&2
+  if [ "$WEIGHTS" = abliterated ]; then echo "get it: scripts/download-abliterated.sh gufo" >&2
+  else echo "get it: hf download unsloth/Qwen3.8-Flash-Next-GGUF MTP/$MTP --local-dir $ENGINE_DIR && mv $ENGINE_DIR/MTP/$MTP $ENGINE_DIR/" >&2; fi
+  exit 1
+fi
 # pre-flight: gufo at 65k has never wedged, but at large ctx the same allocator
 # physics as halogen applies. recover mild fragmentation, fail fast otherwise.
 CTX="${GUFO_CTX:-65536}"
@@ -31,8 +38,8 @@ if [ "$CTX" != "65536" ] && [ -n "$O9" ] && [ "$O9" -lt 1000 ]; then
   fi
 fi
 # pinned like halogen (0.12.0 measured in docs/ENGINES.md); scripts/upgrade-gufo.sh moves both lines
-GUFO_VERSION=0.19.0  # the tag the digest below was pulled as; ./harness update-check compares against it
-GUFO_IMAGE=${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime@sha256:51be93845170ce3ce441c7399b5b2eba942baf7f3e6c9a4a3333fccecc27d190}
+GUFO_VERSION=0.31.0  # the tag the digest below was pulled as; ./harness update-check compares against it
+GUFO_IMAGE=${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime@sha256:9a6e2d43ca00d8d1c89453ebf456e975fd197ef54d648ba0d1b4a8bcc0917f24}
 PORT=${PORT:-8080}
 RENDER_GID=$(getent group render | cut -d: -f3); VIDEO_GID=$(getent group video | cut -d: -f3)
 exec docker run --rm -i \
@@ -46,7 +53,7 @@ exec docker run --rm -i \
     -m "/models/$GUFO_MODEL" \
     --served-model-name qwen3.8-flash-next \
     --speculative mtp \
-    --mtp-model /models/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf \
+    --mtp-model /models/$MTP \
     --think auto \
     -c "$CTX" -j 2 \
     --log-progress \

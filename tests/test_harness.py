@@ -142,4 +142,14 @@ asked.pop()
 h.sys.stdin = real_stdin
 for n, f in saved.items(): setattr(h, n, f)
 assert asked == [False, True], asked
+
+# gufo abliterated: weights present but no shared MTP head -> the sidecar download is still owed
+root = tempfile.mkdtemp(); os.makedirs(f"{root}/orca"); open(f"{root}/orca/w.gguf", "w").close()
+real_wf, h.weights_file = h.weights_file, lambda e: f"{root}/orca/w.gguf"
+assert h.weights_download_gb("gufo") == 5 and h.weights_download_gb("halogen") == 0
+open(f"{root}/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf", "w").close()
+assert h.weights_download_gb("gufo") == 0
+h.weights_file = lambda e: f"{root}/none.gguf"
+assert h.weights_download_gb("gufo") == 112
+h.weights_file = real_wf
 print("ok")
