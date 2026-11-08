@@ -12,7 +12,7 @@ class Mock(http.server.BaseHTTPRequestHandler):
     def _j(self, o):
         b = json.dumps(o).encode(); self.send_response(200); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
     def do_GET(self):
-        if self.path == "/v1/models": self._j({"data": [{"id": "Qwen3-8B", **({"owned_by": "gufo", "context_length": 65536} if GUFO else {} if STRATA else {"owned_by": "llamacpp"})}]})
+        if self.path == "/v1/models": self._j({"data": [{"id": "Qwen3-8B", **({"owned_by": "gufo", "context_length": 65536, "architecture": {"input_modalities": ["text", "image"]}} if GUFO else {} if STRATA else {"owned_by": "llamacpp"})}]})
         elif self.path == "/props" and GUFO: self.send_response(400); self.end_headers()
         elif self.path == "/props": self._j({"default_generation_settings": {"n_ctx": 32768}})
         else: self._j({"ok": 1})
@@ -50,6 +50,7 @@ assert h.pick_target(h.detect(), True, "gufo")[0] == "gufo"
 GUFO = True
 assert [e["engine"] for e in h.detect()["engines"] if e["port"] == srv.server_port] == ["gufo"]
 assert h.server_ctx(srv.server_port) == 65536
+assert h.server_input(srv.server_port) == ["text", "image"] and h.server_input(1) == ["text"]
 # started gufo but detect names the port something else: keep the engine we started
 d = {"engines": [{"engine": "strata", "port": srv.server_port, "models": ["m"]}]}
 assert h.bring_up(d, "gufo", None, True) == ("gufo", "m")

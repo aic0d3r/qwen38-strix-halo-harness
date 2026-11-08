@@ -62,8 +62,8 @@ if [ "$CTX" -gt 65536 ] && [ -n "$O9" ] && [ "$O9" -lt 1000 ]; then
   fi
 fi
 # pinned like halogen (0.12.0 measured in docs/ENGINES.md); scripts/upgrade-gufo.sh moves both lines
-GUFO_VERSION=0.31.0  # the tag the digest below was pulled as; ./harness update-check compares against it
-GUFO_IMAGE=${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime@sha256:9a6e2d43ca00d8d1c89453ebf456e975fd197ef54d648ba0d1b4a8bcc0917f24}
+GUFO_VERSION=0.32.0  # the tag the digest below was pulled as; ./harness update-check compares against it
+GUFO_IMAGE=${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime@sha256:9e47025c4dab6b24867e50e9374009a68133a4864b96a85542bff6c1cdbf2b55}
 PORT=${PORT:-8080}
 RENDER_GID=$(getent group render | cut -d: -f3); VIDEO_GID=$(getent group video | cut -d: -f3)
 exec docker run --rm -i \

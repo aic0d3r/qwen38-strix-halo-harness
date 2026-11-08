@@ -277,7 +277,7 @@ its output.
 | `taint-gate` (confirm risky actions after outside content), `--doctor --refusals` | works — no NPU involved |
 | prompt-injection screening (`auto-guard`) | dead — no `/v1/moderations` |
 | `triage` / `dedup_scan` | dead — no decider or embedder |
-| image input | dead as launched (no `--mmproj` wired) |
+| image input | works on gufo 0.32.0: it auto-loads the adjacent `mmproj-BF16.gguf`, no flag needed (verified 2026-11-08: `vision_prepared` in the container log, screenshot described correctly). Was dead on 0.12. |
 | `/health` verification (cache, vision) | degrades to "unknown" |
 | decode (gufo, MTP) | ~38% slower than halogen 0.18.5: 40 vs 65 t/s median battery, 29-32 vs 47-50 t/s from 4k to 131k (flat on both) |
 | cold prefill (gufo) | ~17% slower: 119k in 94 s vs 78 s (halogen 131k: 86 s; the "131k" label on earlier runs was this 119k-token prompt); warm replay is ~0.1 s on both |

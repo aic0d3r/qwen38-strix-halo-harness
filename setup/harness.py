@@ -332,12 +332,23 @@ def server_ctx(port):
     return 0
 
 
+def server_input(port):
+    """Input modalities from the running server (gufo >=0.32 serves images via the adjacent mmproj); text-only if it will not say."""
+    try:
+        mods = json.load(http(f"http://127.0.0.1:{port}/v1/models"))["data"][0].get("architecture", {}).get("input_modalities")
+        if mods:
+            return mods
+    except Exception:
+        pass
+    return ["text"]
+
+
 def build_entry(engine, model_id, ctx, tuned):
     e = PROFILES["engines"][engine]
     mp = model_profile(model_id)
     ctx = ctx or 32768
     max_tokens = tuned.get("maxTokens") or min(mp["maxTokens"], max(1024, ctx // 8))
-    entry = {"id": model_id, "name": f"{model_id} ({engine})", "reasoning": mp["reasoning"], "input": ["text"],
+    entry = {"id": model_id, "name": f"{model_id} ({engine})", "reasoning": mp["reasoning"], "input": server_input(e["port"]),
              "contextWindow": ctx, "maxTokens": max_tokens, "samplingParams": mp["samplingParams"]}
     for k in ("compat", "thinkingLevelMap"):
         if k in mp:
