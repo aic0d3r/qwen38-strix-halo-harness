@@ -51,6 +51,18 @@ GUFO = True
 assert [e["engine"] for e in h.detect()["engines"] if e["port"] == srv.server_port] == ["gufo"]
 assert h.server_ctx(srv.server_port) == 65536
 assert h.server_input(srv.server_port) == ["text", "image"] and h.server_input(1) == ["text"]
+# sync_ctx: a stale window and a launcher-owned reserve follow the served window; a /tune reserve that still fits stays
+h.jput(f"{AGENT}/models.json", {"providers": {"gufo": {"models": [{"id": "Qwen3-8B", "contextWindow": 262144}]}}})
+saved_profile = h.jget(f"{AGENT}/harness-profile.json")
+h.jput(f"{AGENT}/harness-profile.json", {"engine": "gufo", "model": "Qwen3-8B"})
+h.jput(f"{AGENT}/settings.json", {"compaction": {"reserveTokens": 60000}})
+h.sync_ctx("gufo")
+assert json.load(open(f"{AGENT}/models.json"))["providers"]["gufo"]["models"][0]["contextWindow"] == 65536
+assert json.load(open(f"{AGENT}/settings.json"))["compaction"]["reserveTokens"] == 16384
+h.jput(f"{AGENT}/settings.json", {"compaction": {"reserveTokens": 12345}})
+h.sync_ctx("gufo")
+assert json.load(open(f"{AGENT}/settings.json"))["compaction"]["reserveTokens"] == 12345
+h.jput(f"{AGENT}/harness-profile.json", saved_profile)
 # started gufo but detect names the port something else: keep the engine we started
 d = {"engines": [{"engine": "strata", "port": srv.server_port, "models": ["m"]}]}
 assert h.bring_up(d, "gufo", None, True) == ("gufo", "m")
@@ -231,6 +243,8 @@ assert (r["engine"], r["quant"], r["ctx"], r["tested"]) == ("gufo", "UD-Q4_K_XL"
 assert (rec("amd", 102, 102)["quant"], rec("amd", 102, 102)["ctx"]) == ("UD-Q3_K_XL", 262144)
 assert (rec("amd", 96, 96)["quant"], rec("amd", 96, 96)["ctx"]) == ("UD-Q3_K_XL", 65536)
 assert (rec("amd", 92, 92)["quant"], rec("amd", 92, 92)["ctx"]) == ("UD-IQ3_XXS", 65536)
+assert [h.gufo_ctx(q, {"fast_gb": 124.5}) for q in ("UD-Q4_K_XL", "UD-Q3_K_XL")] == [262144, 262144] and h.gufo_ctx("UD-Q3_K_XL", {"fast_gb": 96}) == 65536
+assert h.gufo_ctx("UD-Q5_K_XL", {"fast_gb": 124.5}) == 65536 and h.gufo_ctx("nope", {"fast_gb": 96}) == 262144  # no fit -> smallest tier; unknown quant -> max
 assert rec("amd", 88, 88)["engine"] is None and rec("amd", 64, 64)["engine"] is None and rec("none", 128, 128, name="")["engine"] is None
 # every other AMD/NVIDIA box goes to Strata (gufo is Strix Halo only); the model is the biggest ISTA pack whose RAM need fits (Strata's rule),
 # Qwen3.6 below that, nothing under its 32 GB; abliterated needs the Unsloth layout; nothing here is measured

@@ -26,6 +26,7 @@ start anyway (idempotent), so a regenerated config is fixed again. Setup's file 
 """
 import glob, json, os, re, sys
 
+CTX_FROM, CTX_TO = 131072, 262144  # setup's recommendation -> the model's trained window
 RESIDENT_BESIDE_GIB = 16  # setup.py UNSLOTH_RESIDENT_BESIDE_GB: RAM left beside the experts
 ENV = {"STRATA_IGPU_PROMPT_SET": "1", "STRATA_PF_FUSED": "1", "STRATA_PF_FUSED_KQ": "1", "STRATA_PREFILL_STREAM_MIN": "128"}
 
@@ -70,6 +71,26 @@ def set_arg(args, flag, value=None):
         args += [flag] + ([value] if value is not None else [])
 
 
+def grow_context(cfg):
+    """Setup recommends 128K on every card (a VRAM rule). On the shared pool the KV cache is small (Strata: 744 MiB of session at 131072,
+    about double at 262144, against 35 GiB of pool left beside the experts here), and the model's trained window is 262144, so a
+    setup-written 131072 becomes 262144. Another value (a --context choice, a hand edit) stays. Strata's docs/ENGINES.md run 256K here."""
+    args, written = cfg["args"], cfg.get("args_written") or cfg["args"]
+    if "--max-context" not in args or "--max-context" not in written:
+        return
+    i = args.index("--max-context") + 1
+    if args[i] == written[written.index("--max-context") + 1] == str(CTX_FROM):
+        args[i] = str(CTX_TO)
+
+
+def write(cfg, path):
+    if not os.path.exists(path + ".budget-mode"):
+        os.replace(path, path + ".budget-mode")  # setup's original, for going back
+    tmp = path + ".tmp"
+    json.dump(cfg, open(tmp, "w"), indent=1)
+    os.replace(tmp, path)
+
+
 def main():
     path, check = sys.argv[1], "--check" in sys.argv
     cfg = json.load(open(path))
@@ -77,6 +98,10 @@ def main():
     pool = strix_halo_pool_gib()
     if not pool or cfg.get("backend") != "hip" or "--native" not in args:
         return 0  # not a Strix Halo GGUF-in-place config: nothing to do
+    before = json.dumps(cfg, sort_keys=True)
+    grow_context(cfg)
+    if json.dumps(cfg, sort_keys=True) != before:
+        print(f"  strata-uma: --max-context {CTX_FROM} -> {CTX_TO} (the model's window; the KV cache is small on the shared pool)")
     root = os.path.dirname(os.path.abspath(path))
     sys.path[:0] = [root, os.path.join(root, "tools")]
     from strata_control import uma_pool  # Strata's measured pool constants (FIXED_GIB, MARGIN_GIB)
@@ -84,8 +109,10 @@ def main():
     need, ram = uma_pool.FIXED_GIB + exp + uma_pool.MARGIN_GIB, ram_gib()
     if not n or need > pool or ram < exp + RESIDENT_BESIDE_GIB:
         print(f"  strata-uma: {exp:.1f} GiB of experts need {need:.1f} of {pool:.1f} GiB pool, RAM {ram:.0f} GiB: keeping setup's budget mode")
+        if json.dumps(cfg, sort_keys=True) != before and not check:
+            write(cfg, path)
         return 0
-    old = json.dumps(cfg, sort_keys=True)
+    old = before
     if "--resident-budget-gib" in args:
         i = args.index("--resident-budget-gib")
         del args[i:i + 2]
@@ -99,13 +126,8 @@ def main():
         return 0
     print(f"  strata-uma: all {n} experts ({exp:.1f} GiB) fit the {pool:.0f} GiB GPU pool: "
           f"{'would write' if check else 'writing'} the all-in-pool config to {path}")
-    if check:
-        return 0
-    if not os.path.exists(path + ".budget-mode"):
-        os.replace(path, path + ".budget-mode")  # setup's original, for going back
-    tmp = path + ".tmp"
-    json.dump(cfg, open(tmp, "w"), indent=1)
-    os.replace(tmp, path)
+    if not check:
+        write(cfg, path)
     return 0
 
 

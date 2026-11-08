@@ -120,6 +120,21 @@ def engine_model(engine):
     return m if engine in catalog().get(m, {}).get("engines", ()) else DEFAULT_MODEL
 
 
+def ctx_for_spare(spare):
+    """Context the spare memory (GB left after weights and extras) buys, or None when it is under the smallest tier."""
+    return next((t["ctx"] for t in PROFILES["recommend"]["ctx_tiers"] if spare >= t["spare_gb"]), None)
+
+
+def gufo_ctx(quant, cap):
+    """Context a gufo launch on this hardware gets for a stock quant: the same table as recommend(). The smallest tier when
+    even that does not fit (the launch then fails loudly rather than being refused here); the model maximum when the quant is unknown."""
+    q = next((q for q in PROFILES["recommend"]["quants"] if q["name"] == quant), None)
+    tiers = PROFILES["recommend"]["ctx_tiers"]
+    if not q or not cap["fast_gb"]:
+        return tiers[0]["ctx"]
+    return ctx_for_spare(cap["fast_gb"] - q["gib"] - PROFILES["recommend"]["extras_gb"]) or tiers[-1]["ctx"]
+
+
 def recommend(hw, cap):
     """-> {engine|None, model, quant, ctx, kv, tested, download_gb, why}. Table in config/profiles.json ("recommend" and
     "catalog"). Only halogen on a Strix Halo with ~124 GB follows a measurement; the rest is arithmetic on published
@@ -136,8 +151,8 @@ def recommend(hw, cap):
                        why=f"AMD NPU + GPU with {ram} GB shared memory: halogen runs the whole model and the NPU guard/triage/dedup tools (its launcher sets context and KV slots)")
         for q in R["quants"]:
             spare = fast - q["gib"] - R["extras_gb"]
-            if spare >= R["ctx_tiers"][-1]["spare_gb"]:
-                ctx = next(t["ctx"] for t in R["ctx_tiers"] if spare >= t["spare_gb"])
+            ctx = ctx_for_spare(spare)
+            if ctx:
                 return out(engine="gufo", model=DEFAULT_MODEL, quant=q["name"], ctx=ctx, download_gb=int(q["gib"]) + R["extras_gb"] + 1,
                            why=f"Strix Halo, {fast:.0f} GB addressable: {q['name']} ({q['gib']} GiB) leaves {spare:.0f} GB for context -> {ctx} tokens (gufo has no KV-cache flag)")
         return none(f"Strix Halo with {fast:.0f} GB addressable: the smallest quant ({R['quants'][-1]['gib']} GiB) plus context does not fit")
@@ -324,7 +339,8 @@ def model_profile(model_id):
 def server_ctx(port):
     """Real context window from the server, or 0 if it will not say."""
     for path, pick in (("/props", lambda d: d["default_generation_settings"]["n_ctx"]), ("/v1/models", lambda d: d["data"][0]["meta"]["n_ctx"]),
-                       ("/v1/models", lambda d: d["data"][0]["context_length"])):  # gufo
+                       ("/v1/models", lambda d: d["data"][0]["context_length"]),  # gufo
+                       ("/v1/models", lambda d: d["data"][0]["max_model_len"])):  # vLLM
         try:
             return int(pick(json.load(http(f"http://127.0.0.1:{port}{path}"))))
         except Exception:
@@ -356,6 +372,34 @@ def build_entry(engine, model_id, ctx, tuned):
     return {"baseUrl": f"http://127.0.0.1:{e['port']}/v1", "api": "openai-completions", "apiKey": "dummy", "models": [entry]}
 
 
+def reserve_for(ctx):
+    """Compaction reserve for a window: a quarter of it, at most 60k (what the halogen launcher sets at 262k)."""
+    return int(min(60000, ctx // 4))
+
+
+def sync_ctx(engine):
+    """Keep pi's contextWindow and compaction reserve in step with the window the server really serves (GUFO_CTX, a Strata
+    --max-context, a launcher fallback): a stale window makes pi budget against a context the server does not have.
+    A reserve we own (unset, or one of our defaults) follows the window; a /tune value that still fits is kept."""
+    e = PROFILES["engines"][engine]
+    ctx, mid = server_ctx(e["port"]), (active() or {}).get("model")
+    mj = os.path.join(AGENT, "models.json")
+    m = jget(mj, {})
+    ent = next((x for x in m.get("providers", {}).get(e["provider"], {}).get("models", []) if x.get("id") == mid), None)
+    if not ctx or not ent:
+        return
+    if ent.get("contextWindow") != ctx:
+        ent["contextWindow"] = ctx
+        jput(mj, m)
+    sj = os.path.join(AGENT, "settings.json")
+    s = jget(sj, {})
+    comp = s.setdefault("compaction", {})
+    if comp.get("reserveTokens") in (None, 10240, 16384, 60000) or comp["reserveTokens"] >= ctx // 2:
+        if comp.get("reserveTokens") != reserve_for(ctx):
+            comp["reserveTokens"] = reserve_for(ctx)
+            jput(sj, s)
+
+
 def apply(engine, model_id, tuned=None):
     tuned = tuned or {}
     e = PROFILES["engines"][engine]
@@ -384,7 +428,7 @@ def apply(engine, model_id, tuned=None):
         shutil.copy(sj, sj + ".pre-harness")  # same one-time backup as models.json
     s = jget(sj, {})
     s["defaultProvider"], s["defaultModel"] = prov, new["models"][0]["id"]
-    reserve = tuned.get("reserveTokens") or min(model_profile(model_id)["reserveTokens"], ctx // 4)
+    reserve = reserve_for(ctx)  # not tuned["reserveTokens"]: a cached probe may be from another window (gufo moved 65k -> 262k)
     s.setdefault("compaction", {}).update({"enabled": True, "reserveTokens": reserve})
     jput(sj, s)
     jput(os.path.join(AGENT, "harness-profile.json"), {
@@ -479,7 +523,7 @@ def tune(engine, model_id):
     # derive settings: answer room scales with decode speed, compaction reserve with the real window
     if ctx:
         res["maxTokens"] = int(min(model_profile(model_id)["maxTokens"], max(1024, ctx // 8)))
-        res["reserveTokens"] = int(min(60000, ctx // 4))
+        res["reserveTokens"] = reserve_for(ctx)
     cache = os.path.join(AGENT, "harness-tuned.json")
     c = jget(cache, {})
     c[hw_key(engine, model_id)] = res
@@ -507,6 +551,10 @@ def cmd_model_info(a):
     if v is None:
         sys.exit(1)
     print(" ".join(v) if isinstance(v, list) else v)
+
+
+def cmd_ctx_info(a):
+    print(gufo_ctx(a.name, capacity()))
 
 
 def cmd_quant_info(a):
@@ -1060,6 +1108,7 @@ def cmd_up(_):
             print(f"! {not_answering(eng)}; pi opens anyway", file=sys.stderr)
     if not install_extensions(eng, verbose=False, show_ok=False):
         print(f"! setup.sh reported problems (details: {SETUP_LOG})", file=sys.stderr)
+    sync_ctx(eng)
     if update_pref() == "1":
         msg = engine_update(eng)
         if msg:
@@ -1279,7 +1328,7 @@ def main():
     import argparse
     ap = argparse.ArgumentParser(prog="harness")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for n, f in (("detect", cmd_detect), ("setup", cmd_setup), ("use", cmd_use), ("tune", cmd_tune), ("status", cmd_status), ("config", cmd_config), ("update-check", cmd_update_check), ("up", cmd_up), ("recommend", cmd_recommend), ("quant-info", cmd_quant_info), ("model-info", cmd_model_info), ("monitor", cmd_monitor)):
+    for n, f in (("detect", cmd_detect), ("setup", cmd_setup), ("use", cmd_use), ("tune", cmd_tune), ("status", cmd_status), ("config", cmd_config), ("update-check", cmd_update_check), ("up", cmd_up), ("recommend", cmd_recommend), ("quant-info", cmd_quant_info), ("ctx-info", cmd_ctx_info), ("model-info", cmd_model_info), ("monitor", cmd_monitor)):
         p = sub.add_parser(n)
         p.set_defaults(fn=f)
         if n in ("setup", "use"):
@@ -1298,7 +1347,7 @@ def main():
         if n == "model-info":
             p.add_argument("id")
             p.add_argument("field")
-        if n == "quant-info":
+        if n in ("quant-info", "ctx-info"):
             p.add_argument("name")
         if n == "update-check":
             p.add_argument("engine", nargs="?", help="default: the active engine")

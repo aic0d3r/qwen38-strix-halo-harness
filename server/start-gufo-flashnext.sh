@@ -51,7 +51,11 @@ MDIR=$ENGINE_DIR; MODEL_REL=$GUFO_MODEL; NAME=qwen3.8-flash-next; SPEC=(--specul
 fi
 # pre-flight: gufo at 65k has never wedged, but at large ctx the same allocator
 # physics as halogen applies. recover mild fragmentation, fail fast otherwise.
-CTX="${GUFO_CTX:-262144}"  # maxed like halogen; ~33 GB device heap was free at 65k (load_completed log), 262k KV fits
+# ctx: GUFO_CTX, else what this hardware's spare memory buys for the quant (config/profiles.json ctx_tiers; 262144 = the model's
+# maximum, measured on the 124 GB box with UD-Q4_K_XL x 2 sessions), else 262144 (27B: its KV is f16 but llama.cpp runs it at 262144 here)
+if [ -n "${GUFO_CTX:-}" ] || [ "$NAME" = qwen3.8-27b ]; then DEFCTX=262144
+else DEFCTX=$(python3 "$(dirname "$0")/../setup/harness.py" ctx-info "$([ "$WEIGHTS" = abliterated ] && echo UD-Q4_K_XL || echo "$QUANT")" 2>/dev/null || echo 262144); fi
+CTX="${GUFO_CTX:-$DEFCTX}"
 O9=$(awk '$4=="Normal"{print $(NF-1)}' /proc/buddyinfo 2>/dev/null | head -1)
 if [ "$CTX" -gt 65536 ] && [ -n "$O9" ] && [ "$O9" -lt 1000 ]; then
   sudo -n sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory' 2>/dev/null || true

@@ -59,9 +59,9 @@ cat config/settings-snippet.json                        # merge into settings.js
 cp -r extensions/* ~/.pi/agent/extensions/              # dirs too: the .ts files import harness-profile/
 ```
 
-Two numbers in the snippet you must understand, not copy: `reserveTokens` ships **10240**
-because that is right for a 65536 window (halogen's launcher rescales it to match its own ctx); on the 27B's 262144 window use
-**60000** instead (what the halogen launcher sets at 262k; it resets any reserve of half the window or more).
+Two numbers in the snippet you must understand, not copy: `reserveTokens` ships **60000**
+for the 262144 window both launchers serve (what the halogen launcher sets at 262k); on a smaller `CTX` use a quarter of it
+(10240 for 65536). `./harness up` and the halogen launcher resync it to the served window on their own.
 `thinkingBudgets` (per-request budgets pi sends) are what actually govern
 pi sessions; the server's `--reasoning-budget` flag is only a default for clients that do not
 send one. On this path the NPU extensions are inert — there is no halogen to serve them.

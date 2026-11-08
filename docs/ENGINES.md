@@ -107,7 +107,9 @@ cd Strata && ROCM_PATH=/nonexistent ./setup.sh --yes --family unsloth --model UD
 - `ROCM_PATH=/nonexistent` makes setup use its own ROCm wheels. A TheRock-layout system ROCm in
   `/opt/rocm` (CachyOS `rocm-gfx1151-bin`) is picked up and then fails at configure
   (`/opt/rocm/llvm/bin/clang++` missing; the compiler is in `lib/llvm`).
-- `--yes` picked a 32k context here; pass `--context` for more.
+- `--yes` picked a 32k context here (131072 on newer Strata: its rule is 128K on every card); pass `--context` for more.
+  `server/start-strata.sh` lifts a setup-written 131072 to 262144 on Strix Halo (`scripts/strata-uma.py`; a pick of any other
+  size stays), and `./harness up` copies the served window into pi's `models.json`.
 - The 94 GB download can come from an existing copy: put the three `UD-IQ4_XS-0000N-of-00003.gguf`
   shards in `Strata-data/models/unsloth-UD-IQ4_XS/` (a hardlink works) before running setup, and setup
   verifies them by size and SHA-256.

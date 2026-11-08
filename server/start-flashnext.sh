@@ -31,7 +31,7 @@ TARGET_GGUF=${TARGET_GGUF:-Qwen3.8-Flash-Next-UD-IQ4_XS.gguf}   # multi-shard: p
 DRAFT_GGUF=${DRAFT_GGUF:-Qwen3.8-Flash-Next-mtp-Q8_0.gguf}
 MMPROJ_GGUF=${MMPROJ_GGUF:-mmproj-F16.gguf}   # vision: same repo as the target; empty string disables
 N_MAX=${N_MAX:-4}          # 4 is the sweet spot at >=8k ctx
-CTX=${CTX:-65536}
+CTX=${CTX:-262144}        # the model's window (docs/LLAMACPP.md: 256k max); the KV cache is q8 and small on this hybrid. Not run here: lower it if the load fails
 RB=${RB:-2048}             # default budget for budget-less clients; pi's per-request tiers override
 DRIVER_DIR=${DRIVER_DIR:-}
 

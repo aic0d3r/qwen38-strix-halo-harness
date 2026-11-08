@@ -41,7 +41,7 @@
           "id": "qwen3.8-flash-next",
           "name": "Qwen3.8-Flash-Next 125B-A6B (llama.cpp local, MTP)",
           "reasoning": true,
-          "contextWindow": 65536,
+          "contextWindow": 262144,
           "maxTokens": 32768,
           "compat": {
             "thinkingFormat": "chat-template",

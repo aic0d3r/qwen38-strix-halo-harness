@@ -50,7 +50,7 @@
   },
   "models": {
     "default": {
-      "reasoning": false, "maxTokens": 8192, "reserveTokens": 16384,
+      "reasoning": false, "maxTokens": 8192,
       "samplingParams": { "temperature": 0.7, "top_p": 0.95 }
     },
     "qwen3": {
