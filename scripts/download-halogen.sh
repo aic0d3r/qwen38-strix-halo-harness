@@ -2,6 +2,7 @@
 # Fetch exactly the halogen file set (~124 GB, resumable) into ~/models/halogen-qwen3.8-flash-next.
 #   scripts/download-halogen.sh [--yes]   asks first unless --yes; exits 1 on abort/failure
 set -u
+. "$(dirname "$0")/lib-hf.sh"
 DL_DIR="$HOME/models/halogen-qwen3.8-flash-next"
 AVAIL=$(df -BG --output=avail "$HOME" 2>/dev/null | tail -1 | tr -dc '0-9')
 echo "  required download: ~124 GB into $DL_DIR${AVAIL:+ (free: ${AVAIL} GB)}"
@@ -22,7 +23,7 @@ if [ -z "$HF_BIN" ]; then
 fi
 mkdir -p "$DL_DIR"
 echo "  downloading (resumable - re-run if interrupted) ..."
-"$HF_BIN" download peonist-ai/halogen-qwen3.8-flash-next \
+hf_dl peonist-ai/halogen-qwen3.8-flash-next \
   qwen38-flash-next-v2.hgn qwen38-flash-next-ngram.hgn qwen38-flash-next-vision.hgn tokenizer/ \
   --revision "${HALOGEN_WEIGHTS_REV:-c464b5b51c968ff54ea78647a4b2556355b36d2c}" \
   --local-dir "$DL_DIR" || { echo "  download failed/incomplete - re-run to resume" >&2; exit 1; }
@@ -31,7 +32,7 @@ echo "  downloading (resumable - re-run if interrupted) ..."
 for n in decider-0.8b qwen3-embedding-0.6b qwen3-reranker-0.6b qwen3guard-gen-0.6b; do
   # hf skips files it already has, so a half-downloaded folder resumes here
   echo "  downloading NPU model: $n ..."
-  "$HF_BIN" download "peonist-ai/halogen-npu-$n" --local-dir "$DL_DIR/npu/$n" \
+  hf_dl "peonist-ai/halogen-npu-$n" --local-dir "$DL_DIR/npu/$n" \
     || { echo "  NPU model download failed: $n - re-run to resume" >&2; exit 1; }
 done
 [ -f "$DL_DIR/qwen38-flash-next-v2.hgn" ] || { echo "  download finished but v2.hgn is missing from $DL_DIR" >&2; exit 1; }

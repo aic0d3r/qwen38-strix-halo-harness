@@ -4,6 +4,7 @@
 #   scripts/download-abliterated.sh halogen|gufo [--yes]
 set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO/scripts/lib-hf.sh"
 ENG=${1:-}
 case "$ENG" in
   halogen)
@@ -41,17 +42,17 @@ if [ -z "$HF_BIN" ]; then
     && HF_BIN="$HOME/.hf-venv/bin/hf" || { echo "  could not bootstrap the hf downloader - install huggingface_hub and re-run" >&2; exit 1; }
 fi
 echo "  downloading (resumable - re-run if interrupted) ..."
-if ! "$HF_BIN" download "${ARGS[@]}" --local-dir "$DIR"; then
+if ! hf_dl "${ARGS[@]}" --local-dir "$DIR"; then
   [ "$ENG" = gufo ] && echo "  the gufo repo is gated: accept its terms on huggingface.co/brainnxdomain/Qwen3.8-Flash-Next-Uncensored-Gufo-GGUF, then: $HF_BIN auth login" >&2
   echo "  download failed/incomplete - re-run to resume" >&2; exit 1
 fi
 # gufo sidecars from the stock repo when this box never had the stock gufo setup: MTP head + vision projector
 if [ "$ENG" = gufo ]; then
   if [ ! -f "$ROOT/$MTP" ]; then
-    "$HF_BIN" download unsloth/Qwen3.8-Flash-Next-GGUF "MTP/$MTP" --local-dir "$ROOT" && mv "$ROOT/MTP/$MTP" "$ROOT/$MTP" \
+    hf_dl unsloth/Qwen3.8-Flash-Next-GGUF "MTP/$MTP" --local-dir "$ROOT" && mv "$ROOT/MTP/$MTP" "$ROOT/$MTP" \
       || { echo "  MTP head download failed - re-run to resume" >&2; exit 1; }
   fi
-  [ -f "$ROOT/mmproj-BF16.gguf" ] || "$HF_BIN" download unsloth/Qwen3.8-Flash-Next-GGUF mmproj-BF16.gguf --local-dir "$ROOT" \
+  [ -f "$ROOT/mmproj-BF16.gguf" ] || hf_dl unsloth/Qwen3.8-Flash-Next-GGUF mmproj-BF16.gguf --local-dir "$ROOT" \
     || echo "  vision projector download failed (text still works) - re-run to retry" >&2
 fi
 # gufo finds the vision projector beside the target: link the stock one in (same disk, no copy)

@@ -7,6 +7,7 @@
 #   scripts/download-stock.sh [--yes]        folder: ENGINE_DIR, else ~/LLMBench/models/qwen38-flash-next
 set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO/scripts/lib-hf.sh"
 WANT=$(GUFO_WEIGHTS=stock bash "$REPO/server/start-gufo-flashnext.sh" --print-model)  # .../UD-Q4_K_XL/<shard 1>
 DIR=$(dirname "$WANT"); ROOT=$(dirname "$DIR"); Q=$(basename "$DIR")   # GUFO_QUANT / the hardware pick can name another quant
 MTP=mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
@@ -33,13 +34,13 @@ if [ -z "$HF_BIN" ]; then
 fi
 R=unsloth/Qwen3.8-Flash-Next-GGUF
 echo "  downloading (resumable - re-run if interrupted) ..."
-"$HF_BIN" download "$R" --revision "$REV" --include "$Q/*" --local-dir "$ROOT" \
+hf_dl "$R" --revision "$REV" --include "$Q/*" --local-dir "$ROOT" \
   || { echo "  download failed/incomplete - re-run to resume" >&2; exit 1; }
 if [ ! -f "$ROOT/$MTP" ]; then
-  "$HF_BIN" download "$R" --revision "$REV" "MTP/$MTP" --local-dir "$ROOT" && mv "$ROOT/MTP/$MTP" "$ROOT/$MTP" \
+  hf_dl "$R" --revision "$REV" "MTP/$MTP" --local-dir "$ROOT" && mv "$ROOT/MTP/$MTP" "$ROOT/$MTP" \
     || { echo "  MTP head download failed - re-run to resume" >&2; exit 1; }
 fi
-[ -f "$ROOT/mmproj-BF16.gguf" ] || "$HF_BIN" download "$R" --revision "$REV" mmproj-BF16.gguf --local-dir "$ROOT" \
+[ -f "$ROOT/mmproj-BF16.gguf" ] || hf_dl "$R" --revision "$REV" mmproj-BF16.gguf --local-dir "$ROOT" \
   || echo "  vision projector download failed (text still works) - re-run to retry" >&2
 # gufo finds the vision projector beside the target: link the shared one in (same disk, no copy)
 [ -f "$ROOT/mmproj-BF16.gguf" ] && [ ! -e "$DIR/mmproj-BF16.gguf" ] && ln "$ROOT/mmproj-BF16.gguf" "$DIR/mmproj-BF16.gguf" 2>/dev/null

@@ -5,6 +5,7 @@
 #   scripts/download-qwen38-27b.sh [--yes]     folder: GUFO_27B_DIR, else <ENGINE_DIR's parent>/qwen38-27b
 set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO/scripts/lib-hf.sh"
 DIR=$(dirname "$(GUFO_FAMILY=qwen38-27b bash "$REPO/server/start-gufo-flashnext.sh" --print-model)")
 TARGET=Qwen3.8-27B-UD-Q4_K_XL.gguf; DRAFT=Qwen3.8-27B-DFlash2-Q4_K_M.gguf; GB=20
 REV_TARGET=4ca720788d1e01f1bff70c033e0d0028fd02e502; REV_DRAFT=2d9571f8ce46e151f61c6499c99dee6079e1d610
@@ -24,8 +25,8 @@ if [ -z "$HF_BIN" ]; then
     && HF_BIN="$HOME/.hf-venv/bin/hf" || { echo "  could not bootstrap the hf downloader - install huggingface_hub and re-run" >&2; exit 1; }
 fi
 echo "  downloading (resumable - re-run if interrupted) ..."
-"$HF_BIN" download unsloth/Qwen3.8-27B-GGUF "$TARGET" mmproj-BF16.gguf --revision "$REV_TARGET" --local-dir "$DIR" \
-  && "$HF_BIN" download z-lab/Qwen3.8-27B-DFlash2-GGUF "$DRAFT" --revision "$REV_DRAFT" --local-dir "$DIR" \
+hf_dl unsloth/Qwen3.8-27B-GGUF "$TARGET" mmproj-BF16.gguf --revision "$REV_TARGET" --local-dir "$DIR" \
+  && hf_dl z-lab/Qwen3.8-27B-DFlash2-GGUF "$DRAFT" --revision "$REV_DRAFT" --local-dir "$DIR" \
   || { echo "  download failed/incomplete - re-run to resume" >&2; exit 1; }
 for f in "$TARGET" "$DRAFT" mmproj-BF16.gguf; do
   [ -f "$DIR/$f" ] || { echo "  download finished but $f is missing from $DIR" >&2; exit 1; }

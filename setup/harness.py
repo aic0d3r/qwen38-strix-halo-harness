@@ -1156,8 +1156,10 @@ def cmd_setup(a):
     added = serena_languages()
     if added:
         print(f"serena: enabled language servers {added} in .serena/project.yml (restart serena to load them)")
+    stopped = plan and plan.get("stop")
     if plan and not prepare_start(plan, {x["engine"]: x for x in d["engines"]}):
-        sys.exit(not_answering(eng))
+        sys.exit(f"\n! a step before starting {eng} failed (output above); nothing was started." + (f" {stopped} was stopped for it: ./start.sh brings the saved engine back." if stopped else "")
+                 + " Re-run ./setup.sh to resume: downloads continue where they stopped.")
     if upgrade:  # a gufo upgrade needs halogen already stopped; the upgraders start/restart the server themselves
         print(f"\n== upgrading {eng} ==")
         if subprocess.run(["bash", upgrader(eng)]).returncode:

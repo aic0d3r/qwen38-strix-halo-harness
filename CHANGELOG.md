@@ -18,6 +18,9 @@
 - Opt-in tool-result screen in `auto-guard` (`PI_GUARD_TOOLRESULTS=1` or `/guard-firewall on`, off by default): qwen3guard on outside tool results behind a regex prefilter, a tripwire for harmful payloads only. `/guard-stats` counts both screens.
 - `bench/refusal-canary.py` + `./setup.sh --doctor --refusals`: 19 one-line prompts (kill/inject/hack vocabulary, pentest payloads, medical wording, blunt copy, odd roles) scored for refusals by the running model, per category, exit 1 on any refusal; `--judge` adds an NPU decider pass, `--self-test` checks the classifier with no server. A floor check for over-refusal, not a stock-vs-abliterated test: stock halogen and every abliterated engine all scored 0/19. `--doctor` also prints the saved weights answer now.
 
+### Fixed
+- A long `hf download` could die midway on an expired Xet token (`Cannot send a request, as the client has been closed`, seen at 94% of a 50 GB fetch) and abort the wizard. The four download scripts now retry it up to three times through `scripts/lib-hf.sh` (resuming from the `.incomplete` files), and when a step before the start fails the wizard says so and what was stopped, instead of claiming the engine is "not answering".
+
 ## 1.9.0 - 2026-11-07
 
 ### Added
