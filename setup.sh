@@ -8,6 +8,10 @@
 #                               (saved answers: ./harness config)
 #   ./setup.sh --halogen [auto|path.hgn]  also provision + start the halogen server
 #   ./setup.sh --doctor         read-only status check
+#   ./setup.sh --doctor --refusals
+#                               + ask the running model 19 tasks that aligned builds
+#                               refuse (kill/inject/pentest words, medical copy, blunt
+#                               tone) and report the refusal rate: bench/refusal-canary.py
 #   ./setup.sh --refresh-mcp    reset serena/semble MCP exposure and ensure ddg (backs up mcp.json first)
 #   ./setup.sh --no-halogen     pi-only install: skip the halogen provider, the NPU
 #                               extensions and all container management (for boxes that
@@ -26,7 +30,7 @@
 set -u
 # bare invocation in a terminal = the guided wizard (flags below stay for scripts/CI)
 if [ $# -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then exec python3 -u "$(dirname "$(readlink -f "$0")")/setup/harness.py" setup; fi
-HALOGEN_CKPT=""; SIDECAR_SET=""; DOCTOR=0; REFRESH_MCP=0; VOICE=0; NO_HALOGEN=0; STRATA=0; GUFO=0; ENG=strata; ENG_URL=http://127.0.0.1:8080
+HALOGEN_CKPT=""; SIDECAR_SET=""; DOCTOR=0; REFUSALS=0; REFRESH_MCP=0; VOICE=0; NO_HALOGEN=0; STRATA=0; GUFO=0; ENG=strata; ENG_URL=http://127.0.0.1:8080
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-halogen)  NO_HALOGEN=1; shift ;;
@@ -34,6 +38,7 @@ while [ $# -gt 0 ]; do
     --strata|--gufo) [ "$1" = --gufo ] && { GUFO=1; ENG=gufo; } || STRATA=1; NO_HALOGEN=1
                case "${2:-}" in http*) ENG_URL="${2%/}"; shift 2 ;; *) shift ;; esac ;;
     --doctor)  DOCTOR=1; shift ;;
+    --refusals) REFUSALS=1; DOCTOR=1; shift ;;
     --refresh-mcp) REFRESH_MCP=1; shift ;;
     --voice)   VOICE=1; shift ;;
     --sidecar|--no-sidecar) SIDECAR_SET=$([ "$1" = --sidecar ] && echo 1 || echo 0); shift ;;
@@ -172,6 +177,15 @@ if [ "$DOCTOR" = 1 ]; then
     fi
   done
   host_checks
+  # the weights answer the launchers read (docs/ENGINES.md#abliterated-models). An abliterated
+  # model will not argue with instructions it reads; taint-gate confirms risky actions after
+  # outside content, on either weights.
+  W=$(head -1 "$PI_HOME/agent/harness-weights" 2>/dev/null); W=${W:-stock}
+  if [ "$W" = abliterated ]; then
+    ok "weights: abliterated (refusals removed; taint-gate confirms risky actions after outside content)"
+  else
+    ok "weights: stock (refusals kept; ./harness config -> weights abliterated removes them)"
+  fi
   if [ -z "${ACT:-}" ]; then :
   elif [[ "$RUNNING" != *" $ACT "* ]]; then fail "ready check skipped: $ACT is down"
   else
@@ -181,6 +195,23 @@ if [ "$DOCTOR" = 1 ]; then
     [ -t 1 ] && printf '\r\033[K'
     R=$(grep -c 'OK' "$RC"); rm -f "$RC"
     [ "$R" -ge 1 ] && ok "ready check: $ACT answered" || fail "ready check: no reply from $ACT"
+  fi
+  # --refusals: ask the running model the tasks aligned builds flinch at (kill/inject/
+  # pentest vocabulary, medical copy, blunt tone) and report the refusal rate.
+  if [ "$REFUSALS" = 1 ]; then
+    echo "== refusal canary ($ACT; 19 one-line prompts) =="
+    if [ -z "${ACT:-}" ] || [[ "$RUNNING" != *" $ACT "* ]]; then
+      fail "refusal canary skipped: $ACT is down"
+    else
+      python3 "$REPO/bench/refusal-canary.py"; RCC=$?
+      case $RCC in
+        0) ok "refusal canary: $ACT refused none of the 19 prompts" ;;
+        1) warn "refusal canary: $ACT refused prompts above - ./harness config -> weights abliterated" ;;
+        *) fail "refusal canary: no usable reply from $ACT (engine busy or thinking-only replies)" ;;
+      esac
+    fi
+  elif [[ "$RUNNING" == *" ${ACT:-none} "* ]]; then
+    echo "  tip: ./setup.sh --doctor --refusals asks $ACT the tasks aligned builds refuse"
   fi
   exit 0
 fi

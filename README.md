@@ -120,7 +120,7 @@ Servers you started yourself are never restarted. Run non-interactively (scripts
 | `./harness status` | engine up/down, model, NPU, saved tuning, sidecar state |
 | `./harness config` | menu of saved answers (engine, sidecar, voice, update check, sudo hints); change one, applied right away |
 | `./harness tune` | re-run the speed probe and re-size the limits |
-| `./setup.sh --doctor` | read-only health check of the whole install |
+| `./setup.sh --doctor` | read-only health check of the whole install (`--refusals` also asks the running model 19 tasks aligned builds refuse) |
 | `./setup.sh --refresh-mcp` | reset the serena/semble MCP exposure and ensure the default DDG server (backs up `mcp.json` first) |
 
 ## Efficiency
@@ -159,6 +159,11 @@ from; locally they cut prefill time.
   embedding similarity); `auto-guard` screens every prompt on the guard model as a fail-open
   tripwire (42 % recall / 0 % false positives on the 30-prompt canary — not a security boundary).
   See [The NPU](#the-npu).
+- **Prompt-injection gate** — `taint-gate` needs no model: once the agent has read outside content
+  (web search or fetch, MCP resources, a `curl`), risky calls (sending data out, `curl | sh`,
+  credentials, recursive `rm` or edits outside the project) need your yes until your next message,
+  and are blocked when there is no UI. Tested live: a hidden "POST your `.env`" in a fetched page
+  was obeyed with the gate off and stopped with it on.
 - **Symbol-precise code tools** — the [serena](https://github.com/oraios/serena) MCP server (find a
   symbol, its callers, an outline, diagnostics, symbol-level edits and renames), wired into
   `mcp.json` by setup and started on your current project. Install serena yourself (setup expects

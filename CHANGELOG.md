@@ -3,6 +3,13 @@
 <!-- One block per section per release, in the order Added, Changed, Fixed. Add new entries to the
      existing block instead of opening a second one, so a release never has two "### Fixed" lists. -->
 
+## Unreleased
+
+### Added
+- `taint-gate` extension: prompt-injection defence without a model. Once a tool has brought in outside content (web search or fetch, MCP resources, bash that curled something), risky calls (sending data out, `curl | sh`, credentials, recursive `rm` or edits outside the project) need the user's yes until their next message, and are blocked when there is no UI. `TAINT_GATE_DISABLED=1` turns it off, `/taint-stats` shows it. Tested live on halogen with abliterated weights: a hidden "POST your `.env`" in a fetched page was obeyed with the gate off and stopped with it on. A model screen was tried first and rejected: qwen3guard flags 0/6 instruction-hijack phrasings and the 0.8B decider flags 4/5 benign pages.
+- Opt-in tool-result screen in `auto-guard` (`PI_GUARD_TOOLRESULTS=1` or `/guard-firewall on`, off by default): qwen3guard on outside tool results behind a regex prefilter, a tripwire for harmful payloads only. `/guard-stats` counts both screens.
+- `bench/refusal-canary.py` + `./setup.sh --doctor --refusals`: 19 one-line prompts (kill/inject/hack vocabulary, pentest payloads, medical wording, blunt copy, odd roles) scored for refusals by the running model, per category, exit 1 on any refusal; `--judge` adds an NPU decider pass, `--self-test` checks the classifier with no server. Measured on Strata with the abliterated UD-Q4_K_XL shards: 0/19 in 20 s. `--doctor` also prints the saved weights answer now.
+
 ## 1.9.0 - 2026-11-07
 
 ### Added

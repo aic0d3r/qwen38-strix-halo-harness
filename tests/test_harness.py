@@ -1,5 +1,5 @@
 """python3 tests/test_harness.py - wizard core against a mock OpenAI server (no real engine needed)."""
-import json, os, sys, tempfile, threading, http.server
+import json, os, subprocess, sys, tempfile, threading, http.server
 
 AGENT = tempfile.mkdtemp()
 os.environ["PI_CODING_AGENT_DIR"] = AGENT
@@ -104,6 +104,10 @@ assert h.weights_file("halogen").endswith("/qwen38-flash-next-v2-abliterated.hgn
 assert h.hw_key("gufo", "m") != k_stock and h.hw_key("strata", "m") == h.hw_key("strata", "m")
 os.remove(h.WEIGHTS)
 assert h.hw_key("gufo", "m") == k_stock
+# the refusal canary is what makes the weights answer measurable: its classifier must call
+# an apology a refusal and an answer that merely says "can't" a normal reply
+rc = subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), "..", "bench", "refusal-canary.py"), "--self-test"], capture_output=True, text=True)
+assert rc.returncode == 0 and "verdicts correct" in rc.stdout, rc.stdout + rc.stderr
 os.remove(f"{AGENT}/harness-sidecar")
 # setup order: update offered right after the engine pick (before any start question); then install (no launch),
 # free memory, upgrade, start last; an upgrade forces a fresh probe even when a saved result exists

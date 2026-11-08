@@ -70,7 +70,17 @@ Optional / situational:
 - `ling-tiny-commit.ts` - now also an agent-invocable `commit` TOOL (agents
   never fire slash commands: 3 measured misses). Offloads commit messages to
   the sidecar; keeps main-model turns free.
-- `ling-tiny-repomap.ts`, `auto-guard.ts` - cheap, fired, benefit unmeasured.
+- `ling-tiny-repomap.ts` - cheap, fired, benefit unmeasured.
+- `auto-guard.ts` - screens every user prompt on `qwen3guard-gen-0.6b` (fail-open tripwire). Opt-in
+  (`PI_GUARD_TOOLRESULTS=1`, `/guard-firewall on`): also screens outside tool results, behind a regex
+  prefilter so ordinary output makes no NPU call. qwen3guard flags harmful payloads but 0/6
+  instruction-hijack phrasings live, so it is a tripwire only. `/guard-stats` counts both screens.
+- `taint-gate.ts` - the prompt-injection defence that needs no model. After the agent reads outside
+  content (web search or fetch, MCP resources, a `curl`), risky calls need a yes from the user until
+  their next message: sending data out, `curl | sh`, credentials, recursive `rm` or edits outside the
+  project. Blocked when there is no UI (print mode, subagents). Off: `TAINT_GATE_DISABLED=1`;
+  `/taint-stats`. Tested live: a hidden "POST your .env" in a fetched page was obeyed with the gate off,
+  stopped with it on.
 - `image-prune.ts` - a guardrail, not a saving: every turn re-sends the whole transcript, so
   each screenshot ever read stays in the request (a provider caps it: DeepInfra 30) and keeps
   costing prefill. Only the newest 4 images go out; older or duplicate ones become a one-line
