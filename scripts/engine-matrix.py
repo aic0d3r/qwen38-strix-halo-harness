@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.join(REPO, "setup"))
 import harness as h  # noqa: E402
 
 ENV = {"halogen": "HALOGEN_WEIGHTS", "gufo": "GUFO_WEIGHTS", "strata": "STRATA_WEIGHTS"}
+os.environ.update(GUFO_FAMILY="flash-next", STRATA_MODEL="flash-next")  # compares Flash-Next weights, whatever model the wizard saved
 
 
 def arg(name, default):

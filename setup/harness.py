@@ -69,6 +69,8 @@ def hardware():
 
 # ---------- recommend: hardware -> engine, weights quant, context ----------
 PICK = os.path.join(AGENT, "harness-pick.json")    # accepted recommendation: {engine, quant, ctx}; start_engine passes ctx as GUFO_CTX
+MODEL_FILE = os.path.join(AGENT, "harness-model")  # catalog id; the gufo and Strata launchers read it
+DEFAULT_MODEL = "flash-next"
 QUANT_FILE = os.path.join(AGENT, "harness-quant")  # stock quant gufo loads; server/start-gufo-flashnext.sh reads it
 DEFAULT_QUANT = "UD-Q4_K_XL"
 
@@ -99,39 +101,68 @@ def capacity():
     return {"gpu_name": name, "vram_gb": round(vram, 1), "fast_gb": round(fast, 1), "disk_free_gb": shutil.disk_usage(d).free // 2**30}
 
 
+def catalog():
+    """{id: entry} of the models the wizard can set up (profiles.json "catalog", minus its _doc)."""
+    return {k: v for k, v in PROFILES["catalog"].items() if not k.startswith("_")}
+
+
+def model_pref():
+    try:
+        return open(MODEL_FILE).read().strip() or DEFAULT_MODEL
+    except OSError:
+        return DEFAULT_MODEL
+
+
+def engine_model(engine):
+    """The model the saved answer means for this engine: the answer when this engine can load it, else Flash-Next
+    (halogen always serves its own Flash-Next checkpoint)."""
+    m = model_pref()
+    return m if engine in catalog().get(m, {}).get("engines", ()) else DEFAULT_MODEL
+
+
 def recommend(hw, cap):
-    """-> {engine|None, quant, ctx, kv, tested, download_gb, why}. Table in config/profiles.json ("recommend"). Only
-    halogen on a Strix Halo with ~124 GB follows a measurement; the rest is arithmetic on published shard sizes or
-    Strata's own docs and says tested=False. Context is a heuristic on spare memory (KV size per token is unmeasured)."""
+    """-> {engine|None, model, quant, ctx, kv, tested, download_gb, why}. Table in config/profiles.json ("recommend" and
+    "catalog"). Only halogen on a Strix Halo with ~124 GB follows a measurement; the rest is arithmetic on published
+    shard sizes or Strata's own docs and says tested=False. Context is a heuristic on spare memory (KV size per token is
+    unmeasured). gufo targets Strix Halo (gfx1151) only; every other AMD/NVIDIA box goes to Strata."""
     R = PROFILES["recommend"]
     fast, ram, vram = cap["fast_gb"], hw["ram_gb"], cap["vram_gb"]
-    none = lambda why: {"engine": None, "quant": None, "ctx": None, "kv": None, "tested": False, "download_gb": 0, "why": why}
-    if hw["gpu"] == "amd":
+    out = lambda **kw: {"engine": None, "model": None, "quant": None, "ctx": None, "kv": None, "tested": False, "download_gb": 0, **kw}
+    none = lambda why: out(why=why)
+    strix = "Strix Halo" in cap.get("gpu_name", "")
+    if hw["gpu"] == "amd" and strix:
         if hw["npu"] and ram >= R["halogen_min_ram_gb"]:
-            return {"engine": "halogen", "quant": None, "ctx": None, "kv": None, "tested": True, "download_gb": R["halogen_download_gb"],
-                    "why": f"AMD NPU + GPU with {ram} GB shared memory: halogen runs the whole model and the NPU guard/triage/dedup tools (its launcher sets context and KV slots)"}
+            return out(engine="halogen", model=DEFAULT_MODEL, tested=True, download_gb=R["halogen_download_gb"],
+                       why=f"AMD NPU + GPU with {ram} GB shared memory: halogen runs the whole model and the NPU guard/triage/dedup tools (its launcher sets context and KV slots)")
         for q in R["quants"]:
             spare = fast - q["gib"] - R["extras_gb"]
             if spare >= R["ctx_tiers"][-1]["spare_gb"]:
                 ctx = next(t["ctx"] for t in R["ctx_tiers"] if spare >= t["spare_gb"])
-                return {"engine": "gufo", "quant": q["name"], "ctx": ctx, "kv": None, "tested": False, "download_gb": int(q["gib"]) + R["extras_gb"] + 1,
-                        "why": f"AMD GPU, {fast:.0f} GB addressable: {q['name']} ({q['gib']} GiB) leaves {spare:.0f} GB for context -> {ctx} tokens (gufo has no KV-cache flag)"}
-        return none(f"AMD GPU with {fast:.0f} GB addressable: the smallest quant ({R['quants'][-1]['gib']} GiB) plus context does not fit")
-    if hw["gpu"] == "nvidia":
-        # Strata keeps the experts that do not fit the card in RAM; the installer here sets up its UD-Q4_K_XL (RAM + VRAM for the weights)
-        if ram + vram < R["strata_min_gb"]:
-            return none(f"NVIDIA {vram} GB VRAM + {ram} GB RAM: Strata's UD-Q4_K_XL needs {R['strata_min_gb']}+ GB of RAM and VRAM together; smaller packs: run Strata's own setup, then ./setup.sh --strata")
-        return {"engine": "strata", "quant": None, "ctx": None, "kv": None, "tested": False, "download_gb": quant_gb(DEFAULT_QUANT),
-                "why": f"NVIDIA {vram} GB VRAM + {ram} GB RAM: Strata keeps what does not fit the card in RAM (and runs on Windows and Mac too)"}
-    return none(f"no supported GPU path on this box (gpu={hw['gpu']}); a remote engine works: ./setup.sh --gufo <url>")
+                return out(engine="gufo", model=DEFAULT_MODEL, quant=q["name"], ctx=ctx, download_gb=int(q["gib"]) + R["extras_gb"] + 1,
+                           why=f"Strix Halo, {fast:.0f} GB addressable: {q['name']} ({q['gib']} GiB) leaves {spare:.0f} GB for context -> {ctx} tokens (gufo has no KV-cache flag)")
+        return none(f"Strix Halo with {fast:.0f} GB addressable: the smallest quant ({R['quants'][-1]['gib']} GiB) plus context does not fit")
+    if hw["gpu"] in ("amd", "nvidia"):
+        cat = catalog()
+        if weights_pref() == "abliterated":  # only the Unsloth-layout Flash-Next has an abliterated build
+            if ram + vram < R["strata_min_gb"]:
+                return none(f"{vram} GB VRAM + {ram} GB RAM: Strata's UD-Q4_K_XL (the abliterated weights) needs {R['strata_min_gb']}+ GB of RAM and VRAM together")
+            return out(engine="strata", model=DEFAULT_MODEL, download_gb=quant_gb(DEFAULT_QUANT),
+                       why=f"{vram} GB VRAM + {ram} GB RAM: Strata runs the abliterated Flash-Next you chose (UD-Q4_K_XL layout)")
+        for mid in R["strata_order"]:  # the biggest pack whose RAM need (experts + ~10 GB, Strata's rule) fits
+            if ram >= cat[mid]["ram_gb"]:
+                return out(engine="strata", model=mid, download_gb=cat[mid]["download_gb"],
+                           why=f"{vram} GB VRAM + {ram} GB RAM: {cat[mid]['label']} needs ~{cat[mid]['ram_gb']} GB RAM; Strata keeps what does not fit the card in RAM (and runs on Windows and Mac too)")
+        return none(f"{ram} GB RAM is under the {cat[R['strata_order'][-1]]['ram_gb']} GB the smallest pack needs")
+    return none(f"no supported GPU path on this box (gpu={hw['gpu']}); run Strata natively there and point pi at it: ./setup.sh --strata <url>")
 
 
 def describe(rec, cap):
     gpu = f"{cap['gpu_name'] or 'no GPU'}, {cap['fast_gb']:g} GB GPU-addressable, {cap['disk_free_gb']} GB disk free"
     if not rec["engine"]:
         return [f"hardware: {gpu}", f"recommended: nothing - {rec['why']}"]
+    label = catalog().get(rec["model"], {}).get("label") if rec["model"] and rec["model"] != DEFAULT_MODEL else None
     out = [f"hardware: {gpu}",
-           f"recommended: {rec['engine']}" + (f", weights {rec['quant']}" if rec["quant"] else "") + (f", context {rec['ctx']}" if rec["ctx"] else "") + (f", {rec['kv']} KV cache" if rec["kv"] else "")
+           f"recommended: {rec['engine']}" + (f", model {label}" if label else "") + (f", weights {rec['quant']}" if rec["quant"] else "") + (f", context {rec['ctx']}" if rec["ctx"] else "") + (f", {rec['kv']} KV cache" if rec["kv"] else "")
            + ("" if rec["tested"] else "  (untested on this class of hardware)"), f"  why: {rec['why']}"]
     if rec["download_gb"] and cap["disk_free_gb"] < rec["download_gb"] + 5:
         out.append(f"  ! a fresh download is ~{rec['download_gb']} GB, only {cap['disk_free_gb']} GB free (fine if the weights are already on disk)")
@@ -154,22 +185,41 @@ def saved_quant(engine="gufo"):
 
 
 def offer_recommendation(eng):
-    """Right after the engine pick: when it is the recommended one, offer its quant and context and save the answer.
-    Never changes the engine and never asks twice for the same settings."""
+    """Right after the engine pick: when it is the recommended one, offer its model, quant and context and save the
+    answer. Never changes the engine and never asks twice for the same settings. -> True when the user accepted
+    (the model question is then already answered)."""
     if not sys.stdin.isatty():
-        return
+        return False
     rec = recommend(hardware(), capacity())
-    if rec["engine"] != eng or eng != "gufo":  # only gufo has a pick to save: halogen and Strata size themselves
-        return
-    want = {"engine": eng, "quant": rec["quant"], "ctx": rec["ctx"]}
-    if jget(PICK, None) == want and (eng != "gufo" or saved_quant() == rec["quant"]):
-        return
-    if not ask_yn(f"Use the recommended settings for this hardware? ({rec['quant'] or 'fixed weights'}, context {rec['ctx'] or 'engine default'}; {rec['why']})", True):
-        return
+    if rec["engine"] != eng or eng not in ("gufo", "strata"):  # halogen sizes itself
+        return False
+    want = {"engine": eng, "model": rec["model"], "quant": rec["quant"], "ctx": rec["ctx"]}
+    if jget(PICK, None) == want and engine_model(eng) == rec["model"] and (eng != "gufo" or saved_quant() == rec["quant"]):
+        return True
+    what = catalog()[rec["model"]]["label"] + (f", {rec['quant']}" if rec["quant"] else "") + (f", context {rec['ctx']}" if rec["ctx"] else "")
+    if not ask_yn(f"Use the recommended settings for this hardware? ({what}; {rec['why']})", True):
+        return False
     os.makedirs(AGENT, exist_ok=True)
+    open(MODEL_FILE, "w").write(rec["model"] + "\n")
     if eng == "gufo" and rec["quant"]:
         open(QUANT_FILE, "w").write(rec["quant"] + "\n")
     jput(PICK, want)
+    return True
+
+
+def ask_model(engine):
+    """Which model the engine loads, when it can load more than one; current answer first. -> True if it changed."""
+    cat = catalog()
+    ids = [m for m in cat if engine in cat[m]["engines"]]
+    if len(ids) < 2 or not sys.stdin.isatty():
+        return False
+    cur = engine_model(engine)
+    ids.sort(key=lambda m: m != cur)
+    pick = {cat[m]["label"] + (f"  (~{cat[m]['download_gb']} GB download, ~{cat[m]['ram_gb']} GB RAM)" if "ram_gb" in cat[m] else ""): m for m in ids}
+    m = pick[choose(f"Which model for {engine}?", list(pick), False)]
+    os.makedirs(AGENT, exist_ok=True)
+    open(MODEL_FILE, "w").write(m + "\n")
+    return m != cur
 
 
 def served_models(port, engine=None):
@@ -371,8 +421,11 @@ def install_extensions(engine, extra=(), verbose=True, show_ok=True, launch=True
 # ---------- tune ----------
 def hw_key(engine, model_id):
     h = hardware()
-    w = "|abliterated" if engine in WEIGHTS_ENGINES and weights_pref() == "abliterated" else ""  # stock keeps its old key
-    if engine == "gufo" and not w and saved_quant() != DEFAULT_QUANT:
+    m = engine_model(engine)
+    w = "|abliterated" if engine in WEIGHTS_ENGINES and m == DEFAULT_MODEL and weights_pref() == "abliterated" else ""  # stock keeps its old key
+    if m != DEFAULT_MODEL:
+        w = "|" + m  # another model is another speed
+    elif engine == "gufo" and not w and saved_quant() != DEFAULT_QUANT:
         w = "|" + saved_quant()  # another quant is another speed; the default quant keeps its old key
     return hashlib.sha1(f"{engine}|{model_id}|{h['gpu']}|{h['ram_gb']}{w}".encode()).hexdigest()[:12]
 
@@ -435,6 +488,14 @@ def cmd_recommend(a):
         print(json.dumps({"hardware": h, "capacity": cap, "recommendation": rec}, indent=1))
     else:
         print("\n".join(describe(rec, cap)))
+
+
+def cmd_model_info(a):
+    """One catalog field of a model (start-strata.sh and install-strata.sh read it); exit 1 when the model or field is not there."""
+    v = catalog().get(a.id, {}).get(a.field)
+    if v is None:
+        sys.exit(1)
+    print(" ".join(v) if isinstance(v, list) else v)
 
 
 def cmd_quant_info(a):
@@ -575,8 +636,19 @@ def stock_ready(quant=DEFAULT_QUANT):
     return bool(m) and all(os.path.isfile(first.replace("-00001-of-", f"-{i:05d}-of-")) for i in range(1, int(m.group(1)) + 1))
 
 
+G27_DRAFT = "Qwen3.8-27B-DFlash2-Q4_K_M.gguf"  # same name in server/start-gufo-flashnext.sh and scripts/download-qwen38-27b.sh
+
+
+def g27_ready():
+    """The 27B target, its DFlash2 draft and the vision projector are all in the folder the gufo launcher reads."""
+    first = subprocess.run(["bash", os.path.join(REPO, "server", "start-gufo-flashnext.sh"), "--print-model"], capture_output=True, text=True,
+                           env=dict(os.environ, GUFO_FAMILY="qwen38-27b")).stdout.strip()
+    d = os.path.dirname(first)
+    return bool(first) and all(os.path.isfile(os.path.join(d, f)) for f in (os.path.basename(first), G27_DRAFT, "mmproj-BF16.gguf"))
+
+
 def strata_installed():
-    """Strata's setup already installed the model for the saved weights answer (its run-unsloth-<model>.sh exists)."""
+    """Strata's setup already installed the saved model (--print-run: its run-<model>.sh exists; Flash-Next also needs the saved weights answer)."""
     return bool(subprocess.run(["bash", os.path.join(REPO, "server", "start-strata.sh"), "--print-run"], capture_output=True, text=True).stdout.strip())
 
 
@@ -599,7 +671,15 @@ def plan_start(engine, running, ask_start=True):
         if not ask_yn(f"No halogen checkpoint on this box. Download it (~124 GB into ~/models, {free} GB free, resumable)?"):
             return None
         plan["download"] = True
-    if engine == "strata" and not strata_installed():
+    m = engine_model(engine)
+    own = m != DEFAULT_MODEL  # another model than Flash-Next: the stock/abliterated answer and its downloads do not apply
+    if engine == "strata" and not strata_installed() and own:
+        free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
+        e = catalog()[m]
+        if not ask_yn(f"Strata does not have {e['label']} set up. Install it (git clone into ~/coding/Strata if needed; its setup fetches the engine and downloads ~{e['download_gb']} GB, {free} GB free, resumable)?"):
+            return None
+        plan["install"] = "strata"
+    elif engine == "strata" and not strata_installed():
         free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
         what = "uses gufo's orca-uncensored shards in place" if weights_pref() == "abliterated" else "uses the stock UD-Q4_K_XL that gufo shares in place"
         if not ask_yn(f"Strata is not installed for the {weights_pref()} weights. Install them (git clone into ~/coding/Strata if needed; its setup fetches the engine and {what}, switching answers rebuilds its small pack, no weights download)?"):
@@ -613,12 +693,17 @@ def plan_start(engine, running, ask_start=True):
     # gufo and Strata share one stock GGUF (Unsloth's UD-Q4_K_XL, latest Dynamic): fetch it once, whichever comes first.
     # gufo may follow the hardware pick to a smaller quant; Strata only runs UD-Q4_K_XL.
     q = saved_quant(engine)
-    if engine in ("gufo", "strata") and weights_pref() == "stock" and not stock_ready(q):
+    if engine in ("gufo", "strata") and not own and weights_pref() == "stock" and not stock_ready(q):
         free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
         if not ask_yn(f"The stock weights (Unsloth {q}, {'shared by gufo and Strata' if q == DEFAULT_QUANT else 'picked for this hardware'}) are not on this box. Download them (~{quant_gb(q)} GB, {free} GB free, resumable)?"):
             return None
         plan["stock"] = q
-    gb = weights_download_gb(engine) if engine in WEIGHTS_ENGINES and weights_pref() != "stock" else 0
+    if engine == "gufo" and m == "qwen38-27b" and not g27_ready():
+        free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
+        if not ask_yn(f"Qwen3.8 27B (UD-Q4_K_XL, DFlash2 draft, vision projector) is not on this box. Download it (~{catalog()[m]['download_gb']} GB, {free} GB free, resumable)?"):
+            return None
+        plan["g27"] = True
+    gb = weights_download_gb(engine) if engine in WEIGHTS_ENGINES and not own and weights_pref() != "stock" else 0
     if gb:
         free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
         if not ask_yn(f"The {weights_pref()} {engine} weights (or their MTP head) are not on this box. Download them (~{gb} GB, {free} GB free, resumable)?"):
@@ -639,6 +724,8 @@ def prepare_start(plan, running):
         return False
     if wd and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-abliterated.sh"), wd, "--yes"]).returncode:
         return False  # before the install: abliterated Strata installs on top of gufo's shards
+    if plan.pop("g27", False) and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-qwen38-27b.sh"), "--yes"]).returncode:
+        return False
     sq = plan.pop("stock", False)
     if sq and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-stock.sh"), "--yes"], env=dict(os.environ, GUFO_QUANT=sq)).returncode:
         return False  # same for stock: Strata installs on top of the shared UD-Q4_K_XL
@@ -697,11 +784,15 @@ def pick_engine(d, yes, want=None, on_pick=None):
     if not running:
         print("No engine is running yet. Pick one: halogen, gufo and Strata can be started (and halogen or Strata installed) from here.")
     eng = engine_menu(running)
-    offer_recommendation(eng)
+    before = engine_model(eng)
+    if not offer_recommendation(eng):
+        ask_model(eng)
     upgrading = on_pick(eng) if on_pick else False
+    # weights stock/abliterated only mean something for Flash-Next
+    weights_changed = ask_weights(eng) if engine_model(eng) == DEFAULT_MODEL else False
     # the server keeps what it loaded at start: a new default needs a restart (an upgrade restarts it anyway)
-    restart = ask_weights(eng) and eng in running and not upgrading and ask_yn(
-        f"{eng} is running the {'stock' if weights_pref() != 'stock' else 'abliterated'} weights. Restart it on the new default?", True)
+    restart = (weights_changed or engine_model(eng) != before) and eng in running and not upgrading and ask_yn(
+        f"{eng} is running different weights than your new default. Restart it?", True)
     if eng in running and not restart:
         return eng, None
     if upgrading:  # every upgrader starts the engine itself: "Start?" would be a question with only one answer
@@ -982,7 +1073,7 @@ def notice(msg):
 
 def choices_line():
     """One line with every saved answer, for summaries and the config menu."""
-    return (f"weights {weights_pref()} · sidecar {'off' if sidecar_pref() == '0' else 'on'} · voice {'on' if jget(EXTRAS, {}).get('voice') else 'off'}"
+    return (f"model {model_pref()} · weights {weights_pref()} · sidecar {'off' if sidecar_pref() == '0' else 'on'} · voice {'on' if jget(EXTRAS, {}).get('voice') else 'off'}"
             f" · update check {'on' if update_pref() == '1' else 'off'}")
 
 
@@ -1048,7 +1139,9 @@ def cmd_setup(a):
                  choices_line()] + (
             [f"stop {plan['stop']} and the ling-tiny sidecar"] if plan and plan["stop"] else []) + (
             ["download halogen (~124 GB, resumable)"] if plan and plan["download"] else []) + (
-            [f"install Strata for the {weights_pref()} weights (" + ("orca-uncensored in place" if weights_pref() == "abliterated" else "shared stock UD-Q4_K_XL in place") + ")"] if plan and plan.get("install") == "strata" else []) + (
+            [f"install Strata with {catalog()[engine_model('strata')]['label']} (its setup downloads ~{catalog()[engine_model('strata')]['download_gb']} GB, resumable)" if engine_model("strata") != DEFAULT_MODEL else
+             f"install Strata for the {weights_pref()} weights (" + ("orca-uncensored in place" if weights_pref() == "abliterated" else "shared stock UD-Q4_K_XL in place") + ")"] if plan and plan.get("install") == "strata" else []) + (
+            [f"download Qwen3.8 27B (~{catalog()['qwen38-27b']['download_gb']} GB, resumable)"] if plan and plan.get("g27") else []) + (
             [f"download the stock {plan['stock']} (~{quant_gb(plan['stock'])} GB, resumable)"] if plan and plan.get("stock") else []) + (
             [f"download the abliterated {eng} weights (~{plan.get('weights_gb')} GB, resumable)"] if plan and plan.get("weights") else []) + (
             [f"upgrade {eng} (restart, rolls back on failure)"] if upgrade else []) + (
@@ -1118,6 +1211,7 @@ def cmd_config(a):
         voice = bool(jget(EXTRAS, {}).get("voice"))
         items = {
             f"engine        {p.get('engine', '-')}/{p.get('model', '-')}": "engine",
+            f"model         {model_pref()}  (gufo and Strata; halogen always runs Flash-Next)": "model",
             f"weights       {weights_pref()}  (default for halogen and gufo)": "weights",
             f"sidecar       {'on' if sc else 'off'}  (ling-tiny, ~8 GiB GPU memory)": "sidecar",
             f"voice         {'on' if voice else 'off'}  (Lemonade STT/TTS)": "voice",
@@ -1131,6 +1225,12 @@ def cmd_config(a):
             eng, mod = pick_target(detect(), False)
             install_extensions(eng, verbose=False)
             finish(eng, mod, bool(jget(os.path.join(AGENT, "harness-tuned.json"), {}).get(hw_key(eng, mod))))
+        elif k == "model":
+            eng = p.get("engine", "halogen")
+            if eng not in ("gufo", "strata"):
+                print(f"  {eng} always runs Flash-Next; the model answer applies to gufo and Strata (switch engine first)")
+            elif ask_model(eng):
+                print(f"  saved; ./harness use {eng} (or ./setup.sh) installs and starts it")
         elif k == "weights":
             eng = p.get("engine", "halogen")
             if not ask_weights(eng if eng in WEIGHTS_ASK else "halogen") or eng not in WEIGHTS_ASK:
@@ -1166,7 +1266,7 @@ def main():
     import argparse
     ap = argparse.ArgumentParser(prog="harness")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for n, f in (("detect", cmd_detect), ("setup", cmd_setup), ("use", cmd_use), ("tune", cmd_tune), ("status", cmd_status), ("config", cmd_config), ("update-check", cmd_update_check), ("up", cmd_up), ("recommend", cmd_recommend), ("quant-info", cmd_quant_info), ("monitor", cmd_monitor)):
+    for n, f in (("detect", cmd_detect), ("setup", cmd_setup), ("use", cmd_use), ("tune", cmd_tune), ("status", cmd_status), ("config", cmd_config), ("update-check", cmd_update_check), ("up", cmd_up), ("recommend", cmd_recommend), ("quant-info", cmd_quant_info), ("model-info", cmd_model_info), ("monitor", cmd_monitor)):
         p = sub.add_parser(n)
         p.set_defaults(fn=f)
         if n in ("setup", "use"):
@@ -1182,6 +1282,9 @@ def main():
             p.add_argument("engine", nargs="?", help="default: the active engine (halogen or strata)")
             p.add_argument("--url", help="server root, e.g. a remote Strata (default: this box)")
             p.add_argument("--once", action="store_true", help="Strata only: print one snapshot and exit")
+        if n == "model-info":
+            p.add_argument("id")
+            p.add_argument("field")
         if n == "quant-info":
             p.add_argument("name")
         if n == "update-check":

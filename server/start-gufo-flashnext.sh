@@ -5,6 +5,20 @@
 # Spec decode: native MTP via the -shared- sidecar (the one gufo's docs name).
 set -u
 ENGINE_DIR=${ENGINE_DIR:-$HOME/LLMBench/models/qwen38-flash-next}
+# model family: GUFO_FAMILY, else the wizard's saved model answer (harness-model; qwen38-27b is the only other one gufo
+# loads). --print-model ignores the saved answer: its callers (download scripts, Strata install) ask about Flash-Next.
+FAMILY="${GUFO_FAMILY:-}"
+[ -z "$FAMILY" ] && [ "${1:-}" != --print-model ] && FAMILY=$(cat "${PI_CODING_AGENT_DIR:-${PI_HOME:-$HOME/.pi}/agent}/harness-model" 2>/dev/null)
+if [ "$FAMILY" = qwen38-27b ]; then
+  # dense 27B + the DFlash2 draft (gufo's docs/models page); files from scripts/download-qwen38-27b.sh
+  MDIR="${GUFO_27B_DIR:-$(dirname "$ENGINE_DIR")/qwen38-27b}"
+  MODEL_REL=Qwen3.8-27B-UD-Q4_K_XL.gguf; DRAFT=Qwen3.8-27B-DFlash2-Q4_K_M.gguf  # DRAFT: keep in step with G27_DRAFT in setup/harness.py
+  [ "${1:-}" = --print-model ] && { echo "$MDIR/$MODEL_REL"; exit 0; }
+  for f in "$MODEL_REL" "$DRAFT"; do
+    [ -f "$MDIR/$f" ] || { echo "gufo 27B file missing: $MDIR/$f - get it: scripts/download-qwen38-27b.sh" >&2; exit 1; }
+  done
+  NAME=qwen3.8-27b; SPEC=(--speculative dflash2 --dflash-model "/models/$DRAFT")
+else
 # default target: the wizard's saved answer (stock|abliterated); GUFO_WEIGHTS overrides it, GUFO_MODEL
 # (relative to ENGINE_DIR, first shard) names any other file. docs/ENGINES.md#abliterated-models
 WEIGHTS="${GUFO_WEIGHTS:-$(cat "${PI_CODING_AGENT_DIR:-${PI_HOME:-$HOME/.pi}/agent}/harness-weights" 2>/dev/null)}"
@@ -33,6 +47,8 @@ if [ ! -f "$ENGINE_DIR/$MTP" ]; then
   else echo "get it: hf download unsloth/Qwen3.8-Flash-Next-GGUF MTP/$MTP --local-dir $ENGINE_DIR && mv $ENGINE_DIR/MTP/$MTP $ENGINE_DIR/" >&2; fi
   exit 1
 fi
+MDIR=$ENGINE_DIR; MODEL_REL=$GUFO_MODEL; NAME=qwen3.8-flash-next; SPEC=(--speculative mtp --mtp-model "/models/$MTP")
+fi
 # pre-flight: gufo at 65k has never wedged, but at large ctx the same allocator
 # physics as halogen applies. recover mild fragmentation, fail fast otherwise.
 CTX="${GUFO_CTX:-65536}"
@@ -54,14 +70,13 @@ exec docker run --rm -i \
   --device /dev/kfd --device /dev/dri \
   --group-add "${RENDER_GID:-44}" --group-add "${VIDEO_GID:-99}" \
   --security-opt seccomp=unconfined --ipc=host --ulimit memlock=-1:-1 \
-  -v "$ENGINE_DIR":/models:ro \
+  -v "$MDIR":/models:ro \
   -p 127.0.0.1:$PORT:$PORT \
   "$GUFO_IMAGE" \
   gufo serve llm \
-    -m "/models/$GUFO_MODEL" \
-    --served-model-name qwen3.8-flash-next \
-    --speculative mtp \
-    --mtp-model /models/$MTP \
+    -m "/models/$MODEL_REL" \
+    --served-model-name "$NAME" \
+    "${SPEC[@]}" \
     --think auto \
     -c "$CTX" -j 2 \
     --log-progress \

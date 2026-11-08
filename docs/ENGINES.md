@@ -124,6 +124,39 @@ TabbyAPI, and Strata also runs on AMD, Windows and Mac. What EXL3 offers is qual
 against 0.0349 for a similar-size UD-IQ3_XXS GGUF, turboderp's chart). If you want it anyway, run TabbyAPI
 yourself and point pi at it as any OpenAI-compatible server; the harness will not set it up or verify it.
 
+## Other models on Strata and gufo
+
+Halogen always serves its own Flash-Next checkpoint. gufo and Strata can load more, chosen by one saved answer
+(`./harness config` -> model, or the wizard's "Which model?" after you pick the engine; the recommendation can set it
+for you). The list is `config/profiles.json` (`catalog`):
+
+| id | engines | what | plan for (Strata's docs) |
+|---|---|---|---|
+| `flash-next` (default) | gufo, Strata | Unsloth UD-Q4_K_XL, stock or abliterated | 104 GiB download |
+| `flash-next-iq3_s` / `-iq3_xxs` / `-iq2_xs` / `-q2_0` | Strata | ISTA-DASLab packs of the same model | 60 / 53 / 46 / 44 GB RAM, 84 / 76 / 68 / 66 GB download |
+| `qwen36-q4` / `-q6` / `-q8` | Strata | Qwen3.6-35B-A3B (small MoE, Unsloth GGUFs with MTP) | 32 / 44 / 52 GB RAM, 24 / 34 / 39 GB download |
+| `qwen38-27b` | gufo | Qwen3.8 27B dense, UD-Q4_K_XL + DFlash2 draft, vision | 20 GB download |
+
+Strata installs the non-default rows through its own `setup.sh --family F --model SIZE` (`scripts/install-strata.sh`,
+which downloads their files); gufo's 27B comes from `scripts/download-qwen38-27b.sh` at the revisions gufo's docs pin.
+The stock/abliterated answer applies to `flash-next` only: no abliterated build of the others exists here.
+
+**Recommendation off Strix Halo.** gufo targets Strix Halo (gfx1151) only, so every other AMD or NVIDIA box is
+recommended Strata, on the biggest ISTA pack whose RAM need fits (Strata's rule: experts + ~10 GB), Qwen3.6 Q4 from
+32 GB, nothing below that. An abliterated answer keeps `flash-next`. Windows and Mac are not set up by this harness
+(its launchers are bash): run Strata natively there and point pi at it with `./setup.sh --strata <url>`.
+
+> [!WARNING]
+> **None of the non-default rows has run here.** The sizes are Strata's MODELS.md / DETAILS.md and the Hugging Face
+> repos; the run-script names are derived from Strata's `setup.py` (`run-<tag>.sh`); the 27B launch line is the one
+> on gufo's docs page (the pinned 0.31.0 lists `--speculative dflash2` and `--dflash-model` in `serve llm --help`).
+> The tests cover the wizard, the launchers' file handling and the recommendation table, not a model start.
+
+**DeepSeek V4.1-Flash is not offered.** Strata runs it (ISTA 1.75-2.25 bpw sets, 239-274 GB, 12 GB card + 46-64 GB
+RAM), but only at 8K context and ~5-16 t/s, which does not fit a pi agent session, and Strata does not run it on Strix
+Halo Linux yet. Use it in Strata's own app or terminal (`strata launch --family deepseek41`) if you want it. gufo's
+DeepSeek V4 Flash is the older 0731 release and is not wired in either.
+
 ## Stock weights: one download for gufo and Strata
 
 The stock default for both is **Unsloth's UD-Q4_K_XL** (`unsloth/Qwen3.8-Flash-Next-GGUF`, folder `UD-Q4_K_XL`,

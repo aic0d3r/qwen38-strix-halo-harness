@@ -236,8 +236,8 @@ Which engine for which hardware:
 |---|---|---|
 | **Strix Halo** (Ryzen AI Max, 128 GB unified) | **halogen** | fastest measured, plus the NPU tools (guard, triage, dedup) |
 | Strix Halo, want open source | gufo or Strata | both open, both lose the NPU tools; Strata decodes faster, gufo prefills faster (table below) |
-| **NVIDIA RTX 20-50 / AMD RX 7000-9000, 12 GB+ VRAM** | **[Strata](docs/ENGINES.md#strata-the-pick-for-nvidia-and-amd-desktop-gpus)** | built for it; not measured here, see Strata's own benchmarks |
-| Apple Silicon, anything else | llama.cpp / MLX / Ollama / LM Studio | not measured here |
+| **NVIDIA RTX 20-50 / AMD RX 7000-9000, 12 GB+ VRAM** | **[Strata](docs/ENGINES.md#strata-the-pick-for-nvidia-and-amd-desktop-gpus)** | built for it; not measured here, see Strata's own benchmarks. `./harness recommend` picks the model by RAM: an ISTA pack of Flash-Next, or [Qwen3.6-35B-A3B](docs/ENGINES.md#other-models-on-strata-and-gufo) from 32 GB |
+| Apple Silicon, Windows, anything else | run Strata natively and point pi at it (`./setup.sh --strata <url>`), or llama.cpp / MLX / Ollama / LM Studio | not measured here; this harness's launchers are bash/Linux |
 
 On Strix Halo, matched measurements on this box (halogen and gufo A/B in one session, fabric clock
 held; Strata re-run 2026-10-14 with the same `halogen-cmp.py` battery and depth prompts, greedy,

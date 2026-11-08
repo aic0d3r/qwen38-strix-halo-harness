@@ -34,7 +34,19 @@
     ],
     "extras_gb": 4,
     "ctx_tiers": [ { "spare_gb": 14, "ctx": 65536 }, { "spare_gb": 8, "ctx": 32768 } ],
-    "halogen_min_ram_gb": 110, "strata_min_gb": 72, "halogen_download_gb": 124
+    "halogen_min_ram_gb": 110, "strata_min_gb": 72, "strata_order": ["flash-next-iq3_s", "flash-next-iq3_xxs", "flash-next-iq2_xs", "flash-next-q2_0", "qwen36-q4"], "halogen_download_gb": 124
+  },
+  "catalog": {
+    "_doc": "Models the wizard can set up, one saved answer (harness-model). engines = who can load it; halogen always serves its own Flash-Next checkpoint and ignores the answer. strata = [family, size] for Strata's `setup.sh --family F --model SIZE` (it downloads the files itself); run = the start script that setup writes; ram_gb = RAM Strata's docs say to plan for (experts + ~10 GB); download_gb = what setup fetches. Sizes are Strata's MODELS.md / DETAILS.md and the Hugging Face repos; none of the non-default rows has run here.",
+    "flash-next": { "label": "Qwen3.8-Flash-Next, Unsloth UD-Q4_K_XL (stock or abliterated)", "engines": ["gufo", "strata"] },
+    "flash-next-iq3_s":   { "label": "Qwen3.8-Flash-Next, ISTA IQ3_S (matches the full model on Strata's tests)", "engines": ["strata"], "strata": ["qwen", "IQ3_S"],   "run": "run-iq3_s.sh",   "ram_gb": 60, "download_gb": 84 },
+    "flash-next-iq3_xxs": { "label": "Qwen3.8-Flash-Next, ISTA IQ3_XXS", "engines": ["strata"], "strata": ["qwen", "IQ3_XXS"], "run": "run-iq3_xxs.sh", "ram_gb": 53, "download_gb": 76 },
+    "flash-next-iq2_xs":  { "label": "Qwen3.8-Flash-Next, ISTA IQ2_XS", "engines": ["strata"], "strata": ["qwen", "IQ2_XS"],  "run": "run-iq2_xs.sh",  "ram_gb": 46, "download_gb": 68 },
+    "flash-next-q2_0":    { "label": "Qwen3.8-Flash-Next, ISTA Q2_0 (smallest, fastest)", "engines": ["strata"], "strata": ["qwen", "Q2_0"],    "run": "run-q2_0.sh",    "ram_gb": 44, "download_gb": 66 },
+    "qwen36-q4": { "label": "Qwen3.6-35B-A3B, UD-Q4_K_XL (small MoE, runs on 32 GB RAM)", "engines": ["strata"], "strata": ["qwen36", "UD-Q4_K_XL"], "run": "run-qwen36-ud-q4_k_xl.sh", "ram_gb": 32, "download_gb": 24 },
+    "qwen36-q6": { "label": "Qwen3.6-35B-A3B, UD-Q6_K_XL", "engines": ["strata"], "strata": ["qwen36", "UD-Q6_K_XL"], "run": "run-qwen36-ud-q6_k_xl.sh", "ram_gb": 44, "download_gb": 34 },
+    "qwen36-q8": { "label": "Qwen3.6-35B-A3B, Q8_0", "engines": ["strata"], "strata": ["qwen36", "Q8_0"], "run": "run-qwen36-q8_0.sh", "ram_gb": 52, "download_gb": 39 },
+    "qwen38-27b": { "label": "Qwen3.8 27B dense, UD-Q4_K_XL + DFlash2 draft (gufo, Strix Halo)", "engines": ["gufo"], "download_gb": 20 }
   },
   "models": {
     "default": {

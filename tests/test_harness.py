@@ -222,7 +222,7 @@ assert srun("stock", "--print-run").stdout.strip().endswith("run-unsloth-ud-q4_k
 assert srun("stock").returncode == 0 and srun("abliterated").returncode == 1
 # hardware -> engine/quant/context. The measured Strix Halo 124 GB box gets halogen; the rest is the table's arithmetic
 R = h.PROFILES["recommend"]
-rec = lambda gpu, ram, fast, vram=0, npu=False: h.recommend({"gpu": gpu, "ram_gb": ram, "npu": npu}, {"fast_gb": fast, "vram_gb": vram})
+rec = lambda gpu, ram, fast, vram=0, npu=False, name="Strix Halo": h.recommend({"gpu": gpu, "ram_gb": ram, "npu": npu}, {"fast_gb": fast, "vram_gb": vram, "gpu_name": name})
 r = rec("amd", 124, 124.5, npu=True)
 assert r["engine"] == "halogen" and r["tested"], r
 r = rec("amd", 124, 124.5)          # same box without the NPU: gufo at the shipped default quant and context
@@ -230,11 +230,18 @@ assert (r["engine"], r["quant"], r["ctx"], r["tested"]) == ("gufo", "UD-Q4_K_XL"
 assert (rec("amd", 102, 102)["quant"], rec("amd", 102, 102)["ctx"]) == ("UD-Q3_K_XL", 65536)
 assert (rec("amd", 96, 96)["quant"], rec("amd", 96, 96)["ctx"]) == ("UD-Q3_K_XL", 32768)
 assert (rec("amd", 92, 92)["quant"], rec("amd", 92, 92)["ctx"]) == ("UD-IQ3_XXS", 32768)
-assert rec("amd", 88, 88)["engine"] is None and rec("amd", 64, 64)["engine"] is None and rec("none", 128, 128)["engine"] is None
-# NVIDIA gets Strata (nothing measured here), and only where RAM + VRAM hold its UD-Q4_K_XL
-r = rec("nvidia", 64, 24, vram=24)
-assert (r["engine"], r["tested"]) == ("strata", False) and rec("nvidia", 48, 24, vram=24)["engine"] == "strata"
-assert rec("nvidia", 32, 24, vram=24)["engine"] is None and rec("nvidia", 32, 8, vram=8)["engine"] is None
+assert rec("amd", 88, 88)["engine"] is None and rec("amd", 64, 64)["engine"] is None and rec("none", 128, 128, name="")["engine"] is None
+# every other AMD/NVIDIA box goes to Strata (gufo is Strix Halo only); the model is the biggest ISTA pack whose RAM need fits (Strata's rule),
+# Qwen3.6 below that, nothing under its 32 GB; abliterated needs the Unsloth layout; nothing here is measured
+nv = lambda ram, vram=24, gpu="nvidia": rec(gpu, ram, vram, vram=vram, name="RTX 4090")
+r = nv(64)
+assert (r["engine"], r["model"], r["tested"]) == ("strata", "flash-next-iq3_s", False), r
+assert [nv(x)["model"] for x in (56, 48, 44, 40, 32)] == ["flash-next-iq3_xxs", "flash-next-iq2_xs", "flash-next-q2_0", "qwen36-q4", "qwen36-q4"]
+assert nv(30)["engine"] is None and nv(64, gpu="amd")["engine"] == "strata" and rec("apple", 64, 64, name="")["engine"] is None
+assert all(m in h.catalog() for m in R["strata_order"])
+h.weights_pref, real_wp = (lambda: "abliterated"), h.weights_pref
+assert nv(64)["model"] == "flash-next" and nv(60, 8)["engine"] is None and nv(64, 8)["engine"] == "strata"
+h.weights_pref = real_wp
 # the ladder is what the gufo launcher can load: every quant resolves to <quant>/...-00001-of-<shards>, sizes feed the download
 for q in R["quants"]:
     out = subprocess.run(["bash", os.path.join(os.path.dirname(__file__), "..", "server", "start-gufo-flashnext.sh"), "--print-model"], capture_output=True, text=True,
@@ -243,20 +250,68 @@ for q in R["quants"]:
     assert h.quant_gb(q["name"]) == int(q["gib"]) + R["extras_gb"] + 1
 assert h.quant_gb("nope") is None
 # accepting the gufo pick saves the quant (the launcher reads it) and the context (start_engine passes it); a repeat does not ask again
-saved = {n: getattr(h, n) for n in ("hardware", "capacity", "ask_yn", "PICK", "QUANT_FILE")}
-h.hardware, h.capacity = (lambda: {"gpu": "amd", "ram_gb": 96, "npu": False, "cpus": 8}), (lambda: {"gpu_name": "t", "vram_gb": 0, "fast_gb": 96, "disk_free_gb": 500})
-h.PICK, h.QUANT_FILE = f"{AGENT}/pick.json", f"{AGENT}/quant"
+saved = {n: getattr(h, n) for n in ("hardware", "capacity", "ask_yn", "PICK", "QUANT_FILE", "MODEL_FILE")}
+h.hardware, h.capacity = (lambda: {"gpu": "amd", "ram_gb": 96, "npu": False, "cpus": 8}), (lambda: {"gpu_name": "Strix Halo", "vram_gb": 0, "fast_gb": 96, "disk_free_gb": 500})
+h.PICK, h.QUANT_FILE, h.MODEL_FILE = f"{AGENT}/pick.json", f"{AGENT}/quant", f"{AGENT}/model"
 asked = []
 h.ask_yn = lambda q, d=False: asked.append(q) or True
 real_stdin, sys.stdin = sys.stdin, types.SimpleNamespace(isatty=lambda: True)
 h.offer_recommendation("gufo")
-assert open(h.QUANT_FILE).read().strip() == "UD-Q3_K_XL" and json.load(open(h.PICK)) == {"engine": "gufo", "quant": "UD-Q3_K_XL", "ctx": 32768}, asked
+assert open(h.QUANT_FILE).read().strip() == "UD-Q3_K_XL" and json.load(open(h.PICK)) == {"engine": "gufo", "model": "flash-next", "quant": "UD-Q3_K_XL", "ctx": 32768}, asked
 assert h.saved_quant("gufo") == "UD-Q3_K_XL" and h.saved_quant("strata") == "UD-Q4_K_XL"
 h.offer_recommendation("gufo"); h.offer_recommendation("strata")
 assert len(asked) == 1, asked
 assert h.hw_key("gufo", "m") != h.hw_key("strata", "m")
+# a discrete-GPU box: accepting the Strata pick saves its model; engines that cannot load it keep Flash-Next; the model joins the tune key
+h.hardware, h.capacity = (lambda: {"gpu": "nvidia", "ram_gb": 64, "npu": False, "cpus": 8}), (lambda: {"gpu_name": "RTX 4090", "vram_gb": 24, "fast_gb": 24, "disk_free_gb": 500})
+k_before = h.hw_key("strata", "m")
+assert h.offer_recommendation("strata") is True and h.model_pref() == "flash-next-iq3_s" and h.engine_model("strata") == "flash-next-iq3_s"
+assert h.engine_model("gufo") == h.engine_model("halogen") == "flash-next" and h.hw_key("strata", "m") != k_before and h.hw_key("gufo", "m") == h.hw_key("gufo", "m")
+n_asked = len(asked); assert h.offer_recommendation("strata") is True and len(asked) == n_asked  # same answer: not asked again
 sys.stdin = real_stdin
 for n, f in saved.items(): setattr(h, n, f)
+# another model than Flash-Next: Strata installs it through its own setup (no stock/abliterated downloads); gufo's 27B fetches its own files
+saved = {n: getattr(h, n) for n in ("MODEL_FILE", "strata_installed", "ask_yn", "heap_holder", "stock_ready", "g27_ready")}
+h.MODEL_FILE = f"{AGENT}/model2"
+h.strata_installed, h.heap_holder, h.stock_ready = (lambda: False), (lambda r: None), (lambda *a: False)
+asked = []
+h.ask_yn = lambda q, d=False: asked.append(q) or True
+open(h.MODEL_FILE, "w").write("qwen36-q4\n")
+plan = h.plan_start("strata", {})
+assert plan["install"] == "strata" and not plan.get("stock") and not plan.get("weights") and "Qwen3.6-35B-A3B" in asked[0] and "~24 GB" in asked[0], (plan, asked)
+ran = []
+h.subprocess.run = lambda a, **k: ran.append(os.path.basename(a[1])) or types.SimpleNamespace(returncode=0)
+assert h.prepare_start(plan, {}) and ran == ["install-strata.sh"], ran
+open(h.MODEL_FILE, "w").write("qwen38-27b\n")
+h.g27_ready = lambda: False
+plan = h.plan_start("gufo", {})
+assert plan["g27"] is True and not plan.get("stock") and not plan.get("weights"), plan
+ran = []
+assert h.prepare_start(plan, {}) and ran == ["download-qwen38-27b.sh"], ran
+h.subprocess.run = real_run
+h.g27_ready = lambda: True
+assert not h.plan_start("gufo", {}).get("g27")
+assert h.plan_start("strata", {})["stock"] == "UD-Q4_K_XL"  # 27B is gufo's: Strata falls back to Flash-Next
+for n, f in saved.items(): setattr(h, n, f)
+# Strata launcher by model: the catalog's run script is used whatever the weights answer says, a missing one is named, an unknown model means Flash-Next
+open(f"{sd}/run-iq3_s.sh", "w").write("#!/bin/sh\necho iq3\n")
+open(f"{sd}/.harness-weights", "w").write("abliterated\n")
+sm = lambda m, w, *a: subprocess.run(["bash", strata, *a], capture_output=True, text=True, env=dict(os.environ, STRATA_DIR=sd, STRATA_WEIGHTS=w, STRATA_MODEL=m))
+assert sm("flash-next-iq3_s", "stock", "--print-run").stdout.strip().endswith("run-iq3_s.sh") and "iq3" in sm("flash-next-iq3_s", "stock").stdout
+r = sm("qwen36-q4", "stock", "--print-run"); assert r.stdout.strip() == "", r
+r = sm("qwen36-q4", "stock"); assert r.returncode == 1 and "run-qwen36-ud-q4_k_xl.sh" in r.stderr, r
+assert sm("qwen38-27b", "abliterated", "--print-run").stdout.strip().endswith("run-unsloth-ud-q4_k_xl.sh")
+for mid, e in h.catalog().items():
+    assert ("run" in e) == ("strata" in e) and ("strata" not in e or "strata" in e["engines"]), mid
+# gufo launcher: the 27B family needs its own files, and --print-model keeps meaning Flash-Next whatever the saved answer is
+gl = os.path.join(os.path.dirname(__file__), "..", "server", "start-gufo-flashnext.sh")
+gd = tempfile.mkdtemp(); open(f"{gd}/harness-model", "w").write("qwen38-27b\n")
+ge = dict(os.environ, PI_CODING_AGENT_DIR=gd, ENGINE_DIR=f"{gd}/flash", GUFO_27B_DIR=f"{gd}/27b")
+assert "/UD-Q4_K_XL/Qwen3.8-Flash-Next" in subprocess.run(["bash", gl, "--print-model"], capture_output=True, text=True, env=ge).stdout
+assert subprocess.run(["bash", gl, "--print-model"], capture_output=True, text=True, env=dict(ge, GUFO_FAMILY="qwen38-27b")).stdout.strip() == f"{gd}/27b/Qwen3.8-27B-UD-Q4_K_XL.gguf"
+r = subprocess.run(["bash", gl], capture_output=True, text=True, env=ge)
+assert r.returncode == 1 and "download-qwen38-27b.sh" in r.stderr, r
+assert h.G27_DRAFT in open(gl).read() and h.G27_DRAFT in open(os.path.join(os.path.dirname(gl), "..", "scripts", "download-qwen38-27b.sh")).read()
 # live monitor: halogen and Strata have one; Strata uses its own when its venv can run it, else our dashboard; others none
 assert h.monitor_cmd("halogen")[1].endswith("halogen-top.sh") and h.monitor_cmd("gufo") is None and h.monitor_cmd("vllm") is None
 os.environ["STRATA_DIR"] = md = tempfile.mkdtemp()

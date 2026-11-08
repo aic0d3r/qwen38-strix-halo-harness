@@ -190,6 +190,11 @@ if [ "$DOCTOR" = 1 ]; then
   else
     ok "weights: stock (refusals kept; ./harness config -> weights abliterated removes them)"
   fi
+  # a non-default model (gufo and Strata): the stock/abliterated answer above is about Flash-Next only
+  M=$(head -1 "$PI_HOME/agent/harness-model" 2>/dev/null)
+  if [ -n "$M" ] && [ "$M" != flash-next ] && python3 "$REPO/setup/harness.py" model-info "$M" engines 2>/dev/null | grep -qw "${ACT:-none}"; then
+    ok "model: $M on $ACT (the weights answer above applies to Flash-Next only; ./harness config -> model)"
+  fi
   # what the active engine gives up: the NPU models exist only on halogen. Everything else is engine-independent.
   if [ -n "${ACT:-}" ] && [ "$ACT" != halogen ]; then
     ok "engine $ACT: no NPU guard/triage/dedup (halogen only); taint-gate, refusal canary, semble search and the sidecar work unchanged"
