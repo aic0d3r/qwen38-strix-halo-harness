@@ -174,17 +174,18 @@ toward `max_tokens`, so keep it high (pi's profile does); run nothing else heavy
 The stock default for both is **Unsloth's UD-Q4_K_XL** (`unsloth/Qwen3.8-Flash-Next-GGUF`, folder `UD-Q4_K_XL`,
 4 shards, 103.7 GiB; the last shard is the n-gram table), because it is the layout gufo qualifies and the one
 Strata runs from a `--gguf-dir`. `scripts/download-stock.sh` (offered by the wizard, `--yes` for scripts) fetches
-the repo's `main`, which since 2026-11-04 is **Unsloth Dynamic v3.1 (preview)**: Unsloth reports UD-Q4_K_XL at
+**Unsloth Dynamic v3.1 (preview, since 2026-11-04)**, pinned to a commit (below): Unsloth reports UD-Q4_K_XL at
 92.3% top-1 agreement and mean KLD 0.047 against the unquantized model, with 10-15% better benchmark accuracy than
 other quants of the same size. It also fetches gufo's shared Q8 MTP head and the vision projector when missing and
-writes the Unsloth commit it got to `UD-Q4_K_XL/.unsloth-revision`; `UNSLOTH_REV=<commit>` pins a revision. The
+writes the Unsloth commit it got to `UD-Q4_K_XL/.unsloth-revision`; `UNSLOTH_REV=<commit>` overrides the revision. The
 files land in `ENGINE_DIR` (default `~/LLMBench/models/qwen38-flash-next`) where `start-gufo-flashnext.sh`
 looks, and Strata uses them in place, so there is one copy, not two. UD-IQ4_XS (87 GiB), Strata's own previous
 stock pick, is no longer the default: gufo 0.12 stopped loading it, and one shared file replaces two downloads.
 
 **Support, checked against the projects' own sources (2026-11-08):** both engines name this exact revision.
-`download-stock.sh` fetches `main`, whose four UD-Q4_K_XL shards are byte-identical (size and SHA-256) to Unsloth
-commit `d9620119`.
+`download-stock.sh` fetches Unsloth commit `d9620119` (full hash in the script) by default. `main` has already moved
+past it (`084c631` on 2026-11-08) and may no longer match either engine's pins, so `UNSLOTH_REV=main` is at your own
+risk. `install-strata.sh` refuses a Strata checkout older than 0.2.11.
 
 - **gufo:** its model page lists `UD-Q4_K_XL/*` (four shards) with the shared Q8 MTP head and `mmproj-BF16.gguf`,
   pinned to `d96201194f10`, and says it keeps the tensor types and shapes of the earlier `38bb39ee9782` with

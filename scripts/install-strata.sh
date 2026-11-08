@@ -36,6 +36,11 @@ if [ ! -f "$DIR/setup.sh" ]; then
   git clone https://github.com/Niko1221/Strata.git "$DIR" || { echo "  git clone failed" >&2; exit 1; }
 fi
 cd "$DIR" || exit 1
+# Strata only knows the Dynamic 3.1 UD-Q4_K_XL shards from 0.2.11; an older checkout fails deep inside its setup
+TAG=$(git describe --tags 2>/dev/null | sed 's/^v//; s/-.*//')
+if [ -n "$TAG" ] && [ "$(printf '%s\n0.2.11\n' "$TAG" | sort -V | head -1)" != 0.2.11 ]; then
+  echo "  Strata in $DIR is v$TAG, the stock UD-Q4_K_XL files need 0.2.11+: scripts/upgrade-strata.sh (or git pull there)" >&2; exit 1
+fi
 # Strata compiles its HIP engine with $ROCM/llvm/bin/clang++; TheRock 10.x system ROCm (rocm-gfx1151-bin) keeps it in
 # lib/llvm, so cmake fails. A ROCM_PATH without hipcc makes Strata use its pinned gfx1151 wheels in .venv (~10 GB, no sudo).
 # shortcut: drop this once Strata finds lib/llvm/bin/clang++ itself
