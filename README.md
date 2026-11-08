@@ -40,7 +40,7 @@ summaries. Guided setup for llama.cpp, vLLM, Ollama, LM Studio and more. Built o
 
 ![AI coding agent harness for any hardware, local or cloud, tuned for AMD Strix Halo: Qwen3.8 Flash-Next 125B runs on the Ryzen AI Max+ 395 iGPU, the NPU screens and routes prompts, a sidecar writes commits and summaries](docs/brand/hero.png)
 
-- **Guided setup:** `./setup.sh` detects your engine (halogen, gufo, llama.cpp, Strata, TabbyAPI, vLLM,
+- **Guided setup:** `./setup.sh` detects your engine (halogen, gufo, llama.cpp, Strata, vLLM,
   Ollama, LM Studio) and wires pi to it. The NPU tools are Strix Halo only.
 - **Private by default:** no API key. The halogen engine makes no outbound calls; only the DuckDuckGo web-search tool reaches the internet. Cloud models are a supported
   [hybrid](docs/ENGINES.md#cloud-models-are-a-supported-hybrid); screening, search and compaction
@@ -74,7 +74,7 @@ Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70
    and offers `git pull --ff-only`, then restarts on the new code. It stays quiet offline, with local
    edits, or when there is nothing new.
 1. **Detects** your hardware and which engines are already serving: halogen, gufo, llama.cpp,
-   Strata, TabbyAPI, vLLM, Ollama, LM Studio.
+   Strata, vLLM, Ollama, LM Studio.
 2. **Shows one engine menu every run** (current engine first): running or not, the served model,
    the last measured prefill/decode speed, what you lose on that engine (the NPU tools off halogen),
    and a warning when halogen and gufo would fight over the same GPU memory. Picking an engine that
@@ -237,7 +237,6 @@ Which engine for which hardware:
 | **Strix Halo** (Ryzen AI Max, 128 GB unified) | **halogen** | fastest measured, plus the NPU tools (guard, triage, dedup) |
 | Strix Halo, want open source | gufo or Strata | both open, both lose the NPU tools; Strata decodes faster, gufo prefills faster (table below) |
 | **NVIDIA RTX 20-50 / AMD RX 7000-9000, 12 GB+ VRAM** | **[Strata](docs/ENGINES.md#strata-the-pick-for-nvidia-and-amd-desktop-gpus)** | built for it; not measured here, see Strata's own benchmarks |
-| NVIDIA 24 GB or less, 64 GB+ RAM, want EXL3 quality per bit | [TabbyAPI](docs/ENGINES.md#tabbyapi-nvidia-when-the-model-does-not-fit-in-vram) | experts spill to RAM; stock weights only; **not run here** (no NVIDIA GPU), numbers are the model card's and a third-party guide's |
 | Apple Silicon, anything else | llama.cpp / MLX / Ollama / LM Studio | not measured here |
 
 On Strix Halo, matched measurements on this box (halogen and gufo A/B in one session, fabric clock

@@ -10,10 +10,6 @@
                  "start": "./setup.sh installs and starts it (or run scripts/install-strata.sh, then server/start-strata.sh)",
                  "script": "server/start-strata.sh",
                  "update": { "have": "dir server/start-strata.sh", "latest": "gh:Niko1221/Strata", "how": "scripts/upgrade-strata.sh (runs Strata's update.sh, restarts it, checks it, rolls back on failure)" } },
-    "tabbyapi": { "port": 5000,  "probe": "/v1/models",  "provider": "tabbyapi","npu": false, "managed": false, "loses": "NPU tools (guard, triage, dedup); abliterated weights (stock EXL3 only)",
-                 "note": "NVIDIA GPUs: ExLlamaV3 EXL3 quants, MoE experts spill to system RAM when VRAM is short; docs/ENGINES.md#tabbyapi",
-                 "start": "./setup.sh installs and starts it (or run scripts/install-tabbyapi.sh, then server/start-tabbyapi.sh)",
-                 "script": "server/start-tabbyapi.sh" },
     "gufo":     { "port": 8080,  "probe": "/v1/models",  "provider": "gufo",    "npu": false, "managed": false,
                  "note": "shares :8080 with strata/llama.cpp; told apart by owned_by=gufo in /v1/models",
                  "start": "stop halogen first, then run server/start-gufo-flashnext.sh",
@@ -29,7 +25,7 @@
     "lmstudio": { "port": 1234,  "probe": "/v1/models",  "provider": "lmstudio","npu": false, "managed": false, "loses": "NPU tools (guard, triage, dedup)" }
   },
   "recommend": {
-    "_doc": "Hardware -> engine/quant/context table behind ./harness recommend. gib = size of the shards on unsloth/Qwen3.8-Flash-Next-GGUF (best first); only gufo reads the quant (halogen, Strata and TabbyAPI ship one fixed weight set). Anything not measured on a Strix Halo 124 GB box is marked untested.",
+    "_doc": "Hardware -> engine/quant/context table behind ./harness recommend. gib = size of the shards on unsloth/Qwen3.8-Flash-Next-GGUF (best first); only gufo reads the quant (halogen and Strata ship one fixed weight set here). Anything not measured on a Strix Halo 124 GB box is marked untested.",
     "quants": [
       { "name": "UD-Q5_K_XL", "gib": 147.4 },
       { "name": "UD-Q4_K_XL", "gib": 103.7 },
@@ -38,7 +34,7 @@
     ],
     "extras_gb": 4,
     "ctx_tiers": [ { "spare_gb": 14, "ctx": 65536 }, { "spare_gb": 8, "ctx": 32768 } ],
-    "halogen_min_ram_gb": 110, "tabby_min_vram_gb": 16, "tabby_min_ram_gb": 56, "tabby_measured_vram_gb": 30, "tabby_download_gb": 100, "halogen_download_gb": 124
+    "halogen_min_ram_gb": 110, "strata_min_gb": 72, "halogen_download_gb": 124
   },
   "models": {
     "default": {

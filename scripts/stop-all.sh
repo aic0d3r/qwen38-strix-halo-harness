@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # stop the engines the harness starts (halogen, gufo, Strata) + the ling-tiny sidecar; leaves pi and
 # servers it does not start (Ollama, vLLM, LM Studio, your own llama-server) alone.
-# Also stops TabbyAPI (plain process on :5000).
 #   scripts/stop-all.sh            stop both, desktop notification when done
 #   scripts/stop-all.sh --install  add "Stop/Start LLM servers" to the app menu + ~/Desktop
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -26,12 +25,6 @@ done
 if pkill -f 'serve/server.py --engine strata'; then
   for _ in $(seq 1 15); do pgrep -f 'serve/server.py --engine strata' >/dev/null || break; sleep 2; done
   out+="Strata stopped. "
-fi
-# TabbyAPI is a plain python process on :5000; only stop what is really its main.py (5000 is a popular port)
-TP=$(ss -ltnpH 'sport = :5000' 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
-if [ -n "$TP" ] && ps -o args= -p "$TP" | grep -q 'main.py' && kill "$TP" 2>/dev/null; then
-  for _ in $(seq 1 15); do kill -0 "$TP" 2>/dev/null || break; sleep 2; done
-  out+="TabbyAPI stopped. "
 fi
 [ -z "$out" ] && out="no engine was running. "
 if systemctl --user is-active --quiet ling-tiny.service 2>/dev/null; then systemctl --user stop ling-tiny.service && out+="ling-tiny stopped. "

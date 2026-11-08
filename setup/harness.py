@@ -101,8 +101,8 @@ def capacity():
 
 def recommend(hw, cap):
     """-> {engine|None, quant, ctx, kv, tested, download_gb, why}. Table in config/profiles.json ("recommend"). Only
-    halogen on a Strix Halo with ~124 GB and TabbyAPI at 30+ GB VRAM follow a measurement; the rest is arithmetic on
-    published shard sizes and says tested=False. Context is a heuristic on spare memory (KV size per token is unmeasured)."""
+    halogen on a Strix Halo with ~124 GB follows a measurement; the rest is arithmetic on published shard sizes or
+    Strata's own docs and says tested=False. Context is a heuristic on spare memory (KV size per token is unmeasured)."""
     R = PROFILES["recommend"]
     fast, ram, vram = cap["fast_gb"], hw["ram_gb"], cap["vram_gb"]
     none = lambda why: {"engine": None, "quant": None, "ctx": None, "kv": None, "tested": False, "download_gb": 0, "why": why}
@@ -118,12 +118,11 @@ def recommend(hw, cap):
                         "why": f"AMD GPU, {fast:.0f} GB addressable: {q['name']} ({q['gib']} GiB) leaves {spare:.0f} GB for context -> {ctx} tokens (gufo has no KV-cache flag)"}
         return none(f"AMD GPU with {fast:.0f} GB addressable: the smallest quant ({R['quants'][-1]['gib']} GiB) plus context does not fit")
     if hw["gpu"] == "nvidia":
-        if vram < R["tabby_min_vram_gb"]:
-            return none(f"NVIDIA {vram} GB VRAM: TabbyAPI needs {R['tabby_min_vram_gb']}+ GB (the experts that do not fit spill to system RAM)")
-        if ram < R["tabby_min_ram_gb"]:
-            return none(f"{ram} GB RAM: the spilled experts need {R['tabby_min_ram_gb']}+ GB or decode collapses into swap")
-        return {"engine": "tabbyapi", "quant": "EXL3 3.05bpw", "ctx": None, "kv": "Q8", "tested": vram >= R["tabby_measured_vram_gb"], "download_gb": R["tabby_download_gb"],
-                "why": f"NVIDIA {vram} GB VRAM + {ram} GB RAM: TabbyAPI keeps the rest of the experts in RAM (its launcher sizes that from VRAM, context 131072, Q8 KV cache)"}
+        # Strata keeps the experts that do not fit the card in RAM; the installer here sets up its UD-Q4_K_XL (RAM + VRAM for the weights)
+        if ram + vram < R["strata_min_gb"]:
+            return none(f"NVIDIA {vram} GB VRAM + {ram} GB RAM: Strata's UD-Q4_K_XL needs {R['strata_min_gb']}+ GB of RAM and VRAM together; smaller packs: run Strata's own setup, then ./setup.sh --strata")
+        return {"engine": "strata", "quant": None, "ctx": None, "kv": None, "tested": False, "download_gb": quant_gb(DEFAULT_QUANT),
+                "why": f"NVIDIA {vram} GB VRAM + {ram} GB RAM: Strata keeps what does not fit the card in RAM (and runs on Windows and Mac too)"}
     return none(f"no supported GPU path on this box (gpu={hw['gpu']}); a remote engine works: ./setup.sh --gufo <url>")
 
 
@@ -160,7 +159,7 @@ def offer_recommendation(eng):
     if not sys.stdin.isatty():
         return
     rec = recommend(hardware(), capacity())
-    if rec["engine"] != eng or eng != "gufo":  # only gufo has a pick to save: halogen and TabbyAPI size themselves
+    if rec["engine"] != eng or eng != "gufo":  # only gufo has a pick to save: halogen and Strata size themselves
         return
     want = {"engine": eng, "quant": rec["quant"], "ctx": rec["ctx"]}
     if jget(PICK, None) == want and (eng != "gufo" or saved_quant() == rec["quant"]):
@@ -455,7 +454,7 @@ def last_speed(engine):
     return f"{t[-1]['prefill_tps']}/{t[-1]['decode_tps']} t/s pf/dec" if t else "not measured"
 
 
-BIG = ("halogen", "gufo", "strata", "tabbyapi")  # big engines: one GPU memory heap (VRAM on NVIDIA), and gufo/strata also share :8080
+BIG = ("halogen", "gufo", "strata")  # big engines: one GPU memory heap (VRAM on NVIDIA), and gufo/strata also share :8080
 
 
 def heap_holder(running):
@@ -469,7 +468,7 @@ def engine_menu(running):
     hw = hardware()  # fresh box: the recommended engine, halogen where it can run, then the NVIDIA engines on an NVIDIA box, then engines we can start for you
     rec = recommend(hw, capacity())["engine"]
     order = sorted(PROFILES["engines"], key=lambda e: (e != cur, e not in running, e != rec, not (hw["npu"] and e == "halogen"),
-                                                       not (hw["gpu"] == "nvidia" and e in ("strata", "tabbyapi")),
+                                                       not (hw["gpu"] == "nvidia" and e == "strata"),
                                                        "script" not in PROFILES["engines"][e], e))
     holder = heap_holder(running)
     labels = {}
@@ -567,11 +566,6 @@ def ask_weights(engine):
     return pick != cur
 
 
-def launcher_has(script):
-    """The launcher reports an installed, runnable engine for the saved answers (--print-run non-empty)."""
-    return bool(subprocess.run(["bash", os.path.join(REPO, "server", script), "--print-run"], capture_output=True, text=True).stdout.strip())
-
-
 def stock_ready(quant=DEFAULT_QUANT):
     """Every shard of the stock quant is on disk (scripts/download-stock.sh puts them there; Strata and an unpicked
     gufo use UD-Q4_K_XL). Shard 1 is tiny and lands first, so it alone proves nothing."""
@@ -579,10 +573,6 @@ def stock_ready(quant=DEFAULT_QUANT):
                            env=dict(os.environ, GUFO_WEIGHTS="stock", GUFO_QUANT=quant)).stdout.strip()
     m = re.search(r"-00001-of-(\d{5})\.gguf$", first)
     return bool(m) and all(os.path.isfile(first.replace("-00001-of-", f"-{i:05d}-of-")) for i in range(1, int(m.group(1)) + 1))
-
-
-def tabbyapi_installed():
-    return launcher_has("start-tabbyapi.sh")
 
 
 def strata_installed():
@@ -628,15 +618,6 @@ def plan_start(engine, running, ask_start=True):
         if not ask_yn(f"The stock weights (Unsloth {q}, {'shared by gufo and Strata' if q == DEFAULT_QUANT else 'picked for this hardware'}) are not on this box. Download them (~{quant_gb(q)} GB, {free} GB free, resumable)?"):
             return None
         plan["stock"] = q
-    if engine == "tabbyapi":
-        if weights_pref() == "abliterated":  # no abliterated EXL3 exists: say it before anything installs or starts
-            print("  ! TabbyAPI serves turboderp's stock EXL3 quant; your saved weights answer 'abliterated' does not apply to it"
-                  " (refusals stay on; ./harness config -> weights only changes halogen, gufo and Strata).")
-        if not tabbyapi_installed():
-            free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
-            if not ask_yn(f"TabbyAPI is not installed. Install it (git clone into ~/coding/tabbyAPI, a Python 3.11 venv with ExLlamaV3, then the ~85 GB EXL3 quant; {free} GB free, resumable; needs an NVIDIA GPU and ~64 GB RAM)?"):
-                return None
-            plan["install"] = "tabbyapi"
     gb = weights_download_gb(engine) if engine in WEIGHTS_ENGINES and weights_pref() != "stock" else 0
     if gb:
         free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
@@ -714,7 +695,7 @@ def pick_engine(d, yes, want=None, on_pick=None):
             sys.exit("no engine answering on the usual ports. Start one (see docs/ENGINES.md, or `./setup.sh --halogen auto`), then re-run.")
         return next(iter(sorted(running, key=lambda e: e != "halogen"))), None
     if not running:
-        print("No engine is running yet. Pick one: halogen, gufo, Strata and TabbyAPI can be started (and halogen, Strata or TabbyAPI installed) from here.")
+        print("No engine is running yet. Pick one: halogen, gufo and Strata can be started (and halogen or Strata installed) from here.")
     eng = engine_menu(running)
     offer_recommendation(eng)
     upgrading = on_pick(eng) if on_pick else False
@@ -1068,7 +1049,6 @@ def cmd_setup(a):
             [f"stop {plan['stop']} and the ling-tiny sidecar"] if plan and plan["stop"] else []) + (
             ["download halogen (~124 GB, resumable)"] if plan and plan["download"] else []) + (
             [f"install Strata for the {weights_pref()} weights (" + ("orca-uncensored in place" if weights_pref() == "abliterated" else "shared stock UD-Q4_K_XL in place") + ")"] if plan and plan.get("install") == "strata" else []) + (
-            ["install TabbyAPI (venv + EXL3 quant, resumable)"] if plan and plan.get("install") == "tabbyapi" else []) + (
             [f"download the stock {plan['stock']} (~{quant_gb(plan['stock'])} GB, resumable)"] if plan and plan.get("stock") else []) + (
             [f"download the abliterated {eng} weights (~{plan.get('weights_gb')} GB, resumable)"] if plan and plan.get("weights") else []) + (
             [f"upgrade {eng} (restart, rolls back on failure)"] if upgrade else []) + (

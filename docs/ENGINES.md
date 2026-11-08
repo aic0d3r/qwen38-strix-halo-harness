@@ -114,60 +114,15 @@ cd Strata && ROCM_PATH=/nonexistent ./setup.sh --yes --family unsloth --model UD
 - `--no-start` leaves the server down. Start it without opening a browser:
   `.venv/bin/python serve/server.py --engine strata --config strata-<model>.json --port 8080`.
 
-## TabbyAPI: NVIDIA when the model does not fit in VRAM
+## Why there is no TabbyAPI engine
 
-[TabbyAPI](https://github.com/theroyallab/tabbyAPI) is the official server for ExLlamaV3 and its EXL3
-quants (trellis-coded, chosen by bits per weight so a model fits a card). It serves an OpenAI-compatible
-API on `http://127.0.0.1:5000` with tool calls, JSON schema, reasoning split into `reasoning_content`,
-MTP speculative decoding and CPU expert offload for MoE models like Qwen3.8-Flash-Next (125B, 6B active).
-The harness treats it as a fourth engine next to halogen, gufo and Strata.
-
-> [!WARNING]
-> **Not run on this harness's box** (Strix Halo, no NVIDIA GPU). Every number below is from turboderp's
-> model card or a third-party single-GPU guide, not measured here, and the 24 GB defaults are extrapolated
-> from the guide's 32 GB setup. TabbyAPI calls itself a rolling-release hobby project.
-
-```bash
-# plug and play: ./setup.sh (or ./start.sh), pick tabbyapi - the wizard offers the install:
-#   scripts/install-tabbyapi.sh: git clone into ~/coding/tabbyAPI (or $TABBYAPI_DIR), Python 3.11 venv,
-#   pip install ".[cu12]" (prebuilt exllamav3 wheel), hf download of turboderp/Qwen3.8-Flash-Next-exl3
-#   revision 3.05bpw_h5_ng5 (~85 GB, resumable). --dry-run prints the plan; needs an NVIDIA GPU.
-# server/start-tabbyapi.sh writes config.yml (only while its first line says it is ours) and starts it.
-./setup.sh && ./harness use tabbyapi
-./setup.sh --doctor                       # tabbyapi up (:5000), plus the refusal canary with --refusals
-```
-
-**What fits.** The guide's measurements, RTX 5090 32 GB + 64 GB DDR5, 3.05 bpw quant, 262k context:
-~26 GB in VRAM, ~43 GB of the coldest experts computed on the CPU from system RAM, **~48-52 t/s decode,
-~175-205 t/s prefill**. Under about 64 GB RAM the expert arena spills into swap and decode falls to
-~2.4 t/s, so the launcher warns below 56 GB. The 32.6 GB n-gram table streams from NVMe. Only the 1.66 bpw
-quant fits a 32 GB card entirely (model card: 200+ t/s agentic, but ~64k context at K5V4 cache).
-
-**24 GB cards (3090/4090), the target here.** Nothing fits without offload. The launcher reads the VRAM
-and sets how many of the 512 experts per layer the CPU computes: 400 at 30 GB+, **440 at 22-29 GB**, 480 at
-16-21 GB, 512 below. These are guesses from the guide's one measured point (400 on 32 GB). Each +10 frees
-~1 GB VRAM and costs ~1 GB RAM, so if the load runs out of VRAM set `TABBY_CPU_EXPERTS` higher. Context
-defaults to 131072 (`TABBY_CTX`), `autosplit_reserve` to 3072 MB because 1000 made the guide's screen flicker
-(`TABBY_RESERVE_MB`). `TABBY_QUANT` picks another revision; turboderp's chart puts the 2.68 bpw
-self-calibrated quant at GPQA-D 91.4 vs 91.7 for the original, the 3.05 bpw one is the only one with a
-published single-GPU recipe.
-
-**Weights: stock only.** No abliterated EXL3 exists, so TabbyAPI always serves the stock quant. A saved
-`abliterated` answer does not apply to it: the wizard and `--doctor` say so instead of silently ignoring it,
-and `--doctor --refusals` shows what the stock weights refuse. (Quantizing the orcarouter BF16 yourself with
-`exllamav3 convert` is possible but not validated here.)
-
-**Against Strata** (the other NVIDIA engine here, also unmeasured on NVIDIA by this repo): the guide's
-author reports ~79 t/s with Strata on a 5-bit quant and 128 GB RAM, against ~50-64 t/s with TabbyAPI on the
-3.05 bpw quant and 64 GB. Different quant and RAM, so not a like-for-like, and not reproduced here. What
-TabbyAPI adds is EXL3's quality per bit (KL 0.0177 at 3.05 bpw vs 0.0349 for a similar-size UD-IQ3_XXS GGUF,
-turboderp's chart) and CPU expert offload sized to the card. Both lose the NPU tools.
-
-**Pitfalls** (from the guide, all handled in the generated config): `backend` must be `exllamav3`, not
-`exl3`; clients that send no sampler values run at temperature 1.0 and drift into other languages, so the
-config ships a `qwen3_8_flash_next` sampler fallback (0.7 / top_k 20 / top_p 0.95); reasoning tokens count
-toward `max_tokens`, so keep it high (pi's profile does); run nothing else heavy beside it. Auth is off
-(`disable_auth`) because it binds 127.0.0.1 only; turn it on before changing `host`.
+TabbyAPI (ExLlamaV3, EXL3 quants) was added and removed before any release. It is NVIDIA and Linux only, serves
+stock weights only, calls itself a rolling-release hobby project, and nothing here could run it (no NVIDIA GPU on
+the dev box). Strata's own tables put a 12 GB RTX 5070 with 64 GB RAM at 53-94 t/s decode on Qwen3.8-Flash-Next
+(ISTA packs, older engine, self-reported), above the ~48-52 t/s a third-party guide measured on an RTX 5090 with
+TabbyAPI, and Strata also runs on AMD, Windows and Mac. What EXL3 offers is quality per bit (KL 0.0177 at 3.05 bpw
+against 0.0349 for a similar-size UD-IQ3_XXS GGUF, turboderp's chart). If you want it anyway, run TabbyAPI
+yourself and point pi at it as any OpenAI-compatible server; the harness will not set it up or verify it.
 
 ## Stock weights: one download for gufo and Strata
 
@@ -254,7 +209,6 @@ weights are not on disk are skipped, never downloaded):
 | gufo 0.31.0 | abliterated | 27 s (warm page cache) | pass, 75.2 t/s | 0/19 |
 | Strata 0.2.12 | stock | - | skipped: not installed (94 GB download) | - |
 | Strata 0.2.12 | abliterated | 69 s | pass, 46.9 t/s | 0/19 |
-| TabbyAPI | stock | - | skipped: no NVIDIA GPU on this box | - |
 
 The decode column is `engine-acceptance.py`'s "count from 1 to 80" prompt, which speculative decoding
 flatters: use it to compare an engine with itself, not against the 10-prompt battery numbers elsewhere. Load
@@ -262,8 +216,8 @@ time is the launcher's start to first answer, with the weights already on disk.
 
 Checked against
 halogen 0.18.23, gufo 0.29.0 and Strata 0.2.10 docs and changelogs (2026-11); the matrix above ran
-halogen, gufo and Strata on the abliterated weights, and halogen on stock. gufo stock, Strata stock and
-TabbyAPI have not been run here.
+halogen, gufo and Strata on the abliterated weights, and halogen on stock. gufo stock and Strata stock
+have not been run here.
 
 The shared GGUF has to be the UD-Q4_K_XL tensor layout, because that is the only layout gufo
 qualifies. `brainnxdomain/Qwen3.8-Flash-Next-Uncensored-Gufo-GGUF` (gated, ~104 GiB, 5 shards)

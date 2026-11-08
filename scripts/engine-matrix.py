@@ -6,7 +6,7 @@ scripts/engine-acceptance.py (the model answers, decodes fast enough) and bench/
 (refusals out of 19). Combinations whose weights are not on disk are skipped with the reason, never
 downloaded. The engine that was running at the start is restarted at the end.
 
-  scripts/engine-matrix.py [--engines halogen,gufo,strata,tabbyapi] [--weights stock,abliterated]
+  scripts/engine-matrix.py [--engines halogen,gufo,strata] [--weights stock,abliterated]
                            [--dry-run] [--no-restore] [--min-tps 15]
 --dry-run prints which combinations are runnable and why the others are not. Takes minutes per engine
 (model load dominates); prints a markdown table to paste into docs/ENGINES.md. Exit 1 if a run failed.
@@ -17,7 +17,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "setup"))
 import harness as h  # noqa: E402
 
-ENV = {"halogen": "HALOGEN_WEIGHTS", "gufo": "GUFO_WEIGHTS", "strata": "STRATA_WEIGHTS"}  # tabbyapi: stock only
+ENV = {"halogen": "HALOGEN_WEIGHTS", "gufo": "GUFO_WEIGHTS", "strata": "STRATA_WEIGHTS"}
 
 
 def arg(name, default):
@@ -32,10 +32,6 @@ def sh(*cmd, **env):
 
 def runnable(engine, w):
     """-> '' when this combination can start from what is on disk, else why not."""
-    if engine == "tabbyapi":
-        if w != "stock":
-            return "no abliterated EXL3 exists"
-        return "" if shutil.which("nvidia-smi") and sh(os.path.join(REPO, "server/start-tabbyapi.sh"), "--print-run") else "not installed / no NVIDIA GPU"
     var = {ENV[engine]: w}
     if engine == "halogen":
         f = sh(os.path.join(REPO, "server/start-halogen.sh"), "--print-ckpt", **var)
@@ -74,7 +70,7 @@ def one(engine, w, min_tps):
 
 
 def main():
-    engines = arg("--engines", "halogen,gufo,strata,tabbyapi").split(",")
+    engines = arg("--engines", "halogen,gufo,strata").split(",")
     weights = arg("--weights", "stock,abliterated").split(",")
     min_tps = float(arg("--min-tps", "15"))
     plan = [(e, w, runnable(e, w)) for e in engines for w in weights]

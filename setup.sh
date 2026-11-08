@@ -169,9 +169,9 @@ if [ "$DOCTOR" = 1 ]; then
     warn "  supported main engine: halogen only (see docs/ENGINES.md)."
   fi
   [ -f "$REPO/start-halogen.sh" ]   && ok "start-halogen.sh ready" || warn "no start-halogen.sh yet (written on first --halogen launch)"
-  for e in strata gufo tabbyapi; do
+  for e in strata gufo; do
     if python3 -c "import json;json.load(open('$MODELS_JSON'))['providers']['$e']" 2>/dev/null; then
-      if [[ "$RUNNING" == *" $e "* ]]; then ok "$e up (:$([ "$e" = tabbyapi ] && echo 5000 || echo 8080))"
+      if [[ "$RUNNING" == *" $e "* ]]; then ok "$e up (:8080)"
       elif [ "$e" = "${ACT:-}" ]; then fail "$e down (the active engine) - ./start.sh starts it"
       else ok "$e configured, not running (not the active engine)"; fi
     fi
@@ -193,9 +193,6 @@ if [ "$DOCTOR" = 1 ]; then
   # what the active engine gives up: the NPU models exist only on halogen. Everything else is engine-independent.
   if [ -n "${ACT:-}" ] && [ "$ACT" != halogen ]; then
     ok "engine $ACT: no NPU guard/triage/dedup (halogen only); taint-gate, refusal canary, semble search and the sidecar work unchanged"
-  fi
-  if [ "${ACT:-}" = tabbyapi ] && [ "$W" = abliterated ]; then
-    warn "tabbyapi serves the stock EXL3 quant: your saved 'abliterated' answer does not apply to it (no abliterated EXL3 exists)"
   fi
   if [ -z "${ACT:-}" ]; then :
   elif [[ "$RUNNING" != *" $ACT "* ]]; then fail "ready check skipped: $ACT is down"

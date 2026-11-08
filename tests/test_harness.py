@@ -196,34 +196,16 @@ assert h.plan_start("gufo", {}) is None
 h.ask_yn = lambda q, d=False: True
 h.stock_ready = lambda *a: True
 assert not h.plan_start("gufo", {}).get("stock")
-# TabbyAPI: not installed -> asks to install; the abliterated answer is called out, not silently dropped; no weights download
-h.tabbyapi_installed = lambda: False
-h.weights_pref = lambda: "abliterated"
-import io, contextlib
-buf = io.StringIO()
-with contextlib.redirect_stdout(buf):
-    plan = h.plan_start("tabbyapi", {})
-assert plan["install"] == "tabbyapi" and not plan["weights"] and "does not apply" in buf.getvalue(), (plan, buf.getvalue())
-ran = []
-h.subprocess.run = lambda a, **k: ran.append(os.path.basename(a[1])) or types.SimpleNamespace(returncode=0)
-assert h.prepare_start(plan, {}) and ran == ["install-tabbyapi.sh"], ran
-h.subprocess.run = real_run
-h.tabbyapi_installed = lambda: True
-buf = io.StringIO()
-with contextlib.redirect_stdout(buf):
-    assert "install" not in h.plan_start("tabbyapi", {})
-h.weights_pref = saved_w["weights_pref"]
 for n, f in saved.items(): setattr(h, n, f)
-# tabbyapi shares the GPU memory heap with the other big engines (VRAM on NVIDIA)
-assert h.heap_holder({"strata": 1}) == "strata" and "tabbyapi" in h.BIG
-# an NVIDIA box lists strata and tabbyapi before the Strix-oriented engines (menu order on a fresh box)
+assert h.heap_holder({"strata": 1}) == "strata" and "tabbyapi" not in h.PROFILES["engines"]
+# an NVIDIA box lists strata before the Strix-oriented engines (menu order on a fresh box)
 real_hw, real_choose = h.hardware, h.choose
 h.hardware = lambda: {"cpus": 8, "ram_gb": 64, "gpu": "nvidia", "npu": False}
 seen = []
 h.choose = lambda q, opts, yes: seen.extend(opts) or opts[0]
 h.engine_menu({})
 names = [o.split()[1] if o[2:3] != " " else o.split()[1] for o in seen]
-assert names.index("strata") < names.index("gufo") and names.index("tabbyapi") < names.index("gufo"), names
+assert names.index("strata") < names.index("gufo"), names
 h.hardware, h.choose = real_hw, real_choose
 # Strata keys its repacked dense weights by model name, so a start on the other weights answer must be refused, not run on the wrong pack
 sd = tempfile.mkdtemp()
@@ -238,27 +220,6 @@ r = srun("stock"); assert r.returncode == 1 and "built from the abliterated weig
 open(f"{sd}/.harness-weights", "w").write("stock\n")
 assert srun("stock", "--print-run").stdout.strip().endswith("run-unsloth-ud-q4_k_xl.sh") and srun("abliterated", "--print-run").stdout.strip() == ""
 assert srun("stock").returncode == 0 and srun("abliterated").returncode == 1
-# the TabbyAPI launcher against a fake checkout: its config follows VRAM, a user's own config.yml is never overwritten, no GPU = clear exit
-fake = tempfile.mkdtemp()
-md = f"{fake}/tabby/models/qwen3.8-flash-next-exl3-3.05bpw"
-os.makedirs(md); os.makedirs(f"{fake}/tabby/.venv/bin"); os.makedirs(f"{fake}/bin")
-for f in ("main.py", "config_sample.yml", "models/qwen3.8-flash-next-exl3-3.05bpw/config.json"): open(f"{fake}/tabby/{f}", "w").close()
-open(f"{fake}/tabby/.venv/bin/python", "w").write("#!/bin/sh\necho started\n"); os.chmod(f"{fake}/tabby/.venv/bin/python", 0o755)
-launch = os.path.join(os.path.dirname(__file__), "..", "server", "start-tabbyapi.sh")
-def tabby(mib, extra=None):
-    open(f"{fake}/bin/nvidia-smi", "w").write(f"#!/bin/sh\necho {mib}\n"); os.chmod(f"{fake}/bin/nvidia-smi", 0o755)
-    return subprocess.run(["bash", launch], capture_output=True, text=True, env=dict(os.environ, PATH=f"{fake}/bin:" + os.environ["PATH"], TABBYAPI_DIR=f"{fake}/tabby", **(extra or {})))
-assert subprocess.run(["bash", launch, "--print-run"], capture_output=True, text=True, env=dict(os.environ, TABBYAPI_DIR=f"{fake}/tabby")).stdout.strip() == md
-for mib, want in ((24564, 440), (32607, 400), (16376, 480), (12288, 512)):
-    r = tabby(mib)
-    assert r.returncode == 0 and f"cpu_moe_split_experts: {want}" in open(f"{fake}/tabby/config.yml").read(), (mib, r.stderr)
-assert "cpu_moe_split_experts: 450" in (tabby(24564, {"TABBY_CPU_EXPERTS": "450"}), open(f"{fake}/tabby/config.yml").read())[1]
-assert "backend: exllamav3" in open(f"{fake}/tabby/config.yml").read() and os.path.exists(f"{fake}/tabby/sampler_overrides/qwen3_8_flash_next.yml")
-open(f"{fake}/tabby/config.yml", "w").write("# mine\nmodel: {}\n")
-assert tabby(24564).returncode == 0 and open(f"{fake}/tabby/config.yml").read().startswith("# mine")
-os.remove(f"{fake}/bin/nvidia-smi")
-r = subprocess.run(["bash", launch], capture_output=True, text=True, env=dict(os.environ, PATH="/usr/bin:/bin", TABBYAPI_DIR=f"{fake}/tabby"))
-assert r.returncode == 1 and "no NVIDIA GPU" in r.stderr, r.stderr
 # hardware -> engine/quant/context. The measured Strix Halo 124 GB box gets halogen; the rest is the table's arithmetic
 R = h.PROFILES["recommend"]
 rec = lambda gpu, ram, fast, vram=0, npu=False: h.recommend({"gpu": gpu, "ram_gb": ram, "npu": npu}, {"fast_gb": fast, "vram_gb": vram})
@@ -270,9 +231,10 @@ assert (rec("amd", 102, 102)["quant"], rec("amd", 102, 102)["ctx"]) == ("UD-Q3_K
 assert (rec("amd", 96, 96)["quant"], rec("amd", 96, 96)["ctx"]) == ("UD-Q3_K_XL", 32768)
 assert (rec("amd", 92, 92)["quant"], rec("amd", 92, 92)["ctx"]) == ("UD-IQ3_XXS", 32768)
 assert rec("amd", 88, 88)["engine"] is None and rec("amd", 64, 64)["engine"] is None and rec("none", 128, 128)["engine"] is None
-assert rec("nvidia", 128, 32, vram=32)["engine"] == "tabbyapi" and rec("nvidia", 128, 32, vram=32)["tested"]
-assert not rec("nvidia", 64, 24, vram=24)["tested"] and rec("nvidia", 64, 24, vram=24)["kv"] == "Q8"
-assert rec("nvidia", 32, 24, vram=24)["engine"] is None and rec("nvidia", 64, 8, vram=8)["engine"] is None
+# NVIDIA gets Strata (nothing measured here), and only where RAM + VRAM hold its UD-Q4_K_XL
+r = rec("nvidia", 64, 24, vram=24)
+assert (r["engine"], r["tested"]) == ("strata", False) and rec("nvidia", 48, 24, vram=24)["engine"] == "strata"
+assert rec("nvidia", 32, 24, vram=24)["engine"] is None and rec("nvidia", 32, 8, vram=8)["engine"] is None
 # the ladder is what the gufo launcher can load: every quant resolves to <quant>/...-00001-of-<shards>, sizes feed the download
 for q in R["quants"]:
     out = subprocess.run(["bash", os.path.join(os.path.dirname(__file__), "..", "server", "start-gufo-flashnext.sh"), "--print-model"], capture_output=True, text=True,
@@ -296,7 +258,7 @@ assert h.hw_key("gufo", "m") != h.hw_key("strata", "m")
 sys.stdin = real_stdin
 for n, f in saved.items(): setattr(h, n, f)
 # live monitor: halogen and Strata have one; Strata uses its own when its venv can run it, else our dashboard; others none
-assert h.monitor_cmd("halogen")[1].endswith("halogen-top.sh") and h.monitor_cmd("gufo") is None and h.monitor_cmd("tabbyapi") is None
+assert h.monitor_cmd("halogen")[1].endswith("halogen-top.sh") and h.monitor_cmd("gufo") is None and h.monitor_cmd("vllm") is None
 os.environ["STRATA_DIR"] = md = tempfile.mkdtemp()
 for f in ("setup.py", "update.sh", "strata.py"): open(f"{md}/{f}", "w").close()
 assert h.monitor_cmd("strata")[2] == "--strata"  # no venv: our dashboard
