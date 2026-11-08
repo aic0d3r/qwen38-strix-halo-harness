@@ -51,7 +51,7 @@ MDIR=$ENGINE_DIR; MODEL_REL=$GUFO_MODEL; NAME=qwen3.8-flash-next; SPEC=(--specul
 fi
 # pre-flight: gufo at 65k has never wedged, but at large ctx the same allocator
 # physics as halogen applies. recover mild fragmentation, fail fast otherwise.
-CTX="${GUFO_CTX:-65536}"
+CTX="${GUFO_CTX:-262144}"  # maxed like halogen; ~33 GB device heap was free at 65k (load_completed log), 262k KV fits
 O9=$(awk '$4=="Normal"{print $(NF-1)}' /proc/buddyinfo 2>/dev/null | head -1)
 if [ "$CTX" -gt 65536 ] && [ -n "$O9" ] && [ "$O9" -lt 1000 ]; then
   sudo -n sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory' 2>/dev/null || true
