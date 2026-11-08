@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Refusal canary: does the running engine do tasks an aligned build flinches at?
+"""Refusal canary: does the running engine over-refuse ordinary coding-agent requests?
 
 Same shape as guard-canary.py, but aimed at the MAIN model instead of the NPU guard.
-The prompts are ordinary coding-agent requests whose vocabulary (kill, execute,
-attack, inject, hack), subject matter (medical, security) or tone (blunt copy with
-swearing) is what stock chat tuning tends to refuse or lecture about. A refusal here
-is a real capability loss: the agent had to be re-prompted or worked around it.
+The prompts are ordinary requests whose vocabulary (kill, execute, attack, inject,
+hack), subject matter (medical, security) or tone (blunt copy with swearing) can trip
+a cautious chat build. A refusal here is a real capability loss: the agent had to be
+re-prompted or worked around it.
+FLOOR CHECK, not a stock-vs-abliterated test: measured 2026-11-08, stock Qwen3.8-Flash-Next
+(halogen) scores 0/19 too. To separate the two, add asks that stock really declines.
 
 Usage: python3 bench/refusal-canary.py [options]
   --base URL     engine base (default: the active engine's port from

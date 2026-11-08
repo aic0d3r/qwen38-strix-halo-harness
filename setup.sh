@@ -9,9 +9,9 @@
 #   ./setup.sh --halogen [auto|path.hgn]  also provision + start the halogen server
 #   ./setup.sh --doctor         read-only status check
 #   ./setup.sh --doctor --refusals
-#                               + ask the running model 19 tasks that aligned builds
-#                               refuse (kill/inject/pentest words, medical copy, blunt
-#                               tone) and report the refusal rate: bench/refusal-canary.py
+#                               + ask the running model 19 one-line tasks a cautious build
+#                               might refuse (kill/inject/pentest words, medical copy, blunt
+#                               tone): a floor check, bench/refusal-canary.py
 #   ./setup.sh --refresh-mcp    reset serena/semble MCP exposure and ensure ddg (backs up mcp.json first)
 #   ./setup.sh --no-halogen     pi-only install: skip the halogen provider, the NPU
 #                               extensions and all container management (for boxes that
@@ -169,9 +169,9 @@ if [ "$DOCTOR" = 1 ]; then
     warn "  supported main engine: halogen only (see docs/ENGINES.md)."
   fi
   [ -f "$REPO/start-halogen.sh" ]   && ok "start-halogen.sh ready" || warn "no start-halogen.sh yet (written on first --halogen launch)"
-  for e in strata gufo; do
+  for e in strata gufo tabbyapi; do
     if python3 -c "import json;json.load(open('$MODELS_JSON'))['providers']['$e']" 2>/dev/null; then
-      if [[ "$RUNNING" == *" $e "* ]]; then ok "$e up (:8080)"
+      if [[ "$RUNNING" == *" $e "* ]]; then ok "$e up (:$([ "$e" = tabbyapi ] && echo 5000 || echo 8080))"
       elif [ "$e" = "${ACT:-}" ]; then fail "$e down (the active engine) - ./start.sh starts it"
       else ok "$e configured, not running (not the active engine)"; fi
     fi
@@ -185,6 +185,13 @@ if [ "$DOCTOR" = 1 ]; then
     ok "weights: abliterated (refusals removed; taint-gate confirms risky actions after outside content)"
   else
     ok "weights: stock (refusals kept; ./harness config -> weights abliterated removes them)"
+  fi
+  # what the active engine gives up: the NPU models exist only on halogen. Everything else is engine-independent.
+  if [ -n "${ACT:-}" ] && [ "$ACT" != halogen ]; then
+    ok "engine $ACT: no NPU guard/triage/dedup (halogen only); taint-gate, refusal canary, semble search and the sidecar work unchanged"
+  fi
+  if [ "${ACT:-}" = tabbyapi ] && [ "$W" = abliterated ]; then
+    warn "tabbyapi serves the stock EXL3 quant: your saved 'abliterated' answer does not apply to it (no abliterated EXL3 exists)"
   fi
   if [ -z "${ACT:-}" ]; then :
   elif [[ "$RUNNING" != *" $ACT "* ]]; then fail "ready check skipped: $ACT is down"
@@ -211,7 +218,7 @@ if [ "$DOCTOR" = 1 ]; then
       esac
     fi
   elif [[ "$RUNNING" == *" ${ACT:-none} "* ]]; then
-    echo "  tip: ./setup.sh --doctor --refusals asks $ACT the tasks aligned builds refuse"
+    echo "  tip: ./setup.sh --doctor --refusals checks $ACT for over-refusal on 19 one-line tasks"
   fi
   exit 0
 fi

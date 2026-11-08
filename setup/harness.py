@@ -318,7 +318,7 @@ def last_speed(engine):
     return f"{t[-1]['prefill_tps']}/{t[-1]['decode_tps']} t/s pf/dec" if t else "not measured"
 
 
-BIG = ("halogen", "gufo", "strata")  # big engines: one GPU memory heap, and gufo/strata also share :8080
+BIG = ("halogen", "gufo", "strata", "tabbyapi")  # big engines: one GPU memory heap (VRAM on NVIDIA), and gufo/strata also share :8080
 
 
 def heap_holder(running):
@@ -329,8 +329,9 @@ def heap_holder(running):
 def engine_menu(running):
     """One screen: state, model, last speed, what you lose, memory conflicts. -> engine name."""
     cur = (active() or {}).get("engine")
-    npu = hardware()["npu"]  # fresh box: halogen first where it can run, then engines we can start for you
-    order = sorted(PROFILES["engines"], key=lambda e: (e != cur, e not in running, not (npu and e == "halogen"),
+    hw = hardware()  # fresh box: halogen first where it can run, then the NVIDIA engines on an NVIDIA box, then engines we can start for you
+    order = sorted(PROFILES["engines"], key=lambda e: (e != cur, e not in running, not (hw["npu"] and e == "halogen"),
+                                                       not (hw["gpu"] == "nvidia" and e in ("strata", "tabbyapi")),
                                                        "script" not in PROFILES["engines"][e], e))
     holder = heap_holder(running)
     labels = {}
@@ -428,6 +429,15 @@ def ask_weights(engine):
     return pick != cur
 
 
+def launcher_has(script):
+    """The launcher reports an installed, runnable engine for the saved answers (--print-run non-empty)."""
+    return bool(subprocess.run(["bash", os.path.join(REPO, "server", script), "--print-run"], capture_output=True, text=True).stdout.strip())
+
+
+def tabbyapi_installed():
+    return launcher_has("start-tabbyapi.sh")
+
+
 def strata_installed():
     """Strata's setup already installed the model for the saved weights answer (its run-unsloth-<model>.sh exists)."""
     return bool(subprocess.run(["bash", os.path.join(REPO, "server", "start-strata.sh"), "--print-run"], capture_output=True, text=True).stdout.strip())
@@ -457,7 +467,21 @@ def plan_start(engine, running, ask_start=True):
         what = "uses gufo's orca-uncensored shards in place, no weights download" if weights_pref() == "abliterated" else f"downloads UD-IQ4_XS ~94 GB, {free} GB free, resumable"
         if not ask_yn(f"Strata is not installed for the {weights_pref()} weights. Install them (git clone into ~/coding/Strata if needed; its setup fetches the engine and {what})?"):
             return None
-        plan["install"] = True
+        plan["install"] = "strata"
+        # abliterated Strata runs gufo's orca-uncensored shards in place: say so now, not when the install fails
+        if weights_pref() == "abliterated" and not os.path.isfile(weights_file("gufo")):
+            if not ask_yn(f"The abliterated Strata model is gufo's orca-uncensored GGUF, which is not on this box. Download it (~{WEIGHTS_ENGINES['gufo'][1]} GB, gated: accept the terms on its Hugging Face page and `hf auth login` first; {free} GB free, resumable)?"):
+                return None
+            plan["weights"], plan["weights_gb"] = "gufo", WEIGHTS_ENGINES["gufo"][1]
+    if engine == "tabbyapi":
+        if weights_pref() == "abliterated":  # no abliterated EXL3 exists: say it before anything installs or starts
+            print("  ! TabbyAPI serves turboderp's stock EXL3 quant; your saved weights answer 'abliterated' does not apply to it"
+                  " (refusals stay on; ./harness config -> weights only changes halogen, gufo and Strata).")
+        if not tabbyapi_installed():
+            free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
+            if not ask_yn(f"TabbyAPI is not installed. Install it (git clone into ~/coding/tabbyAPI, a Python 3.11 venv with ExLlamaV3, then the ~85 GB EXL3 quant; {free} GB free, resumable; needs an NVIDIA GPU and ~64 GB RAM)?"):
+                return None
+            plan["install"] = "tabbyapi"
     gb = weights_download_gb(engine) if engine in WEIGHTS_ENGINES and weights_pref() != "stock" else 0
     if gb:
         free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
@@ -477,9 +501,10 @@ def prepare_start(plan, running):
         return False
     if dl and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-halogen.sh"), "--yes"]).returncode:
         return False
-    if plan.pop("install", False) and subprocess.run(["bash", os.path.join(REPO, "scripts", "install-strata.sh"), "--yes"]).returncode:
-        return False
-    return not (wd and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-abliterated.sh"), wd, "--yes"]).returncode)
+    if wd and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-abliterated.sh"), wd, "--yes"]).returncode:
+        return False  # before the install: abliterated Strata installs on top of gufo's shards
+    inst = plan.pop("install", None)
+    return not (inst and subprocess.run(["bash", os.path.join(REPO, "scripts", f"install-{inst}.sh"), "--yes"]).returncode)
 
 
 def start_engine(engine, running, plan=None, wait_s=900):
@@ -527,7 +552,7 @@ def pick_engine(d, yes, want=None, on_pick=None):
             sys.exit("no engine answering on the usual ports. Start one (see docs/ENGINES.md, or `./setup.sh --halogen auto`), then re-run.")
         return next(iter(sorted(running, key=lambda e: e != "halogen"))), None
     if not running:
-        print("No engine is running yet. Pick one: halogen, gufo and Strata can be started (and halogen or Strata installed) from here.")
+        print("No engine is running yet. Pick one: halogen, gufo, Strata and TabbyAPI can be started (and halogen, Strata or TabbyAPI installed) from here.")
     eng = engine_menu(running)
     upgrading = on_pick(eng) if on_pick else False
     # the server keeps what it loaded at start: a new default needs a restart (an upgrade restarts it anyway)

@@ -160,10 +160,72 @@ h.weights_file = real_wf
 saved = {n: getattr(h, n) for n in ("strata_installed", "ask_yn", "heap_holder")}
 h.strata_installed, h.ask_yn, h.heap_holder = (lambda: False), (lambda q, d=False: True), (lambda r: None)
 plan = h.plan_start("strata", {})
-assert plan["install"] is True, plan
+assert plan["install"] == "strata", plan
 ran, real_run = [], h.subprocess.run
 h.subprocess.run = lambda a, **k: ran.append(os.path.basename(a[1])) or types.SimpleNamespace(returncode=0)
 assert h.prepare_start(plan, {}) and ran == ["install-strata.sh"] and "install" not in plan
 h.subprocess.run = real_run
+# abliterated Strata runs gufo's shards: when they are missing the plan downloads them first (before the install), declining stops it
+saved_w = {n: getattr(h, n) for n in ("weights_pref", "weights_file")}
+h.weights_pref, h.weights_file = (lambda: "abliterated"), (lambda e: "/nonexistent/orca.gguf")
+plan = h.plan_start("strata", {})
+assert plan["install"] == "strata" and plan["weights"] == "gufo" and plan["weights_gb"] == 112, plan
+ran = []
+h.subprocess.run = lambda a, **k: ran.append(os.path.basename(a[1])) or types.SimpleNamespace(returncode=0)
+assert h.prepare_start(plan, {}) and ran == ["download-abliterated.sh", "install-strata.sh"], ran
+h.subprocess.run = real_run
+h.ask_yn = lambda q, d=False: "orca-uncensored" not in q
+assert h.plan_start("strata", {}) is None
+h.ask_yn = lambda q, d=False: True
+for n, f in saved_w.items(): setattr(h, n, f)
+# TabbyAPI: not installed -> asks to install; the abliterated answer is called out, not silently dropped; no weights download
+h.tabbyapi_installed = lambda: False
+h.weights_pref = lambda: "abliterated"
+import io, contextlib
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    plan = h.plan_start("tabbyapi", {})
+assert plan["install"] == "tabbyapi" and not plan["weights"] and "does not apply" in buf.getvalue(), (plan, buf.getvalue())
+ran = []
+h.subprocess.run = lambda a, **k: ran.append(os.path.basename(a[1])) or types.SimpleNamespace(returncode=0)
+assert h.prepare_start(plan, {}) and ran == ["install-tabbyapi.sh"], ran
+h.subprocess.run = real_run
+h.tabbyapi_installed = lambda: True
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    assert "install" not in h.plan_start("tabbyapi", {})
+h.weights_pref = saved_w["weights_pref"]
 for n, f in saved.items(): setattr(h, n, f)
+# tabbyapi shares the GPU memory heap with the other big engines (VRAM on NVIDIA)
+assert h.heap_holder({"strata": 1}) == "strata" and "tabbyapi" in h.BIG
+# an NVIDIA box lists strata and tabbyapi before the Strix-oriented engines (menu order on a fresh box)
+real_hw, real_choose = h.hardware, h.choose
+h.hardware = lambda: {"cpus": 8, "ram_gb": 64, "gpu": "nvidia", "npu": False}
+seen = []
+h.choose = lambda q, opts, yes: seen.extend(opts) or opts[0]
+h.engine_menu({})
+names = [o.split()[1] if o[2:3] != " " else o.split()[1] for o in seen]
+assert names.index("strata") < names.index("gufo") and names.index("tabbyapi") < names.index("gufo"), names
+h.hardware, h.choose = real_hw, real_choose
+# the TabbyAPI launcher against a fake checkout: its config follows VRAM, a user's own config.yml is never overwritten, no GPU = clear exit
+fake = tempfile.mkdtemp()
+md = f"{fake}/tabby/models/qwen3.8-flash-next-exl3-3.05bpw"
+os.makedirs(md); os.makedirs(f"{fake}/tabby/.venv/bin"); os.makedirs(f"{fake}/bin")
+for f in ("main.py", "config_sample.yml", "models/qwen3.8-flash-next-exl3-3.05bpw/config.json"): open(f"{fake}/tabby/{f}", "w").close()
+open(f"{fake}/tabby/.venv/bin/python", "w").write("#!/bin/sh\necho started\n"); os.chmod(f"{fake}/tabby/.venv/bin/python", 0o755)
+launch = os.path.join(os.path.dirname(__file__), "..", "server", "start-tabbyapi.sh")
+def tabby(mib, extra=None):
+    open(f"{fake}/bin/nvidia-smi", "w").write(f"#!/bin/sh\necho {mib}\n"); os.chmod(f"{fake}/bin/nvidia-smi", 0o755)
+    return subprocess.run(["bash", launch], capture_output=True, text=True, env=dict(os.environ, PATH=f"{fake}/bin:" + os.environ["PATH"], TABBYAPI_DIR=f"{fake}/tabby", **(extra or {})))
+assert subprocess.run(["bash", launch, "--print-run"], capture_output=True, text=True, env=dict(os.environ, TABBYAPI_DIR=f"{fake}/tabby")).stdout.strip() == md
+for mib, want in ((24564, 440), (32607, 400), (16376, 480), (12288, 512)):
+    r = tabby(mib)
+    assert r.returncode == 0 and f"cpu_moe_split_experts: {want}" in open(f"{fake}/tabby/config.yml").read(), (mib, r.stderr)
+assert "cpu_moe_split_experts: 450" in (tabby(24564, {"TABBY_CPU_EXPERTS": "450"}), open(f"{fake}/tabby/config.yml").read())[1]
+assert "backend: exllamav3" in open(f"{fake}/tabby/config.yml").read() and os.path.exists(f"{fake}/tabby/sampler_overrides/qwen3_8_flash_next.yml")
+open(f"{fake}/tabby/config.yml", "w").write("# mine\nmodel: {}\n")
+assert tabby(24564).returncode == 0 and open(f"{fake}/tabby/config.yml").read().startswith("# mine")
+os.remove(f"{fake}/bin/nvidia-smi")
+r = subprocess.run(["bash", launch], capture_output=True, text=True, env=dict(os.environ, PATH="/usr/bin:/bin", TABBYAPI_DIR=f"{fake}/tabby"))
+assert r.returncode == 1 and "no NVIDIA GPU" in r.stderr, r.stderr
 print("ok")
