@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Install Strata (github.com/Niko1221/Strata) from source the way its docs/SOURCE_INSTALL.md describes (git clone,
-# then its own ./setup.sh), with the model for the saved weights answer (./harness config -> weights):
-#   abliterated -> gufo's orca-uncensored shards used in place (--gguf-dir --model UD-Q4_K_XL: same tensor layout;
-#                  Strata checks own files for completeness only). Never downloads weights: missing -> fails.
-#   stock       -> UD-IQ4_XS (~94 GB download, resumable), Strata's own pick for Strix Halo.
-# Each model gets its own run-unsloth-<model>.sh; server/start-strata.sh starts the one for the saved answer.
+# then its own ./setup.sh), with the model for the saved weights answer (./harness config -> weights). Both run
+# UD-Q4_K_XL from a GGUF folder used in place (--gguf-dir: same tensor layout; Strata checks own files for
+# completeness only, so Unsloth's newer Dynamic 3.1 files are accepted with a warning). It never downloads weights:
+#   abliterated -> gufo's orca-uncensored shards (scripts/download-abliterated.sh gufo)
+#   stock       -> Unsloth's UD-Q4_K_XL that gufo shares (scripts/download-stock.sh)
+# Strata keys its repacked dense weights (packs/unsloth-ud-q4_k_xl) by model name only, so switching answers
+# deletes that small pack (1.4 GB) first and Strata rebuilds it from the other GGUF; <Strata dir>/.harness-weights
+# records which answer the pack was built from (server/start-strata.sh refuses a start on the other one).
 #   scripts/install-strata.sh [--yes]   asks first unless --yes; folder: $STRATA_DIR, else ~/coding/Strata
 #   STRATA_WEIGHTS=stock|abliterated overrides the saved answer
 set -u
@@ -13,19 +16,20 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 HAVE=$(bash "$REPO/server/start-strata.sh" --print-dir)
 DIR=${HAVE:-${STRATA_DIR:-$HOME/coding/Strata}}
 WEIGHTS="${STRATA_WEIGHTS:-$(cat "${PI_CODING_AGENT_DIR:-${PI_HOME:-$HOME/.pi}/agent}/harness-weights" 2>/dev/null)}"
-GGUF=()
-if [ "$WEIGHTS" = abliterated ]; then
-  ORCA=$(GUFO_WEIGHTS=abliterated bash "$REPO/server/start-gufo-flashnext.sh" --print-model)
-  [ -f "$ORCA" ] || { echo "  abliterated weights not on disk ($ORCA) - get them: scripts/download-abliterated.sh gufo" >&2; exit 1; }
-  MODEL=UD-Q4_K_XL; GGUF=(--gguf-dir "$(dirname "$ORCA")"); WHAT="uses $(dirname "$ORCA") (no weights download)"
-else MODEL=UD-IQ4_XS; WHAT="downloads $MODEL (~94 GB)"; fi
+WEIGHTS=${WEIGHTS:-stock}
+SHARD1=$(GUFO_WEIGHTS=$WEIGHTS bash "$REPO/server/start-gufo-flashnext.sh" --print-model)
+if [ ! -f "$SHARD1" ]; then
+  [ "$WEIGHTS" = abliterated ] && echo "  abliterated weights not on disk ($SHARD1) - get them: scripts/download-abliterated.sh gufo" >&2 \
+    || echo "  stock weights not on disk ($SHARD1) - get them: scripts/download-stock.sh" >&2
+  exit 1
+fi
+MODEL=UD-Q4_K_XL; GGUF=(--gguf-dir "$(dirname "$SHARD1")"); WHAT="uses $(dirname "$SHARD1") (no weights download)"
 AVAIL=$(df -BG --output=avail "$(dirname "$DIR")" 2>/dev/null | tail -1 | tr -dc '0-9')
 echo "  Strata ($WEIGHTS weights): $([ -n "$HAVE" ] && echo "in $HAVE, " || echo "clone into $DIR, ")then its setup fetches the engine and $WHAT${AVAIL:+ (free: ${AVAIL} GB)}"
 if [ "${1:-}" != --yes ]; then
   read -r -p "  install now? [y/N] " A
   case "$A" in [yY]*) ;; *) echo "  aborted" >&2; exit 1 ;; esac
 fi
-[ ${#GGUF[@]} = 0 ] && [ "${AVAIL:-999}" -lt 100 ] && { echo "  only ${AVAIL} GB free - free up at least 100 GB first" >&2; exit 1; }
 if [ ! -f "$DIR/setup.sh" ]; then
   mkdir -p "$(dirname "$DIR")"
   git clone https://github.com/Niko1221/Strata.git "$DIR" || { echo "  git clone failed" >&2; exit 1; }
@@ -40,9 +44,15 @@ if [ -x "$SYS/bin/hipcc" ] && [ ! -x "$SYS/llvm/bin/clang++" ]; then
   export ROCM_PATH="$DIR/.no-system-rocm"
   grep -qs "$SYS/llvm/bin/clang++" build-hip/CMakeCache.txt && rm -rf build-hip  # the failed configure's cache
 fi
+# the other answer's pack must go first: Strata reuses a finished pack by name and would pair it with these GGUFs
+if [ -f "$DIR/run-unsloth-ud-q4_k_xl.sh" ] && [ "$(cat "$DIR/.harness-weights" 2>/dev/null || echo abliterated)" != "$WEIGHTS" ]; then
+  PACK=$(python3 -c 'import json,sys;a=json.load(open(sys.argv[1]))["args"];print(a[a.index("--pack")+1])' "$DIR/strata-unsloth-ud-q4_k_xl.json" 2>/dev/null)
+  case "$PACK" in */packs/unsloth-ud-q4_k_xl) echo "  rebuilding Strata's pack for the $WEIGHTS weights (removing $PACK)"; rm -rf "$PACK" ;; *) echo "  cannot find the old pack to reset ($PACK): remove packs/unsloth-ud-q4_k_xl in Strata's data folder and re-run" >&2; exit 1 ;; esac
+fi
 # --model also makes a later run install that model instead of just starting the installed one
 BROWSER=true sh ./setup.sh --yes --no-start --family unsloth --model "$MODEL" "${GGUF[@]}" < /dev/null \
   || { echo "  Strata setup failed - re-run to resume, or run ./setup.sh in $DIR to see its questions" >&2; exit 1; }
+echo "$WEIGHTS" > "$DIR/.harness-weights"
 [ -n "$(STRATA_WEIGHTS=$WEIGHTS bash "$REPO/server/start-strata.sh" --print-run)" ] \
   || { echo "  Strata setup finished but wrote no run-unsloth-${MODEL,,}.sh in $DIR" >&2; exit 1; }
 echo "  Strata installed in $DIR ($MODEL)"

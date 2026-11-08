@@ -434,6 +434,15 @@ def launcher_has(script):
     return bool(subprocess.run(["bash", os.path.join(REPO, "server", script), "--print-run"], capture_output=True, text=True).stdout.strip())
 
 
+def stock_ready():
+    """Every shard of the stock UD-Q4_K_XL gufo and Strata share is on disk (scripts/download-stock.sh puts them there).
+    Shard 1 is tiny and lands first, so it alone proves nothing."""
+    first = subprocess.run(["bash", os.path.join(REPO, "server", "start-gufo-flashnext.sh"), "--print-model"], capture_output=True, text=True,
+                           env=dict(os.environ, GUFO_WEIGHTS="stock")).stdout.strip()
+    m = re.search(r"-00001-of-(\d{5})\.gguf$", first)
+    return bool(m) and all(os.path.isfile(first.replace("-00001-of-", f"-{i:05d}-of-")) for i in range(1, int(m.group(1)) + 1))
+
+
 def tabbyapi_installed():
     return launcher_has("start-tabbyapi.sh")
 
@@ -464,8 +473,8 @@ def plan_start(engine, running, ask_start=True):
         plan["download"] = True
     if engine == "strata" and not strata_installed():
         free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
-        what = "uses gufo's orca-uncensored shards in place, no weights download" if weights_pref() == "abliterated" else f"downloads UD-IQ4_XS ~94 GB, {free} GB free, resumable"
-        if not ask_yn(f"Strata is not installed for the {weights_pref()} weights. Install them (git clone into ~/coding/Strata if needed; its setup fetches the engine and {what})?"):
+        what = "uses gufo's orca-uncensored shards in place" if weights_pref() == "abliterated" else "uses the stock UD-Q4_K_XL that gufo shares in place"
+        if not ask_yn(f"Strata is not installed for the {weights_pref()} weights. Install them (git clone into ~/coding/Strata if needed; its setup fetches the engine and {what}, switching answers rebuilds its small pack, no weights download)?"):
             return None
         plan["install"] = "strata"
         # abliterated Strata runs gufo's orca-uncensored shards in place: say so now, not when the install fails
@@ -473,6 +482,12 @@ def plan_start(engine, running, ask_start=True):
             if not ask_yn(f"The abliterated Strata model is gufo's orca-uncensored GGUF, which is not on this box. Download it (~{WEIGHTS_ENGINES['gufo'][1]} GB, gated: accept the terms on its Hugging Face page and `hf auth login` first; {free} GB free, resumable)?"):
                 return None
             plan["weights"], plan["weights_gb"] = "gufo", WEIGHTS_ENGINES["gufo"][1]
+    # gufo and Strata share one stock GGUF (Unsloth's UD-Q4_K_XL, latest Dynamic): fetch it once, whichever comes first
+    if engine in ("gufo", "strata") and weights_pref() == "stock" and not stock_ready():
+        free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
+        if not ask_yn(f"The stock weights (Unsloth UD-Q4_K_XL, shared by gufo and Strata) are not on this box. Download them (~112 GB, {free} GB free, resumable)?"):
+            return None
+        plan["stock"] = True
     if engine == "tabbyapi":
         if weights_pref() == "abliterated":  # no abliterated EXL3 exists: say it before anything installs or starts
             print("  ! TabbyAPI serves turboderp's stock EXL3 quant; your saved weights answer 'abliterated' does not apply to it"
@@ -503,6 +518,8 @@ def prepare_start(plan, running):
         return False
     if wd and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-abliterated.sh"), wd, "--yes"]).returncode:
         return False  # before the install: abliterated Strata installs on top of gufo's shards
+    if plan.pop("stock", False) and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-stock.sh"), "--yes"]).returncode:
+        return False  # same for stock: Strata installs on top of the shared UD-Q4_K_XL
     inst = plan.pop("install", None)
     return not (inst and subprocess.run(["bash", os.path.join(REPO, "scripts", f"install-{inst}.sh"), "--yes"]).returncode)
 
@@ -875,7 +892,9 @@ def cmd_setup(a):
                  choices_line()] + (
             [f"stop {plan['stop']} and the ling-tiny sidecar"] if plan and plan["stop"] else []) + (
             ["download halogen (~124 GB, resumable)"] if plan and plan["download"] else []) + (
-            [f"install Strata for the {weights_pref()} weights (" + ("orca-uncensored in place" if weights_pref() == "abliterated" else "UD-IQ4_XS, ~94 GB download, resumable") + ")"] if plan and plan.get("install") else []) + (
+            [f"install Strata for the {weights_pref()} weights (" + ("orca-uncensored in place" if weights_pref() == "abliterated" else "shared stock UD-Q4_K_XL in place") + ")"] if plan and plan.get("install") == "strata" else []) + (
+            ["install TabbyAPI (venv + EXL3 quant, resumable)"] if plan and plan.get("install") == "tabbyapi" else []) + (
+            ["download the stock UD-Q4_K_XL (~112 GB, resumable)"] if plan and plan.get("stock") else []) + (
             [f"download the abliterated {eng} weights (~{plan.get('weights_gb')} GB, resumable)"] if plan and plan.get("weights") else []) + (
             [f"upgrade {eng} (restart, rolls back on failure)"] if upgrade else []) + (
             [f"start {eng} (model asked once it answers, if it serves several)"] if plan else [f"use {eng} (running)"]) + (

@@ -159,8 +159,9 @@ h.weights_file = real_wf
 # strata missing: plan_start asks to install it, prepare_start runs install-strata.sh before the start
 saved = {n: getattr(h, n) for n in ("strata_installed", "ask_yn", "heap_holder")}
 h.strata_installed, h.ask_yn, h.heap_holder = (lambda: False), (lambda q, d=False: True), (lambda r: None)
+h.stock_ready = lambda: True  # the stock GGUF is on disk (this box's real state must not decide the test)
 plan = h.plan_start("strata", {})
-assert plan["install"] == "strata", plan
+assert plan["install"] == "strata" and not plan.get("stock"), plan
 ran, real_run = [], h.subprocess.run
 h.subprocess.run = lambda a, **k: ran.append(os.path.basename(a[1])) or types.SimpleNamespace(returncode=0)
 assert h.prepare_start(plan, {}) and ran == ["install-strata.sh"] and "install" not in plan
@@ -178,6 +179,21 @@ h.ask_yn = lambda q, d=False: "orca-uncensored" not in q
 assert h.plan_start("strata", {}) is None
 h.ask_yn = lambda q, d=False: True
 for n, f in saved_w.items(): setattr(h, n, f)
+# stock weights missing: gufo and Strata both download the one shared UD-Q4_K_XL first (before any Strata install); declining stops it
+h.stock_ready = lambda: False
+plan = h.plan_start("gufo", {})
+assert plan["stock"] is True and "install" not in plan, plan
+plan = h.plan_start("strata", {})
+assert plan["stock"] is True and plan["install"] == "strata", plan
+ran = []
+h.subprocess.run = lambda a, **k: ran.append(os.path.basename(a[1])) or types.SimpleNamespace(returncode=0)
+assert h.prepare_start(plan, {}) and ran == ["download-stock.sh", "install-strata.sh"], ran
+h.subprocess.run = real_run
+h.ask_yn = lambda q, d=False: "UD-Q4_K_XL" not in q
+assert h.plan_start("gufo", {}) is None
+h.ask_yn = lambda q, d=False: True
+h.stock_ready = lambda: True
+assert not h.plan_start("gufo", {}).get("stock")
 # TabbyAPI: not installed -> asks to install; the abliterated answer is called out, not silently dropped; no weights download
 h.tabbyapi_installed = lambda: False
 h.weights_pref = lambda: "abliterated"
@@ -207,6 +223,19 @@ h.engine_menu({})
 names = [o.split()[1] if o[2:3] != " " else o.split()[1] for o in seen]
 assert names.index("strata") < names.index("gufo") and names.index("tabbyapi") < names.index("gufo"), names
 h.hardware, h.choose = real_hw, real_choose
+# Strata keys its repacked dense weights by model name, so a start on the other weights answer must be refused, not run on the wrong pack
+sd = tempfile.mkdtemp()
+for f in ("setup.py", "update.sh"): open(f"{sd}/{f}", "w").close()
+open(f"{sd}/run-unsloth-ud-q4_k_xl.sh", "w").write("#!/bin/sh\necho started\n")
+strata = os.path.join(os.path.dirname(__file__), "..", "server", "start-strata.sh")
+def srun(w, *a):
+    return subprocess.run(["bash", strata, *a], capture_output=True, text=True, env=dict(os.environ, STRATA_DIR=sd, STRATA_WEIGHTS=w))
+assert srun("abliterated", "--print-run").stdout.strip().endswith("run-unsloth-ud-q4_k_xl.sh")  # installs older than the marker were abliterated
+assert srun("stock", "--print-run").stdout.strip() == ""
+r = srun("stock"); assert r.returncode == 1 and "built from the abliterated weights" in r.stderr, r
+open(f"{sd}/.harness-weights", "w").write("stock\n")
+assert srun("stock", "--print-run").stdout.strip().endswith("run-unsloth-ud-q4_k_xl.sh") and srun("abliterated", "--print-run").stdout.strip() == ""
+assert srun("stock").returncode == 0 and srun("abliterated").returncode == 1
 # the TabbyAPI launcher against a fake checkout: its config follows VRAM, a user's own config.yml is never overwritten, no GPU = clear exit
 fake = tempfile.mkdtemp()
 md = f"{fake}/tabby/models/qwen3.8-flash-next-exl3-3.05bpw"

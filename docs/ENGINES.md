@@ -27,9 +27,11 @@ on `http://127.0.0.1:8080`, so it plugs into pi like any other engine.
 # installed the wizard offers to install it (scripts/install-strata.sh: git clone into ~/coding/Strata
 # or $STRATA_DIR, then its own ./setup.sh --yes --no-start --family unsloth --model ...):
 #   abliterated -> UD-Q4_K_XL via --gguf-dir on gufo's orca-uncensored shards (no weights download)
-#   stock       -> UD-IQ4_XS, ~94 GB download, resumable (Strata's own Strix Halo pick)
-# each gets its own run-unsloth-<model>.sh; server/start-strata.sh starts the one for the saved answer,
-# so ./harness config -> weights switches Strata too.
+#   stock       -> UD-Q4_K_XL via --gguf-dir on the Unsloth GGUF gufo shares (scripts/download-stock.sh, ~112 GB once)
+# both run run-unsloth-ud-q4_k_xl.sh. Strata keys its repacked dense weights (a 1.4 GB pack) by model name only,
+# so switching ./harness config -> weights deletes that pack and Strata rebuilds it from the other GGUF (minutes,
+# no download); <Strata dir>/.harness-weights records which one it was built from and start-strata.sh refuses a
+# start on the other answer rather than pair a pack with the wrong experts.
 # Strix Halo: on every start, scripts/strata-uma.py swaps setup's RAM-budget config for every expert in the GPU
 # pool when they fit (cache = all experts, --mmap-experts, --ple-io mmap, --no-prefill-borrow, 16K chunks, the
 # Windows gfx1151 matrix-core prompt set). Orca UD-Q4_K_XL, 124 GiB, 128K, full power (85 W median): 1,080 t/s
@@ -166,6 +168,23 @@ turboderp's chart) and CPU expert offload sized to the card. Both lose the NPU t
 config ships a `qwen3_8_flash_next` sampler fallback (0.7 / top_k 20 / top_p 0.95); reasoning tokens count
 toward `max_tokens`, so keep it high (pi's profile does); run nothing else heavy beside it. Auth is off
 (`disable_auth`) because it binds 127.0.0.1 only; turn it on before changing `host`.
+
+## Stock weights: one download for gufo and Strata
+
+The stock default for both is **Unsloth's UD-Q4_K_XL** (`unsloth/Qwen3.8-Flash-Next-GGUF`, folder `UD-Q4_K_XL`,
+4 shards, 103.7 GiB; the last shard is the n-gram table), because it is the layout gufo qualifies and the one
+Strata runs from a `--gguf-dir`. `scripts/download-stock.sh` (offered by the wizard, `--yes` for scripts) fetches
+the repo's `main`, which since 2026-11-04 is **Unsloth Dynamic v3.1 (preview)**: Unsloth reports UD-Q4_K_XL at
+92.3% top-1 agreement and mean KLD 0.047 against the unquantized model, with 10-15% better benchmark accuracy than
+other quants of the same size. It also fetches gufo's shared Q8 MTP head and the vision projector when missing and
+writes the Unsloth commit it got to `UD-Q4_K_XL/.unsloth-revision`; `UNSLOTH_REV=<commit>` pins a revision. The
+files land in `ENGINE_DIR` (default `~/LLMBench/models/qwen38-flash-next`) where `start-gufo-flashnext.sh`
+looks, and Strata uses them in place, so there is one copy, not two. UD-IQ4_XS (87 GiB), Strata's own previous
+stock pick, is no longer the default: gufo 0.12 stopped loading it, and one shared file replaces two downloads.
+
+Note Strata pins specific Unsloth revisions and checks its own downloads against them; files from `--gguf-dir`
+that differ (as Dynamic 3.1 does from the revision Strata pins) are accepted with a warning that they are a
+complete GGUF, never refused.
 
 ## Abliterated models
 
