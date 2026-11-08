@@ -26,6 +26,9 @@ DIR=$(readlink "/proc/$PID/cwd")
 mapfile -d '' CMD < "/proc/$PID/cmdline"
 [ -f "$DIR/update.sh" ] && [ -d "$DIR/.git" ] || { echo "FAIL: $DIR is not a git clone of Strata - use its own UPDATE instead"; exit 1; }
 [ -z "$(git -C "$DIR" status --porcelain --untracked-files=no)" ] || { echo "FAIL: $DIR has local changes to tracked files - commit or stash them first"; exit 1; }
+# same ROCm redirect as scripts/install-strata.sh: the rebuild must use the wheels the install built with
+SYS=${ROCM_PATH:-/opt/rocm}
+[ -x "$SYS/bin/hipcc" ] && [ ! -x "$SYS/llvm/bin/clang++" ] && export ROCM_PATH="$DIR/.no-system-rocm"
 OLD=$(git -C "$DIR" rev-parse HEAD)
 CUR=$(git -C "$DIR" describe --tags 2>/dev/null || echo "${OLD:0:9}")
 BRANCH=$(git -C "$DIR" symbolic-ref --short -q HEAD || echo main)

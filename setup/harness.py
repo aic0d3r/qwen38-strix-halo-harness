@@ -389,6 +389,7 @@ def halogen_ckpt():
 # ---------- weights (stock / abliterated), one saved answer the halogen and gufo launchers read ----------
 WEIGHTS = os.path.join(AGENT, "harness-weights")
 WEIGHTS_ENGINES = {"halogen": ("--print-ckpt", 89), "gufo": ("--print-model", 112)}  # launcher flag, download GB
+WEIGHTS_ASK = (*WEIGHTS_ENGINES, "strata")  # strata: the answer picks which model scripts/install-strata.sh installs and starts
 WEIGHTS_LABELS = {"stock": "stock Qwen3.8-Flash-Next (default)",
                   "abliterated": "abliterated (refusals removed; orcarouter edit, see docs/ENGINES.md#abliterated-models)"}
 
@@ -417,14 +418,19 @@ def weights_download_gb(engine):
 
 def ask_weights(engine):
     """Which weights halogen/gufo load by default; current answer first. -> True if the answer changed."""
-    if engine not in WEIGHTS_ENGINES or not sys.stdin.isatty():
+    if engine not in WEIGHTS_ASK or not sys.stdin.isatty():
         return False
     cur = weights_pref()
     opts = sorted(WEIGHTS_LABELS, key=lambda k: k != cur)
-    pick = {WEIGHTS_LABELS[k]: k for k in opts}[choose("Default model weights? (halogen and gufo load these)", [WEIGHTS_LABELS[k] for k in opts], False)]
+    pick = {WEIGHTS_LABELS[k]: k for k in opts}[choose("Default model weights? (halogen, gufo and Strata load these; abliterated on Strata = gufo's orca-uncensored shards)", [WEIGHTS_LABELS[k] for k in opts], False)]
     os.makedirs(AGENT, exist_ok=True)
     open(WEIGHTS, "w").write(pick + "\n")
     return pick != cur
+
+
+def strata_installed():
+    """Strata's setup already installed the model for the saved weights answer (its run-unsloth-<model>.sh exists)."""
+    return bool(subprocess.run(["bash", os.path.join(REPO, "server", "start-strata.sh"), "--print-run"], capture_output=True, text=True).stdout.strip())
 
 
 def plan_start(engine, running, ask_start=True):
@@ -446,6 +452,12 @@ def plan_start(engine, running, ask_start=True):
         if not ask_yn(f"No halogen checkpoint on this box. Download it (~124 GB into ~/models, {free} GB free, resumable)?"):
             return None
         plan["download"] = True
+    if engine == "strata" and not strata_installed():
+        free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
+        what = "uses gufo's orca-uncensored shards in place, no weights download" if weights_pref() == "abliterated" else f"downloads UD-IQ4_XS ~94 GB, {free} GB free, resumable"
+        if not ask_yn(f"Strata is not installed for the {weights_pref()} weights. Install them (git clone into ~/coding/Strata if needed; its setup fetches the engine and {what})?"):
+            return None
+        plan["install"] = True
     gb = weights_download_gb(engine) if engine in WEIGHTS_ENGINES and weights_pref() != "stock" else 0
     if gb:
         free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
@@ -464,6 +476,8 @@ def prepare_start(plan, running):
     if stop and not stop_engine(stop, running):
         return False
     if dl and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-halogen.sh"), "--yes"]).returncode:
+        return False
+    if plan.pop("install", False) and subprocess.run(["bash", os.path.join(REPO, "scripts", "install-strata.sh"), "--yes"]).returncode:
         return False
     return not (wd and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-abliterated.sh"), wd, "--yes"]).returncode)
 
@@ -513,7 +527,7 @@ def pick_engine(d, yes, want=None, on_pick=None):
             sys.exit("no engine answering on the usual ports. Start one (see docs/ENGINES.md, or `./setup.sh --halogen auto`), then re-run.")
         return next(iter(sorted(running, key=lambda e: e != "halogen"))), None
     if not running:
-        print("No engine is running yet. Pick one: halogen, gufo and Strata can be started (and halogen downloaded) from here.")
+        print("No engine is running yet. Pick one: halogen, gufo and Strata can be started (and halogen or Strata installed) from here.")
     eng = engine_menu(running)
     upgrading = on_pick(eng) if on_pick else False
     # the server keeps what it loaded at start: a new default needs a restart (an upgrade restarts it anyway)
@@ -836,6 +850,7 @@ def cmd_setup(a):
                  choices_line()] + (
             [f"stop {plan['stop']} and the ling-tiny sidecar"] if plan and plan["stop"] else []) + (
             ["download halogen (~124 GB, resumable)"] if plan and plan["download"] else []) + (
+            [f"install Strata for the {weights_pref()} weights (" + ("orca-uncensored in place" if weights_pref() == "abliterated" else "UD-IQ4_XS, ~94 GB download, resumable") + ")"] if plan and plan.get("install") else []) + (
             [f"download the abliterated {eng} weights (~{plan.get('weights_gb')} GB, resumable)"] if plan and plan.get("weights") else []) + (
             [f"upgrade {eng} (restart, rolls back on failure)"] if upgrade else []) + (
             [f"start {eng} (model asked once it answers, if it serves several)"] if plan else [f"use {eng} (running)"]) + (
@@ -919,7 +934,7 @@ def cmd_config(a):
             finish(eng, mod, bool(jget(os.path.join(AGENT, "harness-tuned.json"), {}).get(hw_key(eng, mod))))
         elif k == "weights":
             eng = p.get("engine", "halogen")
-            if not ask_weights(eng if eng in WEIGHTS_ENGINES else "halogen") or eng not in WEIGHTS_ENGINES:
+            if not ask_weights(eng if eng in WEIGHTS_ASK else "halogen") or eng not in WEIGHTS_ASK:
                 continue
             running = {x["engine"]: x for x in detect()["engines"]}
             if ask_yn(f"Restart {eng} on the {weights_pref()} weights now?", True):

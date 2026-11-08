@@ -23,8 +23,20 @@ Linux (Apple Silicon and Strix Halo are listed as experimental). It serves an Op
 on `http://127.0.0.1:8080`, so it plugs into pi like any other engine.
 
 ```bash
-# 1. install + start Strata itself (START-HERE.bat or ./setup.sh in its folder)
-# 2. then, in this repo:
+# plug and play: ./setup.sh, pick strata, answer "Default model weights?" - if that model is not
+# installed the wizard offers to install it (scripts/install-strata.sh: git clone into ~/coding/Strata
+# or $STRATA_DIR, then its own ./setup.sh --yes --no-start --family unsloth --model ...):
+#   abliterated -> UD-Q4_K_XL via --gguf-dir on gufo's orca-uncensored shards (no weights download)
+#   stock       -> UD-IQ4_XS, ~94 GB download, resumable (Strata's own Strix Halo pick)
+# each gets its own run-unsloth-<model>.sh; server/start-strata.sh starts the one for the saved answer,
+# so ./harness config -> weights switches Strata too.
+# Strix Halo: on every start, scripts/strata-uma.py swaps setup's RAM-budget config for every expert in the GPU
+# pool when they fit (cache = all experts, --mmap-experts, --ple-io mmap, --no-prefill-borrow, 16K chunks, the
+# Windows gfx1151 matrix-core prompt set). Orca UD-Q4_K_XL, 124 GiB, 128K, full power (85 W median): 1,080 t/s
+# prompt (8K/30K), 47-48 t/s decode, probe 1,034 / 42.2 - Strata's own stock UD-Q4_K_XL Linux numbers are
+# 1,169-1,248 / 43-53. The rest of its fast config measured 4% slower prompts here, so it is left out.
+# Setup's file stays as strata-<model>.json.budget-mode.
+# by hand instead: install + start Strata per its README, then in this repo:
 ./setup.sh --strata                      # or: ./setup.sh --strata http://host:port
 ./setup.sh --doctor                      # checks Strata is answering
 pi --provider strata --model <id>        # id: `curl -s localhost:8080/v1/models`; pi >= 1.0 rejects --provider alone
@@ -105,7 +117,7 @@ cd Strata && ROCM_PATH=/nonexistent ./setup.sh --yes --family unsloth --model UD
 Refusal-removed builds, all derived from `orcarouter/Qwen3.8-Flash-Next-Uncensored` (BF16 rev
 `8336e613`), so the engines behave alike.
 
-**Plug and play:** `./setup.sh` asks "Default model weights?" after you pick halogen or gufo
+**Plug and play:** `./setup.sh` asks "Default model weights?" after you pick halogen, gufo or Strata
 (change it later with `./harness config` -> weights). The answer is saved in
 `~/.pi/agent/harness-weights` (`stock` or `abliterated`). Both launchers read it, the wizard and
 `start.sh` offer the download when the file is missing (`scripts/download-abliterated.sh
@@ -154,7 +166,7 @@ mmproj.
 | halogen (default pick) | `Quat3rnion/halogen-qwen3.8-flash-next-v2-abliterated`, file `qwen38-flash-next-v2-abliterated.hgn` at rev `e7783c5822dfda2785a0f5b435abf54df89fe8ee` (r2: PPL 3.134 vs stock 3.144, stock speed; the newer `main` file is not inference-validated) | Weights choice `abliterated`. The file goes beside the stock `.hgn` (~89 GB). Tokenizer, vision, n-gram table and npu/ come from the stock folder. `HALOGEN_CHECKPOINT=<path>` still loads any other file. |
 | halogen (one file for all engines) | the shared GGUF | `HALOGEN_CHECKPOINT=/path/…-00001-of-00005.gguf`. Needs `qwen38-flash-next-mtp.hgn` in the stock folder. The launcher forces 1 slot (halogen #172: K-quant GGUFs return empty replies on overlapping requests). Expect ~28% slower decode than `.hgn` and ~80 GiB resident. |
 | gufo | the shared GGUF | Weights choice `abliterated`. The file goes into `ENGINE_DIR/orca-uncensored/` (~112 GB, gated: accept the terms on the model page, then `hf auth login`). It uses the stock shared-Q8 MTP head (`ENGINE_DIR/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf`); the download fetches it and `mmproj-BF16.gguf` from unsloth if missing, then hardlinks the projector in for vision. `GUFO_MODEL=<subdir>/<shard1>` names any other file. |
-| Strata | the shared GGUF, unofficial | Strata loads only its listed packs, which are checked by SHA-256. A third-party GGUF goes through `tools/iq_pack.py --compat-bf16` and a hand-written run config (Strata issue #2783, closed as unsupported). |
+| Strata | the shared GGUF, unofficial | `scripts/install-strata.sh` passes gufo's `orca-uncensored/` folder as `--gguf-dir --family unsloth --model UD-Q4_K_XL`. Strata 0.2.x accepts a complete own GGUF with the published layout (it warns, never refuses; no SHA-256 for unknown names). Not run here yet. Older Strata needed `tools/iq_pack.py --compat-bf16` and a hand-written config (issue #2783). |
 
 r2 was built against the stock n-gram table at peonist rev `5cc17cea`. If your table is from
 another revision, check that the stock `qwen38-flash-next-ngram.hgn` sha matches before you trust

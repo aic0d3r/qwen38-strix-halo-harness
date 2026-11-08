@@ -156,4 +156,14 @@ assert h.weights_download_gb("gufo") == 0
 h.weights_file = lambda e: f"{root}/none.gguf"
 assert h.weights_download_gb("gufo") == 112
 h.weights_file = real_wf
+# strata missing: plan_start asks to install it, prepare_start runs install-strata.sh before the start
+saved = {n: getattr(h, n) for n in ("strata_installed", "ask_yn", "heap_holder")}
+h.strata_installed, h.ask_yn, h.heap_holder = (lambda: False), (lambda q, d=False: True), (lambda r: None)
+plan = h.plan_start("strata", {})
+assert plan["install"] is True, plan
+ran, real_run = [], h.subprocess.run
+h.subprocess.run = lambda a, **k: ran.append(os.path.basename(a[1])) or types.SimpleNamespace(returncode=0)
+assert h.prepare_start(plan, {}) and ran == ["install-strata.sh"] and "install" not in plan
+h.subprocess.run = real_run
+for n, f in saved.items(): setattr(h, n, f)
 print("ok")
