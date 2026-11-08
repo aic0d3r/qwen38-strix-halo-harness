@@ -259,6 +259,20 @@ alternatives; on this chip Strata is not the upgrade (its pitch is NVIDIA/AMD de
 gufo, stop halogen first (they share one memory heap), then `server/start-gufo-flashnext.sh`
 (UD-Q4_K_XL + MTP, `:8080`) and `./setup.sh --gufo` to wire pi to it. Full numbers: [ENGINES.md](docs/ENGINES.md#what-breaks-on-another-engine).
 
+**Abliterated weights on Strata** (2026-11-08, Strata 0.2.12, the Orca `orca-uncensored/` shards: UD-Q4_K_XL
+layout, not IQ4, so slower than the table above, as abliterated GGUFs are on halogen too). 128k ctx, thinking off, one run
+each, GPU at full power (85 W median); not the `halogen-cmp.py` battery, so compare within this table only:
+
+| Strata config | prompt, 8k / 30k | decode, 400-token answers | `setup.sh` probe | agent turn (926 tok on 12k cached) |
+|---|---|---|---|---|
+| what Strata's setup writes (RAM-budget mode), at a 40 W cap | 350-425 t/s | 26-31 t/s | 425 / 31.6 t/s | n/a |
+| **after `scripts/strata-uma.py`** (every expert in the GPU pool; runs on each start) | **1,081 / 1,082 t/s** | **47.5-47.7 t/s** | **1,034 / 42.2 t/s** | **1.12 s** |
+| plus the rest of Strata's fast config (`PF_F16`, `--lookup-chain 3`, `--mtp-q4 all`, ...) | 1,030 / 1,044 t/s | 46.7-47.4 t/s | 1,007 / 43.1 t/s | 1.16 s |
+
+For scale, Strata's own Linux Strix Halo numbers for the stock UD-Q4_K_XL file are 1,169-1,248 t/s prompt and
+43-53 t/s decode. The first row was measured at a 40 W cap, so it overstates the gain. Details:
+[ENGINES.md](docs/ENGINES.md#strata-the-pick-for-nvidia-and-amd-desktop-gpus).
+
 ## Evidence
 
 <table>
