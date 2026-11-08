@@ -51,7 +51,7 @@ SEMBLE_DESC = ("Semble instant semantic code search (local or remote git repos; 
 SEMBLE_EXPOSURE = {"search": "direct", "find_related": "direct", "*": "hidden"}
 
 DDG_COMMAND = "uvx"
-DDG_ARGS = ["--with", "duckduckgo-mcp-server[browser]", "duckduckgo-mcp-server"]
+DDG_ARGS = ["--from", "duckduckgo-mcp-server[browser]==0.7.0", "duckduckgo-mcp-server"]
 DDG_DESC = "DuckDuckGo web search + page reading (no API key; lightweight Jina alternative)"
 DDG_EXPOSURE = {"search": "direct", "fetch_content": "direct", "expand_link": "direct", "*": "hidden"}
 DDG_ENV = {"DDG_PARSE_MODE": "markdown"}

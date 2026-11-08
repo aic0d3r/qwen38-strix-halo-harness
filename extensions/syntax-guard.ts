@@ -6,8 +6,8 @@ import { resolve } from "node:path";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { ev } from "./harness-profile/index.ts";
 // same event log as the other extensions; scripts/usage-stats.py counts it
-const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
 
 const PY = "import ast,sys; ast.parse(open(sys.argv[1]).read(), sys.argv[1])";
 // shortcut: bun's transpiler is the TS/JS parser (node --check fails on ESM .ts); no bun = no TS check.
@@ -18,11 +18,11 @@ const CHECKS: Record<string, string[]> = {
 	bash: ["bash", "-n"],
 	ts: BUN, tsx: BUN, mts: BUN, js: BUN, jsx: BUN, mjs: BUN, cjs: BUN,
 };
-const SKIP_PATH = /(node_modules|dist|build|vendor)\//;
+const SKIP_PATH = /(^|\/)(node_modules|dist|build|vendor)\//; // whole directory names, matched below the session cwd
 
 // full command to syntax-check this file, or undefined when its type has no checker
-export function checkCommand(file: string): string[] | undefined {
-	if (SKIP_PATH.test(file)) return;
+export function checkCommand(file: string, cwd = ""): string[] | undefined {
+	if (SKIP_PATH.test(cwd ? path.relative(cwd, file) : file)) return;
 	const ext = file.split(".").pop()?.toLowerCase() ?? "";
 	const base = ext === "json" ? undefined : CHECKS[ext];
 	return base && [...base, file];
@@ -43,10 +43,10 @@ export default function syntaxGuard(pi: ExtensionAPI) {
 
 		let err = "";
 		try {
-			if (/\.json$/i.test(file) && !SKIP_PATH.test(file)) {
+			if (/\.json$/i.test(file) && !SKIP_PATH.test(path.relative(ctx.cwd, file))) {
 				err = jsonError(fs.readFileSync(file, "utf8"));
 			} else {
-				const cmd = checkCommand(file);
+				const cmd = checkCommand(file, ctx.cwd);
 				if (!cmd) return;
 				const { code, stdout, stderr } = await pi.exec(cmd[0], cmd.slice(1), { cwd: ctx.cwd, timeout: 15_000 });
 				// code 127/ENOENT-style failures (checker not installed) must stay silent

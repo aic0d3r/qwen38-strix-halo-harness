@@ -10,13 +10,17 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { BOUNDED, trim } from "./core.ts";
+import { ev } from "../harness-profile/index.ts";
 
 const NUDGE_CHARS = 6000;
 const SOURCE = /\.(py|tsx?|jsx?|mjs|go|rs|java|kt|c|cc|cpp|h|hpp|cs|rb|php|swift)$/i;
 const OUT_DIR = path.join(os.tmpdir(), "pi-out");
-const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
+
+// saved originals are only worth keeping while the session that cut them is likely alive
+const sweep = () => { try { for (const f of fs.readdirSync(OUT_DIR)) { const p = path.join(OUT_DIR, f); if (Date.now() - fs.statSync(p).mtimeMs > 2 * 86_400_000) fs.rmSync(p, { force: true }); } } catch {} };
 
 export default function toolTrim(pi: ExtensionAPI) {
+	sweep();
 	let seq = 0;
 	let reads = new Map<string, string>(); // path|offset|limit -> content hash
 	let nudged = new Set<string>(); // source files already given the narrow-read hint this session
@@ -32,7 +36,7 @@ export default function toolTrim(pi: ExtensionAPI) {
 			if (BOUNDED.test(String(event.input?.command ?? ""))) return;
 			const file = path.join(OUT_DIR, `${Date.now()}-${++seq}.txt`);
 			const r = trim(before, file);
-			if (r.cut) { try { fs.mkdirSync(OUT_DIR, { recursive: true }); fs.writeFileSync(file, before); } catch { return; } } // can't save the original: leave output alone
+			if (r.cut) { try { fs.mkdirSync(OUT_DIR, { recursive: true, mode: 0o700 }); fs.writeFileSync(file, before, { mode: 0o600 }); } catch { return; } } // can't save the original: leave output alone
 			if (r.text === before) return;
 			ev({ c: "tool-trim", k: "bash", saved: before.length - r.text.length, cut: r.cut });
 			return { content: [{ type: "text" as const, text: r.text }] };

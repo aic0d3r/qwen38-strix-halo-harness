@@ -9,8 +9,10 @@ if [ "${1:-}" != --yes ]; then
   read -r -p "  download now? [y/N] " A
   case "$A" in [yY]*) ;; *) echo "  aborted - download the files (see README 'Minimum download') or pass a checkpoint: ./setup.sh --halogen /path/to/checkpoint.hgn" >&2; exit 1 ;; esac
 fi
-if [ "${AVAIL:-999}" -lt 135 ]; then
-  echo "  only ${AVAIL} GB free - free up at least 135 GB first" >&2; exit 1
+HAVE_GB=$(du -sBG "$DL_DIR" 2>/dev/null | cut -f1 | tr -dc 0-9)  # a resume only needs the part still missing
+NEED=$((135 - ${HAVE_GB:-0}))
+if [ "${AVAIL:-999}" -lt "$NEED" ]; then
+  echo "  only ${AVAIL} GB free - free up at least $NEED GB first" >&2; exit 1
 fi
 HF_BIN="$(command -v hf || command -v huggingface-cli || true)"
 if [ -z "$HF_BIN" ]; then
@@ -22,10 +24,12 @@ mkdir -p "$DL_DIR"
 echo "  downloading (resumable - re-run if interrupted) ..."
 "$HF_BIN" download peonist-ai/halogen-qwen3.8-flash-next \
   qwen38-flash-next-v2.hgn qwen38-flash-next-ngram.hgn qwen38-flash-next-vision.hgn tokenizer/ \
+  --revision "${HALOGEN_WEIGHTS_REV:-c464b5b51c968ff54ea78647a4b2556355b36d2c}" \
   --local-dir "$DL_DIR" || { echo "  download failed/incomplete - re-run to resume" >&2; exit 1; }
-# the NPU models live in four separate repos (they are NOT in the main weights repo)
+# the NPU models live in four separate repos (they are NOT in the main weights repo); left unpinned on purpose:
+# each halogen image release needs the matching device files, and upgrade-halogen.sh refreshes them
 for n in decider-0.8b qwen3-embedding-0.6b qwen3-reranker-0.6b qwen3guard-gen-0.6b; do
-  [ -d "$DL_DIR/npu/$n" ] && continue
+  # hf skips files it already has, so a half-downloaded folder resumes here
   echo "  downloading NPU model: $n ..."
   "$HF_BIN" download "peonist-ai/halogen-npu-$n" --local-dir "$DL_DIR/npu/$n" \
     || { echo "  NPU model download failed: $n - re-run to resume" >&2; exit 1; }

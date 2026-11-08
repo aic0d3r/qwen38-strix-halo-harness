@@ -20,9 +20,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
-import { isOutsideContent } from "./harness-profile/index.ts";
+import { isOutsideContent, ev } from "./harness-profile/index.ts";
 
-const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
 
 // shortcut: regex heuristics on the command string. A determined agent can obfuscate around them
 // (base64, variables); the goal is the plain, copy-pasted attack a fetched page asks for.
@@ -56,6 +55,8 @@ export function riskyAfterOutside(toolName: string, input: any, cwd: string): st
 		}
 		return null;
 	}
+	// a child pi starts untainted, so delegating is the way around this gate
+	if (toolName === "subagent") return "hands the task to a subagent that starts without this gate";
 	if (toolName === "read" || toolName === "edit" || toolName === "write") {
 		const p = typeof input?.path === "string" ? input.path : "";
 		if (!p) return null;
@@ -84,7 +85,7 @@ export default function taintGate(pi: ExtensionAPI) {
 		if (!why) return;
 
 		asked++;
-		const what = event.toolName === "bash" ? String(event.input?.command ?? "").slice(0, 300) : String(event.input?.path ?? "");
+		const what = (event.toolName === "bash" ? String(event.input?.command ?? "") : event.toolName === "subagent" ? JSON.stringify(event.input ?? {}) : String(event.input?.path ?? "")).slice(0, 300);
 		if (ctx?.hasUI && ctx.ui?.confirm) {
 			const ok = await ctx.ui.confirm(`Outside content is in context (${tainted})`, `The agent wants to run something that ${why}:\n\n${what}\n\nAllow it?`);
 			if (ok) { allowed++; ev({ c: "taint-gate", k: "allowed", why, tool: event.toolName }); return; }

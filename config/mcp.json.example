@@ -33,7 +33,7 @@
     },
     "ddg": {
       "command": "uvx",
-      "args": ["--with", "duckduckgo-mcp-server[browser]", "duckduckgo-mcp-server"],
+      "args": ["--from", "duckduckgo-mcp-server[browser]==0.7.0", "duckduckgo-mcp-server"],
       "enabled": true,
       "exposure": "hidden",
       "toolExposure": {

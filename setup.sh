@@ -425,8 +425,11 @@ if command -v pi >/dev/null; then
   if [ -n "$RTKV" ] && [ "$(printf '%s\n1.0.1\n' "$RTKV" | sort -V | head -1)" = 1.0.1 ]; then ok "rtk $RTKV"
   else
     case "$(uname -m)" in x86_64) RTKT=x86_64-unknown-linux-musl;; aarch64) RTKT=aarch64-unknown-linux-gnu;; *) RTKT=;; esac
+    case "$RTKT" in x86_64-unknown-linux-musl) RTKSHA=5b919c3bccb799b67a61866d0e617410a4fcdf173e2614440e59de2fa2003436;; aarch64-unknown-linux-gnu) RTKSHA=cd627c4091ad90b5e5aca83ca5af66ee4b8aa8537a736533fa90544f461f1c2b;; *) RTKSHA=;; esac
     RTKTMP=$(mktemp -d)
-    if [ -n "$RTKT" ] && curl -fsSL "https://github.com/rtk-ai/rtk/releases/download/v1.0.1/rtk-$RTKT.tar.gz" | tar xz -C "$RTKTMP" 2>/dev/null \
+    # pinned sha256: the binary lands on PATH, so a swapped release asset must not install
+    if [ -n "$RTKT" ] && curl -fsSL -o "$RTKTMP/rtk.tgz" "https://github.com/rtk-ai/rtk/releases/download/v1.0.1/rtk-$RTKT.tar.gz" \
+       && [ "$(sha256sum "$RTKTMP/rtk.tgz" | cut -d" " -f1)" = "$RTKSHA" ] && tar xzf "$RTKTMP/rtk.tgz" -C "$RTKTMP" 2>/dev/null \
        && mkdir -p "$HOME/.local/bin" && install -m755 "$RTKTMP/rtk" "$HOME/.local/bin/rtk"; then
       ok "rtk 1.0.1 installed to ~/.local/bin (was: ${RTKV:-none}); make sure ~/.local/bin is on PATH"
     else warn "rtk 1.0.1 download failed - install it from https://github.com/rtk-ai/rtk/releases"; fi
@@ -495,12 +498,14 @@ else
   elif [ -z "${GGUF:-}" ]; then
     warn "model not found locally - downloading Ling-3.0-tiny-Q4_K_M.gguf (~4.5 GB, resumable) to ~/.models/ling3.0-tiny/"
     mkdir -p "$HOME/.models/ling3.0-tiny"
-    curl -fL -C - -o "$HOME/.models/ling3.0-tiny/Ling-3.0-tiny-Q4_K_M.gguf" \
-      "https://huggingface.co/inclusionAI/Ling-3.0-tiny-GGUF/resolve/main/Ling-3.0-tiny-Q4_K_M.gguf" \
-      && GGUF="$HOME/.models/ling3.0-tiny/Ling-3.0-tiny-Q4_K_M.gguf" \
+    # pinned revision; written as .part and renamed only once complete, so an interrupted download is never mistaken for the model
+    LING_REV=01b850e29ed5b44e2b810160ff980a9bb353296f
+    curl -fL -C - -o "$HOME/.models/ling3.0-tiny/Ling-3.0-tiny-Q4_K_M.gguf.part" \
+      "https://huggingface.co/inclusionAI/Ling-3.0-tiny-GGUF/resolve/$LING_REV/Ling-3.0-tiny-Q4_K_M.gguf" \
+      && GGUF="$HOME/.models/ling3.0-tiny/Ling-3.0-tiny-Q4_K_M.gguf.part" \
       || fail "download failed - fetch it manually from huggingface.co/inclusionAI/Ling-3.0-tiny-GGUF"
     if [ -n "${GGUF:-}" ]; then
-      WANT=$(curl -sf -m 15 "https://huggingface.co/api/models/inclusionAI/Ling-3.0-tiny-GGUF/tree/main" \
+      WANT=$(curl -sf -m 15 "https://huggingface.co/api/models/inclusionAI/Ling-3.0-tiny-GGUF/tree/$LING_REV" \
         | python3 -c "import json,sys; print(next((s['lfs']['oid'] for s in json.load(sys.stdin) if s['path']=='Ling-3.0-tiny-Q4_K_M.gguf'),''))" 2>/dev/null)
       GOT=$(sha256sum "$GGUF" | cut -d' ' -f1)
       if [ -z "$WANT" ]; then
@@ -509,6 +514,7 @@ else
         fail "sha256 MISMATCH (want $WANT, got $GOT) - deleting bad file, fetch manually"
         rm -f "$GGUF"; GGUF=""
       else ok "sha256 verified"; fi
+      [ -n "$GGUF" ] && mv "$GGUF" "${GGUF%.part}" && GGUF="${GGUF%.part}"
     fi
   fi
   if [ -n "${LLS:-}" ] && [ -n "${GGUF:-}" ]; then
@@ -535,7 +541,7 @@ Description=Ling-3.0-tiny sidecar (llama.cpp)
 After=network.target
 
 [Service]
-ExecStart=$LLS -a ling3.0-tiny -m $UNIT_GGUF -ngl 99 -c 131072 -b $UB_TINY -ub $UB_TINY --jinja --host 127.0.0.1 --port $TINY_PORT --metrics --sleep-idle-seconds 600
+ExecStart="$LLS" -a ling3.0-tiny -m "$UNIT_GGUF" -ngl 99 -c 131072 -b $UB_TINY -ub $UB_TINY --jinja --host 127.0.0.1 --port $TINY_PORT --metrics --sleep-idle-seconds 600
 Restart=always
 RestartSec=5
 

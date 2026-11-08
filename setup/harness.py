@@ -22,16 +22,25 @@ TUNE_BUDGET_S = 120
 
 
 def jget(path, default=None):
+    """The parsed file, or default when it is missing. A file that exists but is not JSON stops the run: the
+    callers read-modify-write, and falling back to the default would overwrite the user's file with only our keys."""
     try:
-        return json.load(open(path))
-    except Exception:
+        with open(path) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return default
+    except ValueError as e:
+        sys.exit(f"! {path} is not valid JSON ({e}); fix or remove it, then re-run. Nothing was changed.")
+    except OSError:
         return default
 
 
 def jput(path, obj):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    json.dump(obj, open(path, "w"), indent=2)
-    open(path, "a").write("\n")
+    with open(path + ".tmp", "w") as f:  # temp + rename: a crash mid-write must not leave a truncated config
+        json.dump(obj, f, indent=2)
+        f.write("\n")
+    os.replace(path + ".tmp", path)
 
 
 def http(url, body=None, timeout=3):
@@ -203,6 +212,8 @@ def apply(engine, model_id, tuned=None):
     jput(mj, m)
     ctx = new["models"][0]["contextWindow"]
     sj = os.path.join(AGENT, "settings.json")
+    if os.path.exists(sj) and not os.path.exists(sj + ".pre-harness"):
+        shutil.copy(sj, sj + ".pre-harness")  # same one-time backup as models.json
     s = jget(sj, {})
     s["defaultProvider"], s["defaultModel"] = prov, new["models"][0]["id"]
     reserve = tuned.get("reserveTokens") or min(model_profile(model_id)["reserveTokens"], ctx // 4)

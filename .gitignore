@@ -12,5 +12,4 @@ bench/run-*.sh
 qa-*.png
 *.log
 .serena/
-tests/*
-!tests/test_harness.py
+tests/__pycache__/

@@ -9,8 +9,8 @@ import { resolve } from "node:path";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { ev } from "./harness-profile/index.ts";
 // same event log as the other extensions; scripts/usage-stats.py counts it
-const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
 
 // Impeccable is not part of this harness (it ships no skills; see the 1.0.1 drop of vendored
 // design skills), so the detector binary is wherever the user put it: override with
@@ -18,7 +18,7 @@ const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "ha
 const DETECTOR =
 	process.env.IMPECCABLE_BIN || `${process.env.HOME}/.pi/agent/skills/impeccable/scripts/impeccable`;
 const UI_FILE = /\.(css|scss|sass|less|html|vue|svelte|astro|tsx|jsx)$/i;
-const SKIP_PATH = /(node_modules|dist|build|vendor)\//;
+const SKIP_PATH = /(^|\/)(node_modules|dist|build|vendor)\//;
 
 type Finding = {
 	antipattern: string;

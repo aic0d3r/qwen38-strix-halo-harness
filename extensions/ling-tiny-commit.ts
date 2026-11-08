@@ -10,11 +10,10 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
-import { isMain, profile, sidecarOn } from "./harness-profile/index.ts";
+import { isMain, profile, sidecarOn, ev } from "./harness-profile/index.ts";
 
 const TINY_MODEL = "ling3.0-tiny";
 // one JSON line per sidecar/NPU call; summarized by scripts/session-audit.sh --harness
-const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
 // crash-recovery checkpoint (progress-tracker) must never ride along in a commit
 const PROGRESS = (process.env.PI_PROGRESS_FILE || "PROGRESS.md").split("/").pop()!;
 

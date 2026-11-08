@@ -457,7 +457,7 @@ async function runSingleAgent(
 					wasAborted = true;
 					proc.kill("SIGTERM");
 					setTimeout(() => {
-						if (!proc.killed) proc.kill("SIGKILL");
+						if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL"); // .killed is true once SIGTERM was sent
 					}, 5000);
 				};
 				if (signal.aborted) killProc();

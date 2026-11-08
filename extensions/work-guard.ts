@@ -6,8 +6,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { ev } from "./harness-profile/index.ts";
 // same event log as the other extensions; scripts/usage-stats.py counts it
-const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
 
 const SRC = "(go|py|ts|tsx|js|jsx|mjs|rs|c|h|cpp|java|kt|swift|rb|php|css|scss|html|vue|svelte|astro|lua|sh)";
 // shortcut: regex heuristics on the command string; a determined agent can dodge them, the goal is stopping habit.

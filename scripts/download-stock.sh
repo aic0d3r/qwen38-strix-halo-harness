@@ -21,7 +21,9 @@ if [ "${1:-}" != --yes ]; then
   read -r -p "  download now? [y/N] " A
   case "$A" in [yY]*) ;; *) echo "  aborted" >&2; exit 1 ;; esac
 fi
-[ "${AVAIL:-999}" -lt $((GB + 5)) ] && { echo "  only ${AVAIL} GB free - free up at least $((GB + 5)) GB first" >&2; exit 1; }
+HAVE_GB=$(du -sBG "$DIR" 2>/dev/null | cut -f1 | tr -dc 0-9)  # a resume only needs the part still missing
+NEED=$((GB + 5 - ${HAVE_GB:-0}))
+[ "${AVAIL:-999}" -lt "$NEED" ] && { echo "  only ${AVAIL} GB free - free up at least $NEED GB first" >&2; exit 1; }
 HF_BIN="$(command -v hf || command -v huggingface-cli || ls "$HOME/.hf-venv/bin/hf" 2>/dev/null || true)"
 if [ -z "$HF_BIN" ]; then
   echo "  no hf cli found - bootstrapping a venv (~40 MB) ..."

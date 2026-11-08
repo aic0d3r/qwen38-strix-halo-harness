@@ -7,6 +7,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
+/** One JSON line per sidecar/NPU/guard event in <agent dir>/harness-events.jsonl (scripts/usage-stats.py, session-audit.sh read it). Never throws. */
+export const ev = (o: object) => { try { fs.appendFileSync(path.join(getAgentDir(), "harness-events.jsonl"), JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), ...o }) + "\n"); } catch {} };
+
 export interface Profile { engine: string; provider: string; model: string; sidecarUrl: string; npu: boolean; npuUrl: string }
 const LEGACY: Profile = { engine: "halogen", provider: "halogen", model: "halogen-qwen3.8-flash-next", sidecarUrl: "http://127.0.0.1:8090", npu: true, npuUrl: "http://127.0.0.1:8731" };
 

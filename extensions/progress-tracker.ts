@@ -8,6 +8,7 @@
  * before_agent_start (mutating event.prompt is ignored by pi; see the handler).
  */
 
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -24,6 +25,14 @@ export function isContinuation(t: string): boolean {
 	if (/^(continue|finish|keep going|resume|carry on)\b/i.test(t)) return true;
 	return t.length > 0 && t.length < 120 && /\b(continue|finish|keep going|resume|carry on)\b/i.test(t);
 }
+
+// Only a PROGRESS.md this harness wrote may reach the system prompt: a cloned or unzipped repo can
+// ship its own. The sha256 of every file we write is kept under the agent dir, keyed by path.
+const STAMPS = path.join(AGENT_DIR, "progress-stamps.json");
+const sha = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
+const readStamps = (): Record<string, string> => { try { return JSON.parse(fs.readFileSync(STAMPS, "utf8")); } catch { return {}; } };
+export const isOurs = (file: string, content: string): boolean => readStamps()[file] === sha(content);
+export const stamp = (file: string, content: string) => { try { fs.mkdirSync(AGENT_DIR, { recursive: true }); fs.writeFileSync(STAMPS, JSON.stringify({ ...readStamps(), [file]: sha(content) })); } catch {} };
 
 function promptText(p: any): string {
 	if (typeof p === "string") return p;
@@ -47,6 +56,7 @@ let responseCount = 0;
 		if (!fs.existsSync(p)) return;
 		const content = fs.readFileSync(p, "utf8");
 		if (content.trim().length <= 50) return;
+		if (!isOurs(p, content)) { if (DEBUG) console.log(`[progress-tracker] ${PROGRESS_FILE} was not written by this harness - ignored`); return; }
 		const t = content.match(/\*\*Task:\*\*\s*([\s\S]*?)\n\*\*Last updated/);
 		if (t && t[1].trim() && t[1].trim() !== "(unspecified)") taskDescription = t[1].trim();
 		resumeNote = content;
@@ -133,6 +143,7 @@ let responseCount = 0;
 		const entry = `# Session Progress\n\n**Task:** ${taskLine}\n**Last updated:** ${new Date().toISOString()}\n**Responses:** ${responseCount}\n\n## Last state (assistant note)\n\n${lastNote || "(none yet)"}\n\n## Files modified\n\n\`\`\`\n${diffStat}\n\`\`\`\n\n## Recent commits\n\n\`\`\`\n${recentCommits}\n\`\`\`\n`;
 		try {
 			fs.writeFileSync(path.join(cwd, PROGRESS_FILE), entry);
+			stamp(path.join(cwd, PROGRESS_FILE), entry);
 			// HUD: machine-readable per-checkpoint stats (tail -f it)
 			try {
 				fs.appendFileSync(path.join(AGENT_DIR, "hud.log"),

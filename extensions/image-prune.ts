@@ -9,9 +9,8 @@
 // shortcut: the cap is a total, so one message with more than 4 images keeps only its newest;
 // raise the cap if a provider with a bigger image budget needs them.
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { ev } from "./harness-profile/index.ts";
 
 const MAX_IMAGES = Number(process.env.PI_MAX_HISTORY_IMAGES ?? 4);
 const STUB = "[image omitted from history: re-read the file if you need to see it again]";
@@ -56,12 +55,7 @@ export default function imagePrune(pi: ExtensionAPI) {
 	pi.on("context", async (event) => {
 		const result = pruneImages(event.messages as Message[]);
 		if (!result.changed) return;
-		try {
-			fs.appendFileSync(
-				path.join(getAgentDir(), "harness-events.jsonl"),
-				JSON.stringify({ t: new Date().toISOString(), cwd: process.cwd(), c: "image-prune", k: "request", kept: result.kept, dropped: result.dropped }) + "\n",
-			);
-		} catch {}
+		ev({ c: "image-prune", k: "request", kept: result.kept, dropped: result.dropped });
 		return { messages: result.messages as typeof event.messages };
 	});
 }

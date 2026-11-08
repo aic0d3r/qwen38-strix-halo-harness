@@ -29,6 +29,11 @@
 - `scripts/cache-gaps.py`: a personal Anthropic cache-cost analysis, not used by the harness.
 
 ### Fixed
+- taint-gate now confirms a `subagent` call after outside content (a child pi starts untainted, so delegating skipped the gate). progress-tracker injects a `PROGRESS.md` into the system prompt only when this harness wrote it (sha256 kept under the agent dir), so a cloned repo cannot ship its own resume note; the repo map is marked as data.
+- Downloads: a resume checks only the space still missing (it refused at 30 GB free after 100 GB were fetched), an interrupted NPU folder is resumed instead of skipped, the Ling sidecar GGUF is written as `.part` and renamed after the sha256 check (a truncated file was taken for the model), and the halogen weights, the Ling GGUF, the `rtk` binary (sha256) and the ddg MCP server are pinned.
+- The wizard no longer overwrites a `settings.json`/`models.json` that is not valid JSON (it stops and says which file), writes both through temp + rename, and keeps a one-time `settings.json.pre-harness` backup.
+- A subagent that ignored SIGTERM was never SIGKILLed (`proc.killed` is true once the signal is sent). `tool-trim` saves its originals mode 0600 and drops ones older than two days; syntax-guard and ui-ux-guard skip `build/`, `dist/`, `vendor/` only as whole directory names below the project; uninstall also removes `harness-weights`, `hud.log` and the progress stamps.
+- The tests are tracked now (only `test_harness.py` was; `.gitignore` hid the other eight files) and `tool-trim`, `progress-tracker` and `mcp.py` have tests. The event logger lives once in `harness-profile` instead of in 12 extensions.
 - Abliterated gufo on a box without the stock gufo files: the download skipped the shared MTP head the launcher loads, so gufo never answered (900 s wait, failed upgrade). `scripts/download-abliterated.sh gufo` now also fetches it and `mmproj-BF16.gguf` from unsloth, the wizard and `start.sh` offer that ~5 GB download when only the head is missing, and the launcher exits at once with the fix when it is.
 - `./setup.sh --halogen <path>` launched whatever checkpoint the launcher found on its own, not `<path>`.
 - `tests/test_harness.py` still expected setup to start the sidecar unit, which 1.8.2 removed.
