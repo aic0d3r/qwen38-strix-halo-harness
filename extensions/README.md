@@ -34,7 +34,7 @@ longer launched by default), and a Ling-3.0-tiny sidecar on :8090.
 
 4. pi providers in ~/.pi/agent/models.json:
 
-       "halogen":      { "baseUrl": "http://127.0.0.1:8731/v1", "api": "openai-completions", "apiKey": "dummy", "models": [ { "id": "halogen-qwen3.8-flash-next", "contextWindow": 65536, "maxTokens": 8192, ... } ] },
+       "halogen":      { "baseUrl": "http://127.0.0.1:8731/v1", "api": "openai-completions", "apiKey": "dummy", "models": [ { "id": "halogen-qwen3.8-flash-next", "contextWindow": 262144, "maxTokens": 8192, ... } ] },
        "llamacpp-tiny":{ "baseUrl": "http://127.0.0.1:8090/v1", "api": "openai-completions", "apiKey": "dummy", "models": [ { "id": "ling3.0-tiny", "contextWindow": 131072, "maxTokens": 8192, ... } ] }
 
    maxTokens 8192, not 32768: the server hard-rejects requests once

@@ -277,7 +277,7 @@ except FileNotFoundError: m = {}
 mid, ctx, inp = "qwen3.8-flash-next", 131072, ["text"]
 try:
     d = json.load(urllib.request.urlopen(url + "/v1/models", timeout=3))["data"][0]
-    mid, ctx = d["id"], d.get("meta", {}).get("n_ctx", ctx)
+    mid, ctx = d["id"], d.get("meta", {}).get("n_ctx") or d.get("context_length", ctx)  # gufo reports context_length
     inp = d.get("architecture", {}).get("input_modalities", inp)
 except Exception: print(f"  {eng} not answering - using defaults; re-run once it is up to pick up the real values")
 P = m.setdefault("providers", {})

@@ -33,7 +33,7 @@
       { "name": "UD-IQ3_XXS", "gib": 77.9 }
     ],
     "extras_gb": 4,
-    "ctx_tiers": [ { "spare_gb": 14, "ctx": 65536 }, { "spare_gb": 8, "ctx": 32768 } ],
+    "ctx_tiers": [ { "spare_gb": 14, "ctx": 262144 }, { "spare_gb": 11, "ctx": 131072 }, { "spare_gb": 8, "ctx": 65536 } ],
     "halogen_min_ram_gb": 110, "strata_min_gb": 72, "strata_order": ["flash-next-iq3_s", "flash-next-iq3_xxs", "flash-next-iq2_xs", "flash-next-q2_0", "qwen36-q4"], "halogen_download_gb": 124
   },
   "catalog": {

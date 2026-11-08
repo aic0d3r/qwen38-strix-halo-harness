@@ -227,10 +227,10 @@ rec = lambda gpu, ram, fast, vram=0, npu=False, name="Strix Halo": h.recommend({
 r = rec("amd", 124, 124.5, npu=True)
 assert r["engine"] == "halogen" and r["tested"], r
 r = rec("amd", 124, 124.5)          # same box without the NPU: gufo at the shipped default quant and context
-assert (r["engine"], r["quant"], r["ctx"], r["tested"]) == ("gufo", "UD-Q4_K_XL", 65536, False), r
-assert (rec("amd", 102, 102)["quant"], rec("amd", 102, 102)["ctx"]) == ("UD-Q3_K_XL", 65536)
-assert (rec("amd", 96, 96)["quant"], rec("amd", 96, 96)["ctx"]) == ("UD-Q3_K_XL", 32768)
-assert (rec("amd", 92, 92)["quant"], rec("amd", 92, 92)["ctx"]) == ("UD-IQ3_XXS", 32768)
+assert (r["engine"], r["quant"], r["ctx"], r["tested"]) == ("gufo", "UD-Q4_K_XL", 262144, False), r
+assert (rec("amd", 102, 102)["quant"], rec("amd", 102, 102)["ctx"]) == ("UD-Q3_K_XL", 262144)
+assert (rec("amd", 96, 96)["quant"], rec("amd", 96, 96)["ctx"]) == ("UD-Q3_K_XL", 65536)
+assert (rec("amd", 92, 92)["quant"], rec("amd", 92, 92)["ctx"]) == ("UD-IQ3_XXS", 65536)
 assert rec("amd", 88, 88)["engine"] is None and rec("amd", 64, 64)["engine"] is None and rec("none", 128, 128, name="")["engine"] is None
 # every other AMD/NVIDIA box goes to Strata (gufo is Strix Halo only); the model is the biggest ISTA pack whose RAM need fits (Strata's rule),
 # Qwen3.6 below that, nothing under its 32 GB; abliterated needs the Unsloth layout; nothing here is measured
@@ -258,7 +258,7 @@ asked = []
 h.ask_yn = lambda q, d=False: asked.append(q) or True
 real_stdin, sys.stdin = sys.stdin, types.SimpleNamespace(isatty=lambda: True)
 h.offer_recommendation("gufo")
-assert open(h.QUANT_FILE).read().strip() == "UD-Q3_K_XL" and json.load(open(h.PICK)) == {"engine": "gufo", "model": "flash-next", "quant": "UD-Q3_K_XL", "ctx": 32768}, asked
+assert open(h.QUANT_FILE).read().strip() == "UD-Q3_K_XL" and json.load(open(h.PICK)) == {"engine": "gufo", "model": "flash-next", "quant": "UD-Q3_K_XL", "ctx": 65536}, asked
 assert h.saved_quant("gufo") == "UD-Q3_K_XL" and h.saved_quant("strata") == "UD-Q4_K_XL"
 h.offer_recommendation("gufo"); h.offer_recommendation("strata")
 assert len(asked) == 1, asked
