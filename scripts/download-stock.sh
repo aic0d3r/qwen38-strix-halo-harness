@@ -8,10 +8,11 @@
 set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 WANT=$(GUFO_WEIGHTS=stock bash "$REPO/server/start-gufo-flashnext.sh" --print-model)  # .../UD-Q4_K_XL/<shard 1>
-DIR=$(dirname "$WANT"); ROOT=$(dirname "$DIR")
+DIR=$(dirname "$WANT"); ROOT=$(dirname "$DIR"); Q=$(basename "$DIR")   # GUFO_QUANT / the hardware pick can name another quant
 MTP=mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
-SHARDS=4; GB=112                    # 103.7 GiB of shards; the MTP head (2.6 GB) and projector (0.9 GB) come on top
-HAVE=$(ls "$DIR"/Qwen3.8-Flash-Next-UD-Q4_K_XL-0000?-of-0000$SHARDS.gguf 2>/dev/null | wc -l)
+SHARDS=$(basename "$WANT" | sed -E 's/.*-of-0*([0-9]+)\.gguf/\1/')
+GB=$(python3 "$REPO/setup/harness.py" quant-info "$Q") || exit 1   # UD-Q4_K_XL: 103.7 GiB of shards; the MTP head (2.6 GB) and projector (0.9 GB) come on top
+HAVE=$(ls "$DIR"/Qwen3.8-Flash-Next-$Q-0000?-of-0000$SHARDS.gguf 2>/dev/null | wc -l)
 if [ "$HAVE" = "$SHARDS" ] && [ -f "$ROOT/$MTP" ] && [ -f "$ROOT/mmproj-BF16.gguf" ]; then echo "  already there: $DIR"; exit 0; fi
 mkdir -p "$DIR"
 AVAIL=$(df -BG --output=avail "$DIR" 2>/dev/null | tail -1 | tr -dc '0-9')
@@ -32,7 +33,7 @@ if [ -z "$HF_BIN" ]; then
 fi
 R=unsloth/Qwen3.8-Flash-Next-GGUF
 echo "  downloading (resumable - re-run if interrupted) ..."
-"$HF_BIN" download "$R" --revision "$REV" --include 'UD-Q4_K_XL/*' --local-dir "$ROOT" \
+"$HF_BIN" download "$R" --revision "$REV" --include "$Q/*" --local-dir "$ROOT" \
   || { echo "  download failed/incomplete - re-run to resume" >&2; exit 1; }
 if [ ! -f "$ROOT/$MTP" ]; then
   "$HF_BIN" download "$R" --revision "$REV" "MTP/$MTP" --local-dir "$ROOT" && mv "$ROOT/MTP/$MTP" "$ROOT/$MTP" \
@@ -45,6 +46,6 @@ fi
 # which Dynamic revision these shards are (main moves; the "preview" label is Unsloth's)
 SHA=$(python3 -c "import json,urllib.request as u;print(json.load(u.urlopen('https://huggingface.co/api/models/$R/revision/$REV',timeout=15))['sha'])" 2>/dev/null)
 echo "${SHA:-unknown} ($REV, $(date +%F))" > "$DIR/.unsloth-revision"
-HAVE=$(ls "$DIR"/Qwen3.8-Flash-Next-UD-Q4_K_XL-0000?-of-0000$SHARDS.gguf 2>/dev/null | wc -l)
+HAVE=$(ls "$DIR"/Qwen3.8-Flash-Next-$Q-0000?-of-0000$SHARDS.gguf 2>/dev/null | wc -l)
 [ "$HAVE" = "$SHARDS" ] && [ -f "$WANT" ] || { echo "  download finished but $HAVE of $SHARDS shards are on disk" >&2; exit 1; }
 echo "  download complete (unsloth @ ${SHA:0:8})"

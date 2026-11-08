@@ -1,5 +1,5 @@
 """python3 tests/test_harness.py - wizard core against a mock OpenAI server (no real engine needed)."""
-import json, os, subprocess, sys, tempfile, threading, http.server
+import json, os, re, subprocess, sys, tempfile, threading, http.server
 
 AGENT = tempfile.mkdtemp()
 os.environ["PI_CODING_AGENT_DIR"] = AGENT
@@ -123,9 +123,11 @@ h.prepare_start = lambda p, r: calls.append("prepare") or True
 h.served_models = lambda *a: []
 h.bring_up = lambda d, e, p, y: calls.append(f"start plan={p is not None}") or (e, "Qwen3-8B")
 h.finish = lambda e, m, no_tune, launch=False: calls.append(f"probe={not no_tune}")
+real_cap, h.capacity = h.capacity, lambda: {"gpu_name": "t", "vram_gb": 0, "fast_gb": 8, "disk_free_gb": 500}  # keeps lspci out of the recorded calls
 real_run, h.subprocess.run = h.subprocess.run, lambda *a, **k: calls.append("upgrade" if a[0][0] == "bash" else " ".join(a[0][:3])) or types.SimpleNamespace(returncode=0)
 h.cmd_setup(argparse.Namespace(yes=False, verbose=False, reconfigure=False, no_tune=False))
 h.subprocess.run = real_run
+h.capacity = real_cap
 for n, f in saved.items(): setattr(h, n, f)
 assert calls == ["update_offer", "plan_start", "install launch=False", "prepare", "upgrade", "start plan=True", "probe=True"], calls
 # upgrade chosen: pick_engine must not ask "Start <engine>?" (declining it used to exit setup); without one it does
@@ -159,7 +161,7 @@ h.weights_file = real_wf
 # strata missing: plan_start asks to install it, prepare_start runs install-strata.sh before the start
 saved = {n: getattr(h, n) for n in ("strata_installed", "ask_yn", "heap_holder")}
 h.strata_installed, h.ask_yn, h.heap_holder = (lambda: False), (lambda q, d=False: True), (lambda r: None)
-h.stock_ready = lambda: True  # the stock GGUF is on disk (this box's real state must not decide the test)
+h.stock_ready = lambda *a: True  # the stock GGUF is on disk (this box's real state must not decide the test)
 plan = h.plan_start("strata", {})
 assert plan["install"] == "strata" and not plan.get("stock"), plan
 ran, real_run = [], h.subprocess.run
@@ -180,11 +182,11 @@ assert h.plan_start("strata", {}) is None
 h.ask_yn = lambda q, d=False: True
 for n, f in saved_w.items(): setattr(h, n, f)
 # stock weights missing: gufo and Strata both download the one shared UD-Q4_K_XL first (before any Strata install); declining stops it
-h.stock_ready = lambda: False
+h.stock_ready = lambda *a: False
 plan = h.plan_start("gufo", {})
-assert plan["stock"] is True and "install" not in plan, plan
+assert plan["stock"] == "UD-Q4_K_XL" and "install" not in plan, plan
 plan = h.plan_start("strata", {})
-assert plan["stock"] is True and plan["install"] == "strata", plan
+assert plan["stock"] == "UD-Q4_K_XL" and plan["install"] == "strata", plan
 ran = []
 h.subprocess.run = lambda a, **k: ran.append(os.path.basename(a[1])) or types.SimpleNamespace(returncode=0)
 assert h.prepare_start(plan, {}) and ran == ["download-stock.sh", "install-strata.sh"], ran
@@ -192,7 +194,7 @@ h.subprocess.run = real_run
 h.ask_yn = lambda q, d=False: "UD-Q4_K_XL" not in q
 assert h.plan_start("gufo", {}) is None
 h.ask_yn = lambda q, d=False: True
-h.stock_ready = lambda: True
+h.stock_ready = lambda *a: True
 assert not h.plan_start("gufo", {}).get("stock")
 # TabbyAPI: not installed -> asks to install; the abliterated answer is called out, not silently dropped; no weights download
 h.tabbyapi_installed = lambda: False
@@ -257,4 +259,49 @@ assert tabby(24564).returncode == 0 and open(f"{fake}/tabby/config.yml").read().
 os.remove(f"{fake}/bin/nvidia-smi")
 r = subprocess.run(["bash", launch], capture_output=True, text=True, env=dict(os.environ, PATH="/usr/bin:/bin", TABBYAPI_DIR=f"{fake}/tabby"))
 assert r.returncode == 1 and "no NVIDIA GPU" in r.stderr, r.stderr
+# hardware -> engine/quant/context. The measured Strix Halo 124 GB box gets halogen; the rest is the table's arithmetic
+R = h.PROFILES["recommend"]
+rec = lambda gpu, ram, fast, vram=0, npu=False: h.recommend({"gpu": gpu, "ram_gb": ram, "npu": npu}, {"fast_gb": fast, "vram_gb": vram})
+r = rec("amd", 124, 124.5, npu=True)
+assert r["engine"] == "halogen" and r["tested"], r
+r = rec("amd", 124, 124.5)          # same box without the NPU: gufo at the shipped default quant and context
+assert (r["engine"], r["quant"], r["ctx"], r["tested"]) == ("gufo", "UD-Q4_K_XL", 65536, False), r
+assert (rec("amd", 102, 102)["quant"], rec("amd", 102, 102)["ctx"]) == ("UD-Q3_K_XL", 65536)
+assert (rec("amd", 96, 96)["quant"], rec("amd", 96, 96)["ctx"]) == ("UD-Q3_K_XL", 32768)
+assert (rec("amd", 92, 92)["quant"], rec("amd", 92, 92)["ctx"]) == ("UD-IQ3_XXS", 32768)
+assert rec("amd", 88, 88)["engine"] is None and rec("amd", 64, 64)["engine"] is None and rec("none", 128, 128)["engine"] is None
+assert rec("nvidia", 128, 32, vram=32)["engine"] == "tabbyapi" and rec("nvidia", 128, 32, vram=32)["tested"]
+assert not rec("nvidia", 64, 24, vram=24)["tested"] and rec("nvidia", 64, 24, vram=24)["kv"] == "Q8"
+assert rec("nvidia", 32, 24, vram=24)["engine"] is None and rec("nvidia", 64, 8, vram=8)["engine"] is None
+# the ladder is what the gufo launcher can load: every quant resolves to <quant>/...-00001-of-<shards>, sizes feed the download
+for q in R["quants"]:
+    out = subprocess.run(["bash", os.path.join(os.path.dirname(__file__), "..", "server", "start-gufo-flashnext.sh"), "--print-model"], capture_output=True, text=True,
+                         env=dict(os.environ, GUFO_WEIGHTS="stock", GUFO_QUANT=q["name"])).stdout.strip()
+    assert re.search(rf"/{q['name']}/Qwen3\.8-Flash-Next-{q['name']}-00001-of-0000[46]\.gguf$", out), out
+    assert h.quant_gb(q["name"]) == int(q["gib"]) + R["extras_gb"] + 1
+assert h.quant_gb("nope") is None
+# accepting the gufo pick saves the quant (the launcher reads it) and the context (start_engine passes it); a repeat does not ask again
+saved = {n: getattr(h, n) for n in ("hardware", "capacity", "ask_yn", "PICK", "QUANT_FILE")}
+h.hardware, h.capacity = (lambda: {"gpu": "amd", "ram_gb": 96, "npu": False, "cpus": 8}), (lambda: {"gpu_name": "t", "vram_gb": 0, "fast_gb": 96, "disk_free_gb": 500})
+h.PICK, h.QUANT_FILE = f"{AGENT}/pick.json", f"{AGENT}/quant"
+asked = []
+h.ask_yn = lambda q, d=False: asked.append(q) or True
+real_stdin, sys.stdin = sys.stdin, types.SimpleNamespace(isatty=lambda: True)
+h.offer_recommendation("gufo")
+assert open(h.QUANT_FILE).read().strip() == "UD-Q3_K_XL" and json.load(open(h.PICK)) == {"engine": "gufo", "quant": "UD-Q3_K_XL", "ctx": 32768}, asked
+assert h.saved_quant("gufo") == "UD-Q3_K_XL" and h.saved_quant("strata") == "UD-Q4_K_XL"
+h.offer_recommendation("gufo"); h.offer_recommendation("strata")
+assert len(asked) == 1, asked
+assert h.hw_key("gufo", "m") != h.hw_key("strata", "m")
+sys.stdin = real_stdin
+for n, f in saved.items(): setattr(h, n, f)
+# live monitor: halogen and Strata have one; Strata uses its own when its venv can run it, else our dashboard; others none
+assert h.monitor_cmd("halogen")[1].endswith("halogen-top.sh") and h.monitor_cmd("gufo") is None and h.monitor_cmd("tabbyapi") is None
+os.environ["STRATA_DIR"] = md = tempfile.mkdtemp()
+for f in ("setup.py", "update.sh", "strata.py"): open(f"{md}/{f}", "w").close()
+assert h.monitor_cmd("strata")[2] == "--strata"  # no venv: our dashboard
+os.makedirs(f"{md}/.venv/bin"); os.symlink(sys.executable, f"{md}/.venv/bin/python")
+sp = h.PROFILES["engines"]["strata"]["port"]  # the mock above moved it
+assert h.monitor_cmd("strata", once=True)[1:] == [f"{md}/strata.py", "monitor", "--url", f"http://127.0.0.1:{sp}", "--once"]
+assert h.monitor_cmd("strata", "http://nas:8080", True)[4] == "http://nas:8080"
 print("ok")

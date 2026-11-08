@@ -18,7 +18,7 @@ HAVE=$(bash "$REPO/server/start-strata.sh" --print-dir)
 DIR=${HAVE:-${STRATA_DIR:-$HOME/coding/Strata}}
 WEIGHTS="${STRATA_WEIGHTS:-$(cat "${PI_CODING_AGENT_DIR:-${PI_HOME:-$HOME/.pi}/agent}/harness-weights" 2>/dev/null)}"
 WEIGHTS=${WEIGHTS:-stock}
-SHARD1=$(GUFO_WEIGHTS=$WEIGHTS bash "$REPO/server/start-gufo-flashnext.sh" --print-model)
+SHARD1=$(GUFO_QUANT=UD-Q4_K_XL GUFO_WEIGHTS=$WEIGHTS bash "$REPO/server/start-gufo-flashnext.sh" --print-model)
 if [ ! -f "$SHARD1" ]; then
   [ "$WEIGHTS" = abliterated ] && echo "  abliterated weights not on disk ($SHARD1) - get them: scripts/download-abliterated.sh gufo" >&2 \
     || echo "  stock weights not on disk ($SHARD1) - get them: scripts/download-stock.sh" >&2

@@ -28,6 +28,18 @@
                  "update": { "have": "/api/version version", "latest": "gh:ollama/ollama", "how": "re-run the ollama installer or update it with your package manager" } },
     "lmstudio": { "port": 1234,  "probe": "/v1/models",  "provider": "lmstudio","npu": false, "managed": false, "loses": "NPU tools (guard, triage, dedup)" }
   },
+  "recommend": {
+    "_doc": "Hardware -> engine/quant/context table behind ./harness recommend. gib = size of the shards on unsloth/Qwen3.8-Flash-Next-GGUF (best first); only gufo reads the quant (halogen, Strata and TabbyAPI ship one fixed weight set). Anything not measured on a Strix Halo 124 GB box is marked untested.",
+    "quants": [
+      { "name": "UD-Q5_K_XL", "gib": 147.4 },
+      { "name": "UD-Q4_K_XL", "gib": 103.7 },
+      { "name": "UD-Q3_K_XL", "gib": 83.3 },
+      { "name": "UD-IQ3_XXS", "gib": 77.9 }
+    ],
+    "extras_gb": 4,
+    "ctx_tiers": [ { "spare_gb": 14, "ctx": 65536 }, { "spare_gb": 8, "ctx": 32768 } ],
+    "halogen_min_ram_gb": 110, "tabby_min_vram_gb": 16, "tabby_min_ram_gb": 56, "tabby_measured_vram_gb": 30, "tabby_download_gb": 100, "halogen_download_gb": 124
+  },
   "models": {
     "default": {
       "reasoning": false, "maxTokens": 8192, "reserveTokens": 16384,

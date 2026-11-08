@@ -176,6 +176,10 @@ if [ "$DOCTOR" = 1 ]; then
       else ok "$e configured, not running (not the active engine)"; fi
     fi
   done
+  case "${ACT:-}" in
+    halogen) ok "live monitor: ./harness monitor   (scripts/halogen-top.sh)" ;;
+    strata)  ok "live monitor: ./harness monitor   (Strata's own 'strata monitor' when its venv has Textual, else scripts/halogen-top.sh --strata)" ;;
+  esac
   host_checks
   # the weights answer the launchers read (docs/ENGINES.md#abliterated-models). An abliterated
   # model will not argue with instructions it reads; taint-gate confirms risky actions after

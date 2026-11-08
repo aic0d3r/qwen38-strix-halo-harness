@@ -380,6 +380,10 @@ command. Context knobs, the `vm-compact.timer` and the small-context opt-out are
 ### Live stats
 
 ```sh
+# the right monitor for your active engine (also: ./harness monitor strata --url http://host:8080, --once for one snapshot)
+./harness monitor                 # Strata: its own `strata monitor` (Textual; slots, hardware, requests) when its venv has
+                                  # Textual, else halogen-top.sh --strata; halogen: halogen-top.sh; other engines: none
+
 # live dashboard in a second terminal: busy state, queue, KV pool, per-request prefill/decode t/s, cache
 ./scripts/halogen-top.sh          # optional refresh interval in seconds (default 1); piped = one log line per request
 ./scripts/halogen-top.sh --strata # same for a Strata server on :8080 (or --strata http://host:port)

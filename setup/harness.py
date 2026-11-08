@@ -9,6 +9,8 @@
   ./harness update-check [engine]       one line if the active engine has a newer release (when the check is on)
   ./harness config                      change one saved answer (sidecar, voice, update check, engine, sudo hints)
   ./harness detect                      print what was found (json)
+  ./harness monitor [engine] [--url U]  live dashboard: Strata's own `strata monitor`, else scripts/halogen-top.sh
+  ./harness recommend [--json]          best engine, weights quant and context for this hardware, and why
 
 Profiles live in config/profiles.json. Stdlib only. Never kills or restarts servers it did not launch.
 """
@@ -63,6 +65,112 @@ def hardware():
     elif sys.platform == "darwin":
         gpu = "apple"
     return {"cpus": os.cpu_count(), "ram_gb": mem, "gpu": gpu, "npu": bool(glob.glob("/dev/accel/accel*"))}
+
+
+# ---------- recommend: hardware -> engine, weights quant, context ----------
+PICK = os.path.join(AGENT, "harness-pick.json")    # accepted recommendation: {engine, quant, ctx}; start_engine passes ctx as GUFO_CTX
+QUANT_FILE = os.path.join(AGENT, "harness-quant")  # stock quant gufo loads; server/start-gufo-flashnext.sh reads it
+DEFAULT_QUANT = "UD-Q4_K_XL"
+
+
+def capacity():
+    """What hardware() leaves out. fast_gb: memory the GPU reads at full speed (NVIDIA VRAM; AMD VRAM+GTT, the whole
+    shared pool on an APU; Apple unified RAM). Best effort: a failed probe gives 0/"" and the recommendation says so."""
+    h = hardware()
+    name, vram, fast = "", 0, float(h["ram_gb"])
+    try:
+        if h["gpu"] == "nvidia":
+            row = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"], capture_output=True, text=True).stdout.splitlines()[0]
+            name, _, mib = row.rpartition(",")
+            name, vram = name.strip(), (int(mib) + 512) // 1024  # a "24 GB" card reports 24564 MiB
+            fast = float(vram)
+        elif h["gpu"] == "amd":
+            pools = [sum(int(open(f"{c}/mem_info_{k}_total").read()) for k in ("vram", "gtt")) / 2**30 for c in glob.glob("/sys/class/drm/card[0-9]/device") if os.path.exists(f"{c}/mem_info_gtt_total")]
+            fast = max(pools) if pools else 0.0
+            vram = max([int(open(f).read()) / 2**30 for f in glob.glob("/sys/class/drm/card[0-9]/device/mem_info_vram_total")] or [0])
+            lines = [l for l in subprocess.run(["lspci"], capture_output=True, text=True).stdout.splitlines() if re.search(r"VGA|Display|3D", l) and "AMD" in l]
+            name = re.sub(r"\s*(\[[^\]]*\]|\(rev [^)]*\))", "", lines[0].split("[AMD/ATI]", 1)[-1].split(": ", 1)[-1]).strip() if lines else ""
+            name = name or "AMD GPU"
+    except Exception:
+        pass
+    d = os.environ.get("ENGINE_DIR") or os.path.expanduser("~/LLMBench/models")
+    while d != os.path.dirname(d) and not os.path.isdir(d):
+        d = os.path.dirname(d)
+    return {"gpu_name": name, "vram_gb": round(vram, 1), "fast_gb": round(fast, 1), "disk_free_gb": shutil.disk_usage(d).free // 2**30}
+
+
+def recommend(hw, cap):
+    """-> {engine|None, quant, ctx, kv, tested, download_gb, why}. Table in config/profiles.json ("recommend"). Only
+    halogen on a Strix Halo with ~124 GB and TabbyAPI at 30+ GB VRAM follow a measurement; the rest is arithmetic on
+    published shard sizes and says tested=False. Context is a heuristic on spare memory (KV size per token is unmeasured)."""
+    R = PROFILES["recommend"]
+    fast, ram, vram = cap["fast_gb"], hw["ram_gb"], cap["vram_gb"]
+    none = lambda why: {"engine": None, "quant": None, "ctx": None, "kv": None, "tested": False, "download_gb": 0, "why": why}
+    if hw["gpu"] == "amd":
+        if hw["npu"] and ram >= R["halogen_min_ram_gb"]:
+            return {"engine": "halogen", "quant": None, "ctx": None, "kv": None, "tested": True, "download_gb": R["halogen_download_gb"],
+                    "why": f"AMD NPU + GPU with {ram} GB shared memory: halogen runs the whole model and the NPU guard/triage/dedup tools (its launcher sets context and KV slots)"}
+        for q in R["quants"]:
+            spare = fast - q["gib"] - R["extras_gb"]
+            if spare >= R["ctx_tiers"][-1]["spare_gb"]:
+                ctx = next(t["ctx"] for t in R["ctx_tiers"] if spare >= t["spare_gb"])
+                return {"engine": "gufo", "quant": q["name"], "ctx": ctx, "kv": None, "tested": False, "download_gb": int(q["gib"]) + R["extras_gb"] + 1,
+                        "why": f"AMD GPU, {fast:.0f} GB addressable: {q['name']} ({q['gib']} GiB) leaves {spare:.0f} GB for context -> {ctx} tokens (gufo has no KV-cache flag)"}
+        return none(f"AMD GPU with {fast:.0f} GB addressable: the smallest quant ({R['quants'][-1]['gib']} GiB) plus context does not fit")
+    if hw["gpu"] == "nvidia":
+        if vram < R["tabby_min_vram_gb"]:
+            return none(f"NVIDIA {vram} GB VRAM: TabbyAPI needs {R['tabby_min_vram_gb']}+ GB (the experts that do not fit spill to system RAM)")
+        if ram < R["tabby_min_ram_gb"]:
+            return none(f"{ram} GB RAM: the spilled experts need {R['tabby_min_ram_gb']}+ GB or decode collapses into swap")
+        return {"engine": "tabbyapi", "quant": "EXL3 3.05bpw", "ctx": None, "kv": "Q8", "tested": vram >= R["tabby_measured_vram_gb"], "download_gb": R["tabby_download_gb"],
+                "why": f"NVIDIA {vram} GB VRAM + {ram} GB RAM: TabbyAPI keeps the rest of the experts in RAM (its launcher sizes that from VRAM, context 131072, Q8 KV cache)"}
+    return none(f"no supported GPU path on this box (gpu={hw['gpu']}); a remote engine works: ./setup.sh --gufo <url>")
+
+
+def describe(rec, cap):
+    gpu = f"{cap['gpu_name'] or 'no GPU'}, {cap['fast_gb']:g} GB GPU-addressable, {cap['disk_free_gb']} GB disk free"
+    if not rec["engine"]:
+        return [f"hardware: {gpu}", f"recommended: nothing - {rec['why']}"]
+    out = [f"hardware: {gpu}",
+           f"recommended: {rec['engine']}" + (f", weights {rec['quant']}" if rec["quant"] else "") + (f", context {rec['ctx']}" if rec["ctx"] else "") + (f", {rec['kv']} KV cache" if rec["kv"] else "")
+           + ("" if rec["tested"] else "  (untested on this class of hardware)"), f"  why: {rec['why']}"]
+    if rec["download_gb"] and cap["disk_free_gb"] < rec["download_gb"] + 5:
+        out.append(f"  ! a fresh download is ~{rec['download_gb']} GB, only {cap['disk_free_gb']} GB free (fine if the weights are already on disk)")
+    return out
+
+
+def quant_gb(name):
+    """Download size in GB for a stock quant: shards + MTP head + projector. None for an unknown quant."""
+    q = next((q for q in PROFILES["recommend"]["quants"] if q["name"] == name), None)
+    return q and int(q["gib"]) + PROFILES["recommend"]["extras_gb"] + 1
+
+
+def saved_quant(engine="gufo"):
+    """The stock quant the engine loads: Strata only knows the default; gufo follows the saved hardware pick."""
+    try:
+        q = open(QUANT_FILE).read().strip()
+    except OSError:
+        q = ""
+    return q if engine == "gufo" and quant_gb(q) else DEFAULT_QUANT
+
+
+def offer_recommendation(eng):
+    """Right after the engine pick: when it is the recommended one, offer its quant and context and save the answer.
+    Never changes the engine and never asks twice for the same settings."""
+    if not sys.stdin.isatty():
+        return
+    rec = recommend(hardware(), capacity())
+    if rec["engine"] != eng or eng != "gufo":  # only gufo has a pick to save: halogen and TabbyAPI size themselves
+        return
+    want = {"engine": eng, "quant": rec["quant"], "ctx": rec["ctx"]}
+    if jget(PICK, None) == want and (eng != "gufo" or saved_quant() == rec["quant"]):
+        return
+    if not ask_yn(f"Use the recommended settings for this hardware? ({rec['quant'] or 'fixed weights'}, context {rec['ctx'] or 'engine default'}; {rec['why']})", True):
+        return
+    os.makedirs(AGENT, exist_ok=True)
+    if eng == "gufo" and rec["quant"]:
+        open(QUANT_FILE, "w").write(rec["quant"] + "\n")
+    jput(PICK, want)
 
 
 def served_models(port, engine=None):
@@ -265,6 +373,8 @@ def install_extensions(engine, extra=(), verbose=True, show_ok=True, launch=True
 def hw_key(engine, model_id):
     h = hardware()
     w = "|abliterated" if engine in WEIGHTS_ENGINES and weights_pref() == "abliterated" else ""  # stock keeps its old key
+    if engine == "gufo" and not w and saved_quant() != DEFAULT_QUANT:
+        w = "|" + saved_quant()  # another quant is another speed; the default quant keeps its old key
     return hashlib.sha1(f"{engine}|{model_id}|{h['gpu']}|{h['ram_gb']}{w}".encode()).hexdigest()[:12]
 
 
@@ -319,6 +429,22 @@ def active():
     return jget(os.path.join(AGENT, "harness-profile.json"))
 
 
+def cmd_recommend(a):
+    h, cap = hardware(), capacity()
+    rec = recommend(h, cap)
+    if a.json:
+        print(json.dumps({"hardware": h, "capacity": cap, "recommendation": rec}, indent=1))
+    else:
+        print("\n".join(describe(rec, cap)))
+
+
+def cmd_quant_info(a):
+    gb = quant_gb(a.name)
+    if gb is None:
+        sys.exit(f"unknown quant {a.name}; known: {', '.join(q['name'] for q in PROFILES['recommend']['quants'])}")
+    print(gb)
+
+
 def cmd_detect(_):
     print(json.dumps(detect(), indent=1))
 
@@ -340,8 +466,9 @@ def heap_holder(running):
 def engine_menu(running):
     """One screen: state, model, last speed, what you lose, memory conflicts. -> engine name."""
     cur = (active() or {}).get("engine")
-    hw = hardware()  # fresh box: halogen first where it can run, then the NVIDIA engines on an NVIDIA box, then engines we can start for you
-    order = sorted(PROFILES["engines"], key=lambda e: (e != cur, e not in running, not (hw["npu"] and e == "halogen"),
+    hw = hardware()  # fresh box: the recommended engine, halogen where it can run, then the NVIDIA engines on an NVIDIA box, then engines we can start for you
+    rec = recommend(hw, capacity())["engine"]
+    order = sorted(PROFILES["engines"], key=lambda e: (e != cur, e not in running, e != rec, not (hw["npu"] and e == "halogen"),
                                                        not (hw["gpu"] == "nvidia" and e in ("strata", "tabbyapi")),
                                                        "script" not in PROFILES["engines"][e], e))
     holder = heap_holder(running)
@@ -352,7 +479,7 @@ def engine_menu(running):
         state = f"running: {mods[0] if mods else '-'}" if e in running else "not running"
         lose = f"loses: {c.get('loses', '?')}"
         warn = f" | ! stops {holder} first (shared GPU memory)" if e in BIG and holder and holder != e and e not in running else ""
-        labels[f"{'*' if e == cur else ' '}{'o' if e in running else '-'} {e:9s} {state} | {last_speed(e)} | {lose}{warn}"] = e
+        labels[f"{'*' if e == cur else ' '}{'o' if e in running else '-'} {e:9s}{' (recommended)' if e == rec else ''} {state} | {last_speed(e)} | {lose}{warn}"] = e
     return labels[choose("Which engine? (* = current, o = running)", list(labels), False)]
 
 
@@ -445,11 +572,11 @@ def launcher_has(script):
     return bool(subprocess.run(["bash", os.path.join(REPO, "server", script), "--print-run"], capture_output=True, text=True).stdout.strip())
 
 
-def stock_ready():
-    """Every shard of the stock UD-Q4_K_XL gufo and Strata share is on disk (scripts/download-stock.sh puts them there).
-    Shard 1 is tiny and lands first, so it alone proves nothing."""
+def stock_ready(quant=DEFAULT_QUANT):
+    """Every shard of the stock quant is on disk (scripts/download-stock.sh puts them there; Strata and an unpicked
+    gufo use UD-Q4_K_XL). Shard 1 is tiny and lands first, so it alone proves nothing."""
     first = subprocess.run(["bash", os.path.join(REPO, "server", "start-gufo-flashnext.sh"), "--print-model"], capture_output=True, text=True,
-                           env=dict(os.environ, GUFO_WEIGHTS="stock")).stdout.strip()
+                           env=dict(os.environ, GUFO_WEIGHTS="stock", GUFO_QUANT=quant)).stdout.strip()
     m = re.search(r"-00001-of-(\d{5})\.gguf$", first)
     return bool(m) and all(os.path.isfile(first.replace("-00001-of-", f"-{i:05d}-of-")) for i in range(1, int(m.group(1)) + 1))
 
@@ -493,12 +620,14 @@ def plan_start(engine, running, ask_start=True):
             if not ask_yn(f"The abliterated Strata model is gufo's orca-uncensored GGUF, which is not on this box. Download it (~{WEIGHTS_ENGINES['gufo'][1]} GB, gated: accept the terms on its Hugging Face page and `hf auth login` first; {free} GB free, resumable)?"):
                 return None
             plan["weights"], plan["weights_gb"] = "gufo", WEIGHTS_ENGINES["gufo"][1]
-    # gufo and Strata share one stock GGUF (Unsloth's UD-Q4_K_XL, latest Dynamic): fetch it once, whichever comes first
-    if engine in ("gufo", "strata") and weights_pref() == "stock" and not stock_ready():
+    # gufo and Strata share one stock GGUF (Unsloth's UD-Q4_K_XL, latest Dynamic): fetch it once, whichever comes first.
+    # gufo may follow the hardware pick to a smaller quant; Strata only runs UD-Q4_K_XL.
+    q = saved_quant(engine)
+    if engine in ("gufo", "strata") and weights_pref() == "stock" and not stock_ready(q):
         free = shutil.disk_usage(os.path.expanduser("~")).free // 2**30
-        if not ask_yn(f"The stock weights (Unsloth UD-Q4_K_XL, shared by gufo and Strata) are not on this box. Download them (~112 GB, {free} GB free, resumable)?"):
+        if not ask_yn(f"The stock weights (Unsloth {q}, {'shared by gufo and Strata' if q == DEFAULT_QUANT else 'picked for this hardware'}) are not on this box. Download them (~{quant_gb(q)} GB, {free} GB free, resumable)?"):
             return None
-        plan["stock"] = True
+        plan["stock"] = q
     if engine == "tabbyapi":
         if weights_pref() == "abliterated":  # no abliterated EXL3 exists: say it before anything installs or starts
             print("  ! TabbyAPI serves turboderp's stock EXL3 quant; your saved weights answer 'abliterated' does not apply to it"
@@ -529,7 +658,8 @@ def prepare_start(plan, running):
         return False
     if wd and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-abliterated.sh"), wd, "--yes"]).returncode:
         return False  # before the install: abliterated Strata installs on top of gufo's shards
-    if plan.pop("stock", False) and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-stock.sh"), "--yes"]).returncode:
+    sq = plan.pop("stock", False)
+    if sq and subprocess.run(["bash", os.path.join(REPO, "scripts", "download-stock.sh"), "--yes"], env=dict(os.environ, GUFO_QUANT=sq)).returncode:
         return False  # same for stock: Strata installs on top of the shared UD-Q4_K_XL
     inst = plan.pop("install", None)
     return not (inst and subprocess.run(["bash", os.path.join(REPO, "scripts", f"install-{inst}.sh"), "--yes"]).returncode)
@@ -542,7 +672,11 @@ def start_engine(engine, running, plan=None, wait_s=900):
         return False
     c = PROFILES["engines"][engine]
     log = open(f"/tmp/harness-{engine}.log", "w")
-    proc = subprocess.Popen(["bash", os.path.join(REPO, c["script"])], stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
+    env = dict(os.environ)
+    pick = jget(PICK, {}) or {}
+    if engine == "gufo" and pick.get("engine") == "gufo" and pick.get("ctx"):
+        env.setdefault("GUFO_CTX", str(pick["ctx"]))  # the accepted hardware pick; an explicit GUFO_CTX still wins
+    proc = subprocess.Popen(["bash", os.path.join(REPO, c["script"])], stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True, env=env)
     t0 = time.time()
     try:
         while time.time() - t0 < wait_s:
@@ -582,6 +716,7 @@ def pick_engine(d, yes, want=None, on_pick=None):
     if not running:
         print("No engine is running yet. Pick one: halogen, gufo, Strata and TabbyAPI can be started (and halogen, Strata or TabbyAPI installed) from here.")
     eng = engine_menu(running)
+    offer_recommendation(eng)
     upgrading = on_pick(eng) if on_pick else False
     # the server keeps what it loaded at start: a new default needs a restart (an upgrade restarts it anyway)
     restart = ask_weights(eng) and eng in running and not upgrading and ask_yn(
@@ -806,6 +941,31 @@ def update_offer(eng):
     return False
 
 
+def monitor_cmd(eng, url=None, once=False):
+    """argv of the live monitor for an engine, or None. Strata: its own `strata monitor` (Textual, optional: Strata's
+    venv has it when its setup installed the monitor requirements; --once needs none), else our scripts/halogen-top.sh
+    --strata. halogen: halogen-top.sh. Other engines have none."""
+    top = os.path.join(REPO, "scripts", "halogen-top.sh")
+    if eng == "halogen":
+        return ["bash", top, *([url] if url else [])]
+    if eng != "strata":
+        return None
+    d = subprocess.run(["bash", os.path.join(REPO, "server", "start-strata.sh"), "--print-dir"], capture_output=True, text=True).stdout.strip()
+    py = os.path.join(d, ".venv", "bin", "python")
+    if d and os.path.isfile(os.path.join(d, "strata.py")) and os.access(py, os.X_OK) and (
+            once or subprocess.run([py, "-c", "import textual"], capture_output=True).returncode == 0):
+        return [py, os.path.join(d, "strata.py"), "monitor", "--url", url or f"http://127.0.0.1:{PROFILES['engines']['strata']['port']}", *(["--once"] if once else [])]
+    return ["bash", top, "--strata", *([url] if url else [])]
+
+
+def cmd_monitor(a):
+    eng = a.engine or (active() or {}).get("engine") or next((x["engine"] for x in detect()["engines"]), "halogen")
+    argv = monitor_cmd(eng, a.url, a.once)
+    if not argv:
+        sys.exit(f"no live monitor for {eng} (halogen and Strata have one)")
+    os.execvp(argv[0], argv)
+
+
 def cmd_up(_):
     """start.sh: bring the saved engine up (start it if we ship a launcher; ask before stopping another engine
     that holds the GPU memory), refresh the install quietly, then the update notice + upgrade offer."""
@@ -876,6 +1036,8 @@ def finish(eng, mod, no_tune, launch=False):
         speed += f" (saved {tuned.get('when', '')}; re-measure: ./harness tune)"
     print(f"\n== ready ==\n  engine   {eng} -> {prov}/{mid}\n  context  {ctx}\n  speed    {speed}")
     print("  start    ./start.sh ~/your-project")
+    if eng in ("halogen", "strata"):
+        print("  monitor  ./harness monitor   (live speed, memory and requests; Ctrl-C to quit)")
     print(f"  choices  {choices_line()}   (change: ./harness config)")
     print("  check    ./setup.sh --doctor   (status: ./harness status)")
     if launch:
@@ -887,6 +1049,8 @@ def cmd_setup(a):
     h = d["hardware"]
     verbose = a.verbose or active() is None  # first run shows everything; later runs only what needs you
     print(f"hardware: {h['ram_gb']} GB RAM, gpu={h['gpu']}, npu={h['npu']}; engines up: {[x['engine'] for x in d['engines']] or 'none'}")
+    cap = capacity()
+    print("\n".join(describe(recommend(h, cap), cap)[1:]))
     if not d["pi"]:
         print("! pi not found on PATH - install it first")
     # 1. every question first ...
@@ -905,7 +1069,7 @@ def cmd_setup(a):
             ["download halogen (~124 GB, resumable)"] if plan and plan["download"] else []) + (
             [f"install Strata for the {weights_pref()} weights (" + ("orca-uncensored in place" if weights_pref() == "abliterated" else "shared stock UD-Q4_K_XL in place") + ")"] if plan and plan.get("install") == "strata" else []) + (
             ["install TabbyAPI (venv + EXL3 quant, resumable)"] if plan and plan.get("install") == "tabbyapi" else []) + (
-            ["download the stock UD-Q4_K_XL (~112 GB, resumable)"] if plan and plan.get("stock") else []) + (
+            [f"download the stock {plan['stock']} (~{quant_gb(plan['stock'])} GB, resumable)"] if plan and plan.get("stock") else []) + (
             [f"download the abliterated {eng} weights (~{plan.get('weights_gb')} GB, resumable)"] if plan and plan.get("weights") else []) + (
             [f"upgrade {eng} (restart, rolls back on failure)"] if upgrade else []) + (
             [f"start {eng} (model asked once it answers, if it serves several)"] if plan else [f"use {eng} (running)"]) + (
@@ -1022,7 +1186,7 @@ def main():
     import argparse
     ap = argparse.ArgumentParser(prog="harness")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for n, f in (("detect", cmd_detect), ("setup", cmd_setup), ("use", cmd_use), ("tune", cmd_tune), ("status", cmd_status), ("config", cmd_config), ("update-check", cmd_update_check), ("up", cmd_up)):
+    for n, f in (("detect", cmd_detect), ("setup", cmd_setup), ("use", cmd_use), ("tune", cmd_tune), ("status", cmd_status), ("config", cmd_config), ("update-check", cmd_update_check), ("up", cmd_up), ("recommend", cmd_recommend), ("quant-info", cmd_quant_info), ("monitor", cmd_monitor)):
         p = sub.add_parser(n)
         p.set_defaults(fn=f)
         if n in ("setup", "use"):
@@ -1032,6 +1196,14 @@ def main():
             p.add_argument("--verbose", action="store_true", help="show full setup.sh output (default on the first run only)")
         if n == "use":
             p.add_argument("target", help="engine[/model]")
+        if n == "recommend":
+            p.add_argument("--json", action="store_true")
+        if n == "monitor":
+            p.add_argument("engine", nargs="?", help="default: the active engine (halogen or strata)")
+            p.add_argument("--url", help="server root, e.g. a remote Strata (default: this box)")
+            p.add_argument("--once", action="store_true", help="Strata only: print one snapshot and exit")
+        if n == "quant-info":
+            p.add_argument("name")
         if n == "update-check":
             p.add_argument("engine", nargs="?", help="default: the active engine")
     a = ap.parse_args()
