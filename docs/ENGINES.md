@@ -182,9 +182,23 @@ files land in `ENGINE_DIR` (default `~/LLMBench/models/qwen38-flash-next`) where
 looks, and Strata uses them in place, so there is one copy, not two. UD-IQ4_XS (87 GiB), Strata's own previous
 stock pick, is no longer the default: gufo 0.12 stopped loading it, and one shared file replaces two downloads.
 
-Note Strata pins specific Unsloth revisions and checks its own downloads against them; files from `--gguf-dir`
-that differ (as Dynamic 3.1 does from the revision Strata pins) are accepted with a warning that they are a
-complete GGUF, never refused.
+**Support, checked against the projects' own sources (2026-11-08):** both engines name this exact revision.
+`download-stock.sh` fetches `main`, whose four UD-Q4_K_XL shards are byte-identical (size and SHA-256) to Unsloth
+commit `d9620119`.
+
+- **gufo:** its model page lists `UD-Q4_K_XL/*` (four shards) with the shared Q8 MTP head and `mmproj-BF16.gguf`,
+  pinned to `d96201194f10`, and says it keeps the tensor types and shapes of the earlier `38bb39ee9782` with
+  unchanged AR pp2048/tg128 speed. At the `v0.30.0` tag that page still named `38bb39ee`; at `v0.31.0` (the version
+  `start-gufo-flashnext.sh` pins) it names 3.1. 0.31.0 also fixes opening tensorless split shards (#1021), which
+  the 10 MB metadata-only first shard of the new layout is (our inference, the changelog does not say so).
+- **Strata:** 0.2.11+ lists size and SHA-256 pins for exactly these four shards (`UNSLOTH_Q4_V31_SHARDS`) and
+  accepts the layout from `--gguf-dir`; we checked all four against the Hub. Its own download of UD-Q4_K_XL still
+  fetches the 09-30 files, which is why this harness passes `--gguf-dir`. The two layouts cannot be mixed. Its
+  release notes list real-file runs of the other v3.1 sets but not of UD-Q4_K_XL, so that one rests on the
+  layout match (same 1224 tensors, the n-gram table moved into its own shard).
+- The MTP head and projector are the same bytes at both revisions.
+
+Neither engine has run the stock 3.1 files on this box yet; `scripts/engine-matrix.py` is the test.
 
 ## Abliterated models
 

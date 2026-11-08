@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Install Strata (github.com/Niko1221/Strata) from source the way its docs/SOURCE_INSTALL.md describes (git clone,
 # then its own ./setup.sh), with the model for the saved weights answer (./harness config -> weights). Both run
-# UD-Q4_K_XL from a GGUF folder used in place (--gguf-dir: same tensor layout; Strata checks own files for
-# completeness only, so Unsloth's newer Dynamic 3.1 files are accepted with a warning). It never downloads weights:
+# UD-Q4_K_XL from a GGUF folder used in place (--gguf-dir). Strata 0.2.11+ pins Unsloth's Dynamic 3.1 shards
+# (UNSLOTH_Q4_V31_SHARDS, checked by size and SHA-256) and takes them from a folder you already have, while its own
+# download of UD-Q4_K_XL is still the 09-30 files. It never downloads weights:
 #   abliterated -> gufo's orca-uncensored shards (scripts/download-abliterated.sh gufo)
 #   stock       -> Unsloth's UD-Q4_K_XL that gufo shares (scripts/download-stock.sh)
 # Strata keys its repacked dense weights (packs/unsloth-ud-q4_k_xl) by model name only, so switching answers
