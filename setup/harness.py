@@ -15,6 +15,8 @@
 Profiles live in config/profiles.json. Stdlib only. Never kills or restarts servers it did not launch.
 """
 import json, os, re, shutil, subprocess, sys, time, urllib.request, uuid, hashlib, glob
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import strata_doctor
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AGENT = os.environ.get("PI_CODING_AGENT_DIR") or os.path.join(os.environ.get("PI_HOME", os.path.expanduser("~/.pi")), "agent")
@@ -811,8 +813,11 @@ def start_engine(engine, running, plan=None, wait_s=900):
                 print(f"\n  {engine} is up")
                 return True
             if proc.poll() is not None:  # launchers exec the server: an exited launcher means the start failed
-                tail = open(f"/tmp/harness-{engine}.log").read().strip().splitlines()[-3:]
+                whole = open(f"/tmp/harness-{engine}.log").read()
+                tail = whole.strip().splitlines()[-3:]
                 print(f"\n  {engine} failed to start:" + "".join(f"\n    {l}" for l in tail))
+                if engine == "strata":
+                    print("".join(f"\n  -> {x}" for x in strata_doctor.explain(whole)), end="")
                 return False
             print(f"\r  waiting for {engine} on :{c['port']} ... {int(time.time() - t0)}s (Ctrl-C to stop waiting)", end="", flush=True)
             time.sleep(3)

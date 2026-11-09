@@ -174,6 +174,8 @@ if [ "$DOCTOR" = 1 ]; then
       if [[ "$RUNNING" == *" $e "* ]]; then ok "$e up (:8080)"
       elif [ "$e" = "${ACT:-}" ]; then fail "$e down (the active engine) - ./start.sh starts it"
       else ok "$e configured, not running (not the active engine)"; fi
+      # known Strata failures (port taken, model id drift, why it is down, install feed): only the warnings, only when Strata is the engine you chose
+      [ "$e" = strata ] && [ "${ACT:-}" = strata ] && while read -r L T; do [ "$L" = warn ] && warn "$T"; done < <(python3 "$REPO/setup/strata_doctor.py" check 2>/dev/null)
     fi
   done
   case "${ACT:-}" in
