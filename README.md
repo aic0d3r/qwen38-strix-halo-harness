@@ -6,6 +6,10 @@ iGPU with **262k context**, NPU models screening and routing prompts, and a side
 summaries. Guided setup for llama.cpp, vLLM, Ollama, LM Studio, Strata and more. Built on
 [pi](https://github.com/earendil-works/pi).
 
+It is also an engine switcher: `./harness use <engine>` moves pi between llama.cpp, vLLM, Ollama, LM Studio,
+halogen, gufo and Strata, the wizard starts halogen and gufo for you, and it upgrades halogen, gufo and Strata
+with rollback on failure.
+
 > **Not only for Strix Halo, and not only local.** The harness (token-saving extensions, context
 > management, guards, sidecar) runs on any machine, with any OpenAI-compatible engine or a cloud
 > model. Only the NPU tools need Strix Halo, and they're optional. Strix Halo is just the
@@ -65,6 +69,19 @@ summaries. Guided setup for llama.cpp, vLLM, Ollama, LM Studio, Strata and more.
 ![Local Qwen3.8 Flash-Next 125B vs GLM 5.3 cloud tiers on Strix Halo: time to first token and decode tokens per second](docs/charts/local-vs-cloud.png)
 
 Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70 W sustained.
+
+## Windows
+
+Install [Strata](https://github.com/Niko1221/Strata) with its own installer and start it, install pi
+(`irm https://pi.dev/install.ps1 | iex`), then in this repo run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+`setup.ps1` sets pi up against the running engine (default `http://127.0.0.1:8080`; `-Engine gufo -Url <url>` for gufo).
+It never installs or starts an engine, and it offers Git for Windows, Python 3, uv and Serena through winget. Steps,
+checks and what is not covered yet: [docs/WINDOWS.md](docs/WINDOWS.md).
 
 ## Guided setup
 
@@ -502,11 +519,6 @@ container and your checkpoint files.
 - [Qwen3.8-27B on Strix Halo at 31 t/s decode, the full stack guide](https://www.reddit.com/r/LocalLLaMA/comments/1vsw6nz/) (r/LocalLLaMA)
 - [Running a local coding agent on Strix Halo with pi + llama.cpp](https://www.reddit.com/r/StrixHalo/comments/1w6c5nz/) (r/StrixHalo)
 - [Qwen3.8-Flash-Next on Strix Halo: 40 t/s sustained decode](https://www.reddit.com/r/StrixHalo/comments/1w6cf5t/) (r/StrixHalo)
-- [Neon Ladder: a playtest-graded benchmark for local LLM stacks](https://www.reddit.com/r/LocalLLaMA/comments/1w6cjm5/) (r/LocalLLaMA)
-
-Companion repo: **[neon-ladder](https://github.com/aic0d3r/neon-ladder)** — the playtest-graded
-benchmark this stack was validated on. Benchmark protocol questions live there; harness questions
-live here.
 
 ## License
 

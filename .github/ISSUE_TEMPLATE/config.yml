@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or setup help
+    url: https://github.com/aic0d3r/local-ai-harness/discussions
+    about: Ask in Discussions first for setup and tuning questions

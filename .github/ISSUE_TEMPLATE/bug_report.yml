@@ -1,0 +1,37 @@
+name: Bug report
+description: Setup, engine or extension problem
+labels: [bug]
+body:
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options: [Linux, Windows, macOS]
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Engine
+      options: [halogen, gufo, Strata, llama.cpp, vLLM, Ollama, LM Studio, cloud model, other]
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware
+      description: CPU/APU, GPU and VRAM, RAM
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Diagnostics
+      description: Linux, `./setup.sh --doctor` output. Windows, the full `setup.ps1` output and your Windows build. Redact tokens and URLs you want private.
+      render: text

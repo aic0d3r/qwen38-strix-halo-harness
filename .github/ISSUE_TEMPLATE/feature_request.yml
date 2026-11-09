@@ -1,0 +1,15 @@
+name: Feature request
+description: A new engine, model, hardware path or extension
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What do you want to do that you can't today?
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Your setup
+      description: OS, hardware, engine and model

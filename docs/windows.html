@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Run a local AI coding agent on Windows with Strata</title>
+<meta name="description" content="Set up the pi coding agent against a local Strata engine on Windows with one PowerShell script. Steps, prerequisites, and what is and is not tested.">
+<link rel="canonical" href="https://aic0d3r.github.io/local-ai-harness/windows.html">
+<meta property="og:title" content="Run a local AI coding agent on Windows with Strata">
+<meta property="og:description" content="One PowerShell script wires the pi coding agent to a local Strata engine.">
+<meta property="og:image" content="https://aic0d3r.github.io/local-ai-harness/brand/social-preview.png">
+<meta property="og:url" content="https://aic0d3r.github.io/local-ai-harness/windows.html">
+<style>
+body{font:16px/1.6 system-ui,sans-serif;max-width:46rem;margin:0 auto;padding:2rem 1rem;color:#222}
+h1{font-size:2rem;line-height:1.2}h2{font-size:1.4rem}a{color:#1d6fa5}
+pre{overflow-x:auto;padding:.75rem 1rem;background:#f1f1f1;border-radius:6px}
+@media(prefers-color-scheme:dark){body{background:#1b1e20;color:#e6e6e6}a{color:#6cb8e6}pre{background:#262a2d}}
+</style>
+</head>
+<body>
+<p><a href="./">Local AI harness</a></p>
+<h1>Run a local AI coding agent on Windows with Strata</h1>
+<p>This harness sets up the <a href="https://github.com/earendil-works/pi">pi</a> coding agent against a local engine. On Windows the engine is <a href="https://github.com/Niko1221/Strata">Strata</a> (or gufo): you install and run it with its own tools, and <code>setup.ps1</code> wires pi to it.</p>
+<h2>Steps</h2>
+<ol>
+<li>Install Strata with its own installer and start it. Check it answers: <code>curl.exe -s http://127.0.0.1:8080/v1/models</code>.</li>
+<li>Install pi: <code>irm https://pi.dev/install.ps1 | iex</code>.</li>
+<li>In a PowerShell in the repo:
+<pre>powershell -ExecutionPolicy Bypass -File .\setup.ps1</pre></li>
+<li>Start pi in your project and pick the Strata model.</li>
+</ol>
+<h2>What is tested</h2>
+<p><code>setup.ps1</code> is verified on a clean Windows 11 VM against a stub engine. It is not yet verified on Windows hardware with a real Strata. The <code>./harness</code> wizard, engine launchers and the sidecar are Linux only.</p>
+<p>Full details: <a href="https://github.com/aic0d3r/local-ai-harness/blob/master/docs/WINDOWS.md">docs/WINDOWS.md</a> · <a href="https://github.com/aic0d3r/local-ai-harness">Source on GitHub</a></p>
+</body>
+</html>
