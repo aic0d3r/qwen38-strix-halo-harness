@@ -25,8 +25,8 @@ function Refresh-Path {
   $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
 }
 
-function Winget-Install($id, $what) {
-  if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Host "  winget not found: install $what yourself, then re-run"; return $false }
+function Winget-Install($id, $what, $link) {
+  if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Host "  winget not found: install $what yourself ($link), then re-run"; return $false }
   if (-not (Ask "Install $what with winget ($id)?")) { return $false }
   winget install --id $id -e --accept-package-agreements --accept-source-agreements
   Refresh-Path
@@ -60,17 +60,29 @@ if (-not (Get-Command pi -ErrorAction SilentlyContinue)) {
 # pi's bash tool (and every guard in extensions\) needs Git Bash on native Windows
 if (-not (Have-GitBash)) {
   Write-Host "Git for Windows (Git Bash) not found: pi's bash tool needs it."
-  [void](Winget-Install 'Git.Git' 'Git for Windows')
+  [void](Winget-Install 'Git.Git' 'Git for Windows' 'https://git-scm.com/download/win')
 }
 
 $py = Find-Python
 if (-not $py) {
   Write-Host "Python 3 not found (the Microsoft Store stub does not count)."
-  if (Winget-Install 'Python.Python.3.12' 'Python 3.12') { $py = Find-Python }
+  if (Winget-Install 'Python.Python.3.12' 'Python 3.12' 'https://www.python.org/downloads/') { $py = Find-Python }
 }
 if (-not $py) {
   Write-Host "Python 3 is still not available in this window. Install it (https://www.python.org/downloads/), open a new terminal and re-run."
   exit 1
+}
+
+# the semble and ddg search tools run through uvx; Serena (symbol-level code navigation) is a uv tool. uv's installer refuses the
+# default Restricted execution policy, hence the ByPass child process (uv's own documented way).
+$localBin = Join-Path $env:USERPROFILE '.local\bin'
+if (-not (Get-Command uvx -ErrorAction SilentlyContinue) -and (Ask 'Install uv (runs the semble and ddg search tools)?')) {
+  powershell -NoProfile -ExecutionPolicy ByPass -Command 'irm https://astral.sh/uv/install.ps1 | iex'
+  Refresh-Path
+  if (($env:Path -split ';') -notcontains $localBin) { $env:Path = $env:Path + ';' + $localBin }
+}
+if ((Get-Command uv -ErrorAction SilentlyContinue) -and -not (Test-Path (Join-Path $localBin 'serena.exe')) -and (Ask 'Install Serena (symbol-level code navigation for the agent)?')) {
+  uv tool install -p 3.13 serena-agent
 }
 
 $pre = $py.Pre

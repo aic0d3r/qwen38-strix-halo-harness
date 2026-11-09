@@ -47,8 +47,11 @@ pi --provider strata --model <id>        # id: `curl -s localhost:8080/v1/models
 **Windows:** install Strata with its own installer (Terminal or desktop app), start it, then from a PowerShell in this repo
 `powershell -ExecutionPolicy Bypass -File .\setup.ps1 [-Engine gufo] [-Url http://host:8080]`. It runs `setup\adopt.py`
 (the same code `setup.sh` uses for the pi side): extensions, the provider read from `/v1/models`, skills, packages, the pinned
-`rtk`, MCP servers, then the Strata checks. It needs pi, Git for Windows (pi's `bash` tool) and Python 3, and offers the last two
-through winget. The ling-tiny sidecar stays off (it is Linux/systemd). Engine install, start and upgrade stay Strata's own.
+`rtk`, MCP servers, then the Strata checks. It needs pi, Git for Windows (pi's `bash` tool) and Python 3, and offers those through
+winget (with download links where winget is missing, e.g. LTSC), plus uv (the semble and ddg search tools) and Serena. pi itself
+needs Node.js 22.19+, which pi's own installer asks for. The ling-tiny sidecar stays off (it is Linux/systemd). Engine install,
+start and upgrade stay Strata's own. Verified on a clean Windows 11 VM against a stub engine (`tests/windows-vm/`); not yet on
+Windows hardware with a real Strata.
 
 `--strata` is a pi-only install (it implies `--no-halogen`): it installs the extensions and adds a
 `strata` provider to `~/.pi/agent/models.json`, with model id, context and input types read from

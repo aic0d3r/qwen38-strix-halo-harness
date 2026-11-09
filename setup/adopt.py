@@ -206,18 +206,35 @@ def packages():
     cfg = os.path.join(EXT_DIR, "pi-rtk-optimizer", "config.json")
     if not os.path.isfile(cfg):
         shutil.copy(os.path.join(REPO, "config", "rtk", "pi-rtk-optimizer.json"), cfg)
-    # shortcut: rtk's own config.toml (git diff/cat/head/tail left alone) is only placed on Linux/macOS; its Windows location is unverified
-    if platform.system() != "Windows":
-        toml = os.path.join(os.path.expanduser("~"), ".config", "rtk", "config.toml")
-        if not os.path.isfile(toml):
-            os.makedirs(os.path.dirname(toml), exist_ok=True)
-            shutil.copy(os.path.join(REPO, "config", "rtk", "config.toml"), toml)
     rtk_binary()
+    rtk_config()
+
+
+def rtk_config():
+    """rtk's config.toml (git diff/cat/head/tail left alone) at the path rtk itself reports (it differs per OS); never overwrites."""
+    try:
+        exe = shutil.which("rtk") or os.path.join(RTK_BIN, rtk_exe())
+        line = next(l for l in subprocess.run([exe, "config"], capture_output=True, text=True).stdout.splitlines() if l.startswith("Config:"))
+        toml = line.split(":", 1)[1].strip()  # first colon only: a Windows path has its own
+    except Exception:
+        return  # no runnable rtk, nothing to configure
+    if not os.path.isfile(toml):
+        os.makedirs(os.path.dirname(toml), exist_ok=True)
+        shutil.copy(os.path.join(REPO, "config", "rtk", "config.toml"), toml)
+
+
+RTK_BIN = os.path.join(os.path.expanduser("~"), ".local", "bin")
+
+
+def rtk_exe():
+    return "rtk.exe" if platform.system() == "Windows" else "rtk"
 
 
 def rtk_version():
+    """(version tuple, text) of the rtk on PATH, else of the one we installed (its folder may not be on PATH yet)."""
     try:
-        out = subprocess.run(["rtk", "--version"], capture_output=True, text=True).stdout.split()
+        exe = shutil.which("rtk") or os.path.join(RTK_BIN, rtk_exe())
+        out = subprocess.run([exe, "--version"], capture_output=True, text=True).stdout.split()
         return tuple(int(x) for x in out[1].split(".")), out[1]
     except Exception:
         return None, ""
@@ -231,8 +248,7 @@ def rtk_binary():
     else:
         sysname, arch = platform.system().lower(), platform.machine().lower().replace("amd64", "x86_64").replace("arm64", "aarch64")
         asset = RTK_ASSETS.get((sysname, arch))
-        bindir = os.path.join(os.path.expanduser("~"), ".local", "bin")
-        exe = "rtk.exe" if sysname == "windows" else "rtk"
+        bindir, exe = RTK_BIN, rtk_exe()
         try:
             if not asset:
                 raise ValueError("no pinned build for this platform")

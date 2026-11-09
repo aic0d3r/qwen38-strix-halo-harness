@@ -102,4 +102,17 @@ os.remove(os.path.join(bindir, "rtk.exe"))
 out = try_rtk("Windows", "AMD64", p, "0" * 64)
 assert "download failed" in out and not os.path.exists(os.path.join(bindir, "rtk.exe")), out  # swapped asset: nothing installed
 
+# rtk config: placed where `rtk config` says (on Windows the path carries its own colon), never overwritten
+toml = os.path.join(HOME, "cfg", "rtk", "config.toml")
+adopt.shutil.which = lambda n: "rtk"
+adopt.subprocess.run = lambda *a, **k: type("R", (), {"stdout": f"Config: {toml}\n\n(default config, file not created)\n"})()  # a shell-script fake cannot run on Windows
+run(adopt.rtk_config)
+assert open(toml).read() == open(os.path.join(adopt.REPO, "config", "rtk", "config.toml")).read()
+open(toml, "w").write("mine")
+run(adopt.rtk_config)
+assert open(toml).read() == "mine"
+adopt.shutil.which = lambda n: None
+adopt.RTK_BIN = os.path.join(HOME, "nowhere")
+run(adopt.rtk_config)  # no rtk at all: silent no-op
+
 print("ok")
