@@ -13,8 +13,8 @@ longer launched by default), and a Ling-3.0-tiny sidecar on :8090.
 1. Automated setup (does steps 2-4, starts the sidecar if it can, checks the
    rest and prints exact fixes):
 
-       git clone https://github.com/aic0d3r/qwen38-strix-halo-harness
-       cd qwen38-strix-halo-harness && ./setup.sh
+       git clone https://github.com/aic0d3r/local-ai-harness
+       cd local-ai-harness && ./setup.sh
 
 2. Halogen server on 127.0.0.1:8731, prompt cache ON - see the
    halogen-flash-server repo for the container/model download. Do NOT disable

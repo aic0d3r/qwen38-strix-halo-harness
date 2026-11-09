@@ -10,7 +10,7 @@ import { profile, sidecarOn } from "../harness-profile/index.ts";
 const BASE = process.env.HALOGEN_URL || "http://127.0.0.1:8731";
 // setup.sh writes the repo path to <agent dir>/harness-repo
 const recorded = (() => { try { return fs.readFileSync(path.join(getAgentDir(), "harness-repo"), "utf8").trim(); } catch { return ""; } })();
-const REPO = process.env.HARNESS_REPO || recorded || path.join(os.homedir(), "coding", "qwen38-strix-halo-harness");
+const REPO = process.env.HARNESS_REPO || recorded || path.join(os.homedir(), "coding", "local-ai-harness");
 const metric = (txt: string, k: string) => { const m = txt.match(new RegExp(`^${k.replace(":", ":")}\\s+([0-9.eE+-]+)`, "m")); return m ? Number(m[1]) : undefined; };
 
 export default function harnessStatus(pi: ExtensionAPI) {
