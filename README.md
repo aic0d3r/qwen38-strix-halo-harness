@@ -6,6 +6,10 @@ iGPU with **262k context**, NPU models screening and routing prompts, and a side
 summaries. Guided setup for llama.cpp, vLLM, Ollama, LM Studio, Strata and more. Built on
 [pi](https://github.com/earendil-works/pi).
 
+It tunes itself to the box: setup detects your GPU, VRAM and RAM, `./harness recommend` picks the engine and model
+that fit, and a short speed probe records prefill and decode and sizes the answer and compaction limits to your
+context window. Only halogen on Strix Halo is measured here; other picks are sized from RAM and VRAM and marked untested.
+
 It is also an engine switcher: `./harness use <engine>` moves pi between llama.cpp, vLLM, Ollama, LM Studio,
 halogen, gufo and Strata, the wizard starts halogen and gufo for you, and it upgrades halogen, gufo and Strata
 with rollback on failure.
@@ -44,6 +48,8 @@ with rollback on failure.
 
 ![Local AI harness: one command, ./harness use, switches the coding agent between Strata, halogen, gufo, llama.cpp, vLLM, Ollama and LM Studio. Linux, Windows (beta)](docs/brand/hero.png)
 
+- **Tuned to your hardware:** `./setup.sh` detects your GPU, VRAM and RAM, recommends an engine and model that fit,
+  probes prefill and decode speed, and sizes the output and compaction limits to your context window. `./harness tune` re-runs it.
 - **Guided setup:** `./setup.sh` detects your engine (halogen, gufo, llama.cpp, Strata, vLLM,
   Ollama, LM Studio) and wires pi to it. The NPU tools are Strix Halo only.
 - **Private by default:** no API key. The halogen engine makes no outbound calls; only the DuckDuckGo web-search tool reaches the internet. Cloud models are a supported

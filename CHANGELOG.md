@@ -5,7 +5,7 @@
 
 ## 2.0.0 - 2026-11-09
 
-Windows (beta) and a new name. `setup.ps1` is verified on a clean Windows 11 VM against a stub engine, not yet on Windows hardware with a real Strata; the `./harness` wizard, engine launchers and sidecar stay Linux only.
+Windows (beta) and a new name. The README and banner now lead with hardware-aware setup: detect the GPU, VRAM and RAM, recommend an engine and model, and size limits to the context window. `setup.ps1` is verified on a clean Windows 11 VM against a stub engine, not yet on Windows hardware with a real Strata; the `./harness` wizard, engine launchers and sidecar stay Linux only.
 
 ### Added
 - Repo renamed to `local-ai-harness`. New `docs/WINDOWS.md` and Pages page, a README Windows (beta) section, a Pages sitemap and structured data, `.github` issue templates, `CONTRIBUTING.md` and `SECURITY.md`; the README intro now says it switches engines, and the Reddit posts list no longer links neon-ladder.
