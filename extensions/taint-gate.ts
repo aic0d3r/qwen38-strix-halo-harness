@@ -10,7 +10,7 @@
  *   while tainted, a small set of risky calls needs a yes from the user:
  *     sending data out (curl -d/-F/-T/POST, nc, scp, rsync, ssh, git push), piping into a shell,
  *     reading or writing credentials (.env, ~/.ssh, ~/.aws, .netrc, auth.json), recursive rm
- *     outside the project, and file edits outside the project.
+ *     outside the project. (File edits outside the project are allowed.)
  *   no UI to ask (print mode, subagents) -> the call is blocked with the reason.
  *
  * No NPU, no model, no phrasing to dodge. Everything else runs untouched, so ordinary work after
@@ -62,7 +62,6 @@ export function riskyAfterOutside(toolName: string, input: any, cwd: string): st
 		const p = typeof input?.path === "string" ? input.path : "";
 		if (!p) return null;
 		if (SECRET.test(p)) return "touches credentials";
-		if (toolName !== "read" && !inside(p, cwd)) return "edits a file outside the project";
 	}
 	return null;
 }

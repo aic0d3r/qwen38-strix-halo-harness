@@ -56,12 +56,14 @@ fi
 if [ -n "${GUFO_CTX:-}" ] || [ "$NAME" = qwen3.8-27b ]; then DEFCTX=262144
 else DEFCTX=$(python3 "$(dirname "$0")/../setup/harness.py" ctx-info "$([ "$WEIGHTS" = abliterated ] && echo UD-Q4_K_XL || echo "$QUANT")" 2>/dev/null || echo 262144); fi
 CTX="${GUFO_CTX:-$DEFCTX}"
-O9=$(awk '$4=="Normal"{print $(NF-1)}' /proc/buddyinfo 2>/dev/null | head -1)
+# contiguous 2MiB units (order-9 x1 + order-10 x2); order-9 alone false-positives when free memory coalesces to order-10 (same as start-halogen.sh)
+units() { awk '$4=="Normal"{u=0; for(i=14;i<=NF;i++) u+=$(i)*2**(i-14); print u}' /proc/buddyinfo 2>/dev/null | head -1; }
+O9=$(units)
 if [ "$CTX" -gt 65536 ] && [ -n "$O9" ] && [ "$O9" -lt 1000 ]; then
   sudo -n sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory' 2>/dev/null || true
-  sleep 5; O9=$(awk '$4=="Normal"{print $(NF-1)}' /proc/buddyinfo 2>/dev/null | head -1)
+  sleep 5; O9=$(units)
   if [ -z "$O9" ] || [ "$O9" -lt 1000 ]; then
-    echo "order-9 = ${O9:-?} <1000: large-ctx gufo would likely wedge. fix: sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory' (or reboot)." >&2
+    echo "contiguous units = ${O9:-?} <1000: large-ctx gufo would likely wedge. fix: sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory' (or reboot)." >&2
     exit 1
   fi
 fi
