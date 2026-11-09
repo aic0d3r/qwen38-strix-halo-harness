@@ -13,7 +13,7 @@ W, H = (int(v) for v in spec.lower().split("x"))
 path = pathlib.Path(os.environ.get("PI_HOME", pathlib.Path.home() / ".pi")) / "agent/models.json"
 limits = {"images": {"resize": {"maxWidth": W, "maxHeight": H}}}
 
-rows = subprocess.run(["pi", "--list-models"], capture_output=True, text=True, check=True).stdout.splitlines()[1:]
+rows = subprocess.run([shutil.which("pi") or "pi", "--list-models"], capture_output=True, text=True, check=True).stdout.splitlines()[1:]
 models = [(r.split()[0], r.split()[1]) for r in rows if len(r.split()) > 2 and r.split()[-1] == "yes"]
 if not models:
     sys.exit("pi --list-models returned no image-capable models - left models.json untouched")

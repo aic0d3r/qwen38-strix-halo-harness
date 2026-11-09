@@ -81,3 +81,11 @@ test("HARNESS_AUTOUPDATE=1 applies at startup", async () => {
 	expect(notes.at(-1)).toContain("pulled 1 commit");
 	expect(fs.readFileSync(path.join(clone, "f"), "utf8")).toBe("three");
 });
+
+test("Windows re-installs with setup.ps1, everything else with setup.sh", async () => {
+	const { installer } = await import("../extensions/harness-update.ts");
+	expect(installer("/r", "linux")).toEqual(["bash", [path.join("/r", "setup.sh")]]);
+	const [cmd, args] = installer("/r", "win32");
+	expect(cmd).toBe("powershell");
+	expect(args.slice(-2)).toEqual(["-File", path.join("/r", "setup.ps1")]);
+});

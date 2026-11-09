@@ -241,63 +241,15 @@ fi
 
 echo "== 1. pi + extensions =="
 if command -v pi >/dev/null; then ok "pi found"; else fail "pi coding agent not found on PATH - install it first, then re-run"; fi
-mkdir -p "$EXT_DIR"
-printf '%s\n' "$REPO" > "$PI_HOME/agent/harness-repo"  # lets harness-status find scripts/usage-stats.py
-N=0
-for f in "$REPO"/extensions/*.ts; do
-  b=$(basename "$f")
-  # NPU extensions are opt-out (--no-halogen): they need a local halogen on :8731
-  { [ "$b" = "npu-retrieval.ts" ] || [ "$b" = "auto-guard.ts" ]; } && [ "$NO_HALOGEN" = 1 ] && continue
-  if ! cmp -s "$f" "$EXT_DIR/$b"; then cp "$f" "$EXT_DIR/$b"; echo "  installed $b"; N=$((N+1)); fi
-done
-# drop measured no-op extensions from older installs (deleted from the repo; see extensions/README.md)
-for f in context-prune npu-triage ling-tiny-triage; do
-  [ -f "$EXT_DIR/$f.ts" ] && rm -f "$EXT_DIR/$f.ts" && echo "  removed $f.ts (measured no-op)"
-done
-[ -d "$EXT_DIR/optional" ] && rm -rf "$EXT_DIR/optional" && echo "  removed optional/ (archive deleted from the repo)"
-[ -d "$EXT_DIR/plan-mode" ] && rm -rf "$EXT_DIR/plan-mode" && echo "  removed plan-mode/ (3 uses in 569 sessions)"
-for d in "$REPO"/extensions/*/; do
-  [ -d "$d" ] || continue
-  b=$(basename "$d")
-  if ! diff -rq "$d" "$EXT_DIR/$b" >/dev/null 2>&1; then rm -rf "$EXT_DIR/$b"; cp -r "$d" "$EXT_DIR/$b"; echo "  installed $b/"; N=$((N+1)); fi
-done
-[ "$N" = 0 ] && ok "all extensions already current ($(ls "$EXT_DIR"/*.ts 2>/dev/null | wc -l) files + $(find "$EXT_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l) dirs)"
-[ "$N" != 0 ] && ok "installed/updated $N extensions"
+command -v python3 >/dev/null || { fail "python3 required - install python3 and re-run"; exit 1; }
+python3 "$REPO/setup/adopt.py" extensions $([ "$NO_HALOGEN" = 1 ] && echo --no-halogen)  # copy logic lives in adopt.py (shared with the Windows installer)
 
 echo "== 2. pi providers (models.json) =="
 if [ "$NO_HALOGEN" = 1 ]; then
   ok "pi-only install: halogen provider, NPU extensions and container management skipped"
   ok "point pi at your own provider, or at a remote halogen appliance by setting its baseUrl in models.json"
   if [ "$STRATA" = 1 ] || [ "$GUFO" = 1 ]; then
-    python3 - "$MODELS_JSON" "$ENG_URL" "$ENG" <<'PY' && ok "$ENG provider configured in $MODELS_JSON" || fail "could not update $MODELS_JSON (left untouched)"
-import json, sys, os, urllib.request
-path, url, eng = sys.argv[1:4]
-os.makedirs(os.path.dirname(path), exist_ok=True)
-try: m = json.load(open(path))
-except FileNotFoundError: m = {}
-# ask the running server for its model id, context and input types; fall back to a text-only guess
-mid, ctx, inp = "qwen3.8-flash-next", 131072, ["text"]
-try:
-    d = json.load(urllib.request.urlopen(url + "/v1/models", timeout=3))["data"][0]
-    mid, ctx = d["id"], d.get("meta", {}).get("n_ctx") or d.get("context_length", ctx)  # gufo reports context_length
-    inp = d.get("architecture", {}).get("input_modalities", inp)
-except Exception: print(f"  {eng} not answering - using defaults; re-run once it is up to pick up the real values")
-P = m.setdefault("providers", {})
-if eng in P: print(f"  {eng} provider exists - left untouched")
-else:
-    P[eng] = {"baseUrl": url + "/v1", "api": "openai-completions", "apiKey": "dummy",  # set the key here if Strata runs with API_KEY
-        "models": [{"id": mid, "name": f"{eng} (local)", "reasoning": True, "input": inp,
-                    "contextWindow": ctx, "maxTokens": 8192}]}
-    print(f"  added provider: {eng}")
-print(f"  model id: {mid}")
-json.dump(m, open(path, "w"), indent=1)
-sp = os.path.join(os.path.dirname(path), "settings.json")
-try: st = json.load(open(sp))
-except FileNotFoundError: st = {}
-for k, v in (("defaultProvider", eng), ("defaultModel", mid)):
-    st.setdefault(k, v)
-json.dump(st, open(sp, "w"), indent=2)
-PY
+    python3 "$REPO/setup/adopt.py" provider "$ENG_URL" "$ENG" && ok "$ENG provider configured in $MODELS_JSON" || fail "could not update $MODELS_JSON (left untouched)"
     eng_up && ok "$ENG up ($ENG_URL)" || warn "$ENG not answering at $ENG_URL - start it before using pi"
   fi
 else
@@ -384,68 +336,11 @@ fi
 echo "== 2a-2. prompt templates =="
 # pi loads personal prompt templates from agent/prompts/; older installs copied to
 # ~/.pi/templates, which pi never reads - drop those stale copies
-PROMPTS="$PI_HOME/agent/prompts"; mkdir -p "$PROMPTS"
-for f in "$REPO"/templates/*.md; do rm -f "$PI_HOME/templates/$(basename "$f")"; done
-rmdir "$PI_HOME/templates" 2>/dev/null
-T=0
-for f in "$REPO"/templates/*.md; do
-  [ -f "$f" ] || continue
-  b=$(basename "$f")
-  if ! diff -q "$f" "$PROMPTS/$b" >/dev/null 2>&1; then cp "$f" "$PROMPTS/$b"; T=$((T+1)); fi
-done
-ok "prompt templates current ($T updated, $(ls "$PROMPTS" 2>/dev/null | wc -l) total)"
-# codebase search is the semble MCP server (mcp.json): verify its runtime is available
-if command -v uvx >/dev/null; then ok "uvx found (semble + ddg MCP runnable)"; else warn "uvx not found - semantic search and web search (semble/ddg) unavailable; install uv (https://docs.astral.sh/uv)"; fi
+python3 "$REPO/setup/adopt.py" templates
 
 echo "== 2a. skills + pi packages =="
-SKILL_DIR="$PI_HOME/agent/skills"; mkdir -p "$SKILL_DIR"
-mkdir -p "$PI_HOME/agent/themes"
-if [ -f "$REPO/config/themes/opencode.json" ] && [ ! -f "$PI_HOME/agent/themes/opencode.json" ]; then
-  cp "$REPO/config/themes/opencode.json" "$PI_HOME/agent/themes/opencode.json"
-  echo "  installed theme: opencode (select via /settings, or set \"theme\": \"opencode\")"
-fi
-# micro-interactions ships in ~/.agents/skills (pi scans it natively) - a pi-side copy collides
-[ -d "$SKILL_DIR/micro-interactions" ] && rm -rf "$SKILL_DIR/micro-interactions" && echo "  removed duplicate micro-interactions (native ~/.agents/skills copy is used)"
-S=0
-for d in "$REPO"/skills/*/; do
-  [ -d "$d" ] || continue
-  b=$(basename "$d")
-  if ! diff -rq "$d" "$SKILL_DIR/$b" >/dev/null 2>&1; then rm -rf "$SKILL_DIR/$b"; cp -r "$d" "$SKILL_DIR/$b"; S=$((S+1)); fi
-done
-if command -v pi >/dev/null; then
-  if ! python3 -c "import json,sys; sys.exit(0 if any('ponytail' in p for p in json.load(open('$PI_HOME/agent/settings.json')).get('packages',[])) else 1)" 2>/dev/null; then
-    pi install git:github.com/DietrichGebert/ponytail >/dev/null 2>&1 && ok "ponytail installed (pi package)" || warn "ponytail install failed - run: pi install git:github.com/DietrichGebert/ponytail"
-  else ok "ponytail package present"; fi
-  # the structured ask_user_question tool is a package, not a local extension: without it the
-  # agent can only ask prose questions, so ambiguous runs silently guess
-  if ! python3 -c "import json,sys; sys.exit(0 if any('ask-user-question' in p for p in json.load(open('$PI_HOME/agent/settings.json')).get('packages',[])) else 1)" 2>/dev/null; then
-    pi install npm:@juicesharp/rpiv-ask-user-question >/dev/null 2>&1 && ok "ask-user-question installed (pi package)" || warn "ask-user-question install failed - run: pi install npm:@juicesharp/rpiv-ask-user-question"
-  else ok "ask-user-question package present"; fi
-  # rtk: the pi package rewrites bash commands through the rtk binary (installed separately)
-  if ! python3 -c "import json,sys; sys.exit(0 if any('pi-rtk-optimizer' in p for p in json.load(open('$PI_HOME/agent/settings.json')).get('packages',[])) else 1)" 2>/dev/null; then
-    pi install npm:@estebanforge/pi-rtk-optimizer >/dev/null 2>&1 && ok "pi-rtk-optimizer installed (pi package)" || warn "pi-rtk-optimizer install failed - run: pi install npm:@estebanforge/pi-rtk-optimizer"
-  else ok "pi-rtk-optimizer package present"; fi
-  mkdir -p "$HOME/.config/rtk" "$EXT_DIR/pi-rtk-optimizer"
-  [ -f "$HOME/.config/rtk/config.toml" ] || cp "$REPO/config/rtk/config.toml" "$HOME/.config/rtk/config.toml"
-  [ -f "$EXT_DIR/pi-rtk-optimizer/config.json" ] || cp "$REPO/config/rtk/pi-rtk-optimizer.json" "$EXT_DIR/pi-rtk-optimizer/config.json"
-  # rtk < 1.0.1 mangles single-file grep output (reads the line number as a filename)
-  RTKV=$(rtk --version 2>/dev/null | awk '{print $2}')
-  if [ -n "$RTKV" ] && [ "$(printf '%s\n1.0.1\n' "$RTKV" | sort -V | head -1)" = 1.0.1 ]; then ok "rtk $RTKV"
-  else
-    case "$(uname -m)" in x86_64) RTKT=x86_64-unknown-linux-musl;; aarch64) RTKT=aarch64-unknown-linux-gnu;; *) RTKT=;; esac
-    case "$RTKT" in x86_64-unknown-linux-musl) RTKSHA=5b919c3bccb799b67a61866d0e617410a4fcdf173e2614440e59de2fa2003436;; aarch64-unknown-linux-gnu) RTKSHA=cd627c4091ad90b5e5aca83ca5af66ee4b8aa8537a736533fa90544f461f1c2b;; *) RTKSHA=;; esac
-    RTKTMP=$(mktemp -d)
-    # pinned sha256: the binary lands on PATH, so a swapped release asset must not install
-    if [ -n "$RTKT" ] && curl -fsSL -o "$RTKTMP/rtk.tgz" "https://github.com/rtk-ai/rtk/releases/download/v1.0.1/rtk-$RTKT.tar.gz" \
-       && [ "$(sha256sum "$RTKTMP/rtk.tgz" | cut -d" " -f1)" = "$RTKSHA" ] && tar xzf "$RTKTMP/rtk.tgz" -C "$RTKTMP" 2>/dev/null \
-       && mkdir -p "$HOME/.local/bin" && install -m755 "$RTKTMP/rtk" "$HOME/.local/bin/rtk"; then
-      ok "rtk 1.0.1 installed to ~/.local/bin (was: ${RTKV:-none}); make sure ~/.local/bin is on PATH"
-    else warn "rtk 1.0.1 download failed - install it from https://github.com/rtk-ai/rtk/releases"; fi
-    rm -rf "$RTKTMP"
-  fi
-  command -v rtk >/dev/null || warn "rtk not on PATH - add ~/.local/bin to PATH in your shell profile, or pi-rtk-optimizer warns 'rtk binary unavailable'"
-fi
-[ "$S" = 0 ] && ok "skills current ($(ls "$SKILL_DIR" | wc -l) dirs)" || ok "installed/updated $S skills"
+python3 "$REPO/setup/adopt.py" skills
+python3 "$REPO/setup/adopt.py" packages  # pi packages, rtk binary + config
 
 echo "== 2b. MCP servers (mcp.json) =="
 MCP_JSON="$PI_HOME/agent/mcp.json"
@@ -475,11 +370,7 @@ fi
 
 echo "== 2c. global AGENTS.md =="
 # user-owned: write only when absent, never append to or overwrite an existing one
-if [ -f "$PI_HOME/agent/AGENTS.md" ]; then
-  ok "AGENTS.md exists (left untouched; see $REPO/config/AGENTS.md for semble/serena guidance to merge)"
-elif [ -d "$PI_HOME/agent" ]; then
-  cp "$REPO/config/AGENTS.md" "$PI_HOME/agent/AGENTS.md" && ok "installed AGENTS.md (semble/serena guidance)"
-fi
+python3 "$REPO/setup/adopt.py" agents
 
 echo "== 3. ling-tiny sidecar (:8090) =="
 GGUF=""

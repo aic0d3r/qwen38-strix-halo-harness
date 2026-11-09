@@ -23,12 +23,19 @@ const repoPath = () => {
 // commits on the upstream branch we don't have yet
 const behind = (repo: string) => git(repo, "rev-list", "--count", "HEAD..@{u}").then(Number);
 
-// ff-only pull + setup.sh; throws on a dirty tree. n = commits behind.
+// Windows installs with setup.ps1 (adopts the running engine); bash there would run the halogen path of setup.sh
+export const installer = (repo: string, platform: string = process.platform): [string, string[]] =>
+	platform === "win32"
+		? ["powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(repo, "setup.ps1")]]
+		: ["bash", [path.join(repo, "setup.sh")]];
+
+// ff-only pull + installer; throws on a dirty tree. n = commits behind.
 const apply = async (repo: string, n: number) => {
 	if (await git(repo, "status", "--porcelain")) throw new Error(`${repo} has uncommitted changes: commit or stash, then retry`);
 	await run("git", ["-C", repo, "pull", "--ff-only", "--quiet"], { timeout: 60000 });
-	await run("bash", [path.join(repo, "setup.sh")], { timeout: 300000 });
-	return `pulled ${n} commit${n > 1 ? "s" : ""} and re-ran setup.sh. Restart pi to load changed extensions.`;
+	const [cmd, args] = installer(repo);
+	await run(cmd, args, { timeout: 300000 });
+	return `pulled ${n} commit${n > 1 ? "s" : ""} and re-ran ${path.basename(args[args.length - 1])}. Restart pi to load changed extensions.`;
 };
 const fail = (e: any) => `harness-update failed: ${String(e?.stderr || e?.message || e).slice(0, 300)}`;
 
