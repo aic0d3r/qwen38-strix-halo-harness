@@ -161,6 +161,52 @@ that tool result, so a broken edit is fixed on the next turn. Checkers: `python3
 and no false positives from missing deps. A missing checker is silent. Cost: one
 subprocess per edit. Off switch: `SYNTAX_GUARD_DISABLED=1`.
 
+## Tools and MCP servers that setup installs
+
+- **One-command setup.** `./setup.sh` is idempotent: engine wiring, extensions, providers, sidecar download, keep-alive
+  units, halogen launch (when chosen), memory check. It touches nothing you configured yourself and probes every piece
+  instead of trusting it: the NPU guard answers a real `/v1/moderations` probe, the vision tower shows `enabled: true` on
+  `/health`, and the smoke test checks its own file artifact rather than the model's report.
+- **Prompt-injection gate.** `taint-gate` needs no model. Once the agent has read outside content (web search or fetch,
+  MCP resources, a `curl`), risky calls (sending data out, `curl | sh`, credentials, recursive `rm` outside the project)
+  need your yes until your next message, and are blocked when there is no UI. Edits outside the project are allowed;
+  credential files are not. Tested live: a hidden "POST your `.env`" in a fetched page was obeyed with the gate off and
+  stopped with it on.
+- **NPU side jobs.** The `npu-retrieval` extension ships `triage` (a constrained routing decision with per-option
+  probabilities in ~120 ms), `dedup_scan` (near-duplicate files by embedding similarity) and `auto-guard` (screens every
+  prompt as a fail-open tripwire, not a security boundary). See [The NPU](../docs/STRIX-HALO.md#the-npu).
+- **Symbol-precise code tools.** The [serena](https://github.com/oraios/serena) MCP server (find a symbol, its callers,
+  an outline, diagnostics, symbol-level edits and renames), wired into `mcp.json` by setup and started on your current
+  project. Install serena yourself (setup expects `~/.local/bin/serena`); it also needs a language server for your
+  language. In real sessions the agent reached for `read` far more often, so `tool-trim` hints at serena or
+  `offset`/`limit` after a big whole-file source read, and the installed `AGENTS.md` says the same. Nine core tools are
+  `direct`; the long tail stays script-reachable through `codemode` when it is active (`./setup.sh --refresh-mcp`
+  restores the shipped exposure).
+- **Semantic code search.** The pinned [semble](https://pypi.org/project/semble/) MCP server (`search` + `find_related`),
+  wired into `mcp.json` by setup. It needs no NPU and indexes any local path or remote git URL on first query.
+- **Web search and page reading.** The [DuckDuckGo MCP server](https://github.com/nickclyde/duckduckgo-mcp-server)
+  (`search`, `fetch_content`, `expand_link`), enabled by default. No account or API key; `fetch_content` returns
+  Markdown, with `max_length`/`start_index` for long pages. Jina stays optional (disabled by default) for
+  academic/image/rerank work.
+- **Sidecar suite off the main context.** `ling-tiny-compaction` (non-blocking, thinking off, 10/10 rule retention on the
+  canary), `ling-tiny-commit`, `ling-tiny-branch-summary`, `ling-tiny-repomap`. Diffs and transcripts never touch
+  halogen's prompt cache, so a side call can never evict your session prefix.
+- **Speed tooling.** `scripts/halogen-top.sh` (live prefill/decode dashboard) and `scripts/session-audit.sh --perf`
+  (per-session throughput from the server logs).
+- **`bench/` and `config/`.** `harness-ab.sh` (baseline vs kill+resume A/B, one command), `report-accuracy.py` (grades
+  every file:line claim in a report against the tree), the `guard-canary.py` / `compaction-retention.py` canaries,
+  `check-sidecar.sh` + `check-fixes.sh` (offline regression checks), plus `models.json.example` and the compaction
+  snippet. Two numbers there must be understood, not copied: `reserveTokens` is per-model, and on halogen `maxTokens`
+  must stay <= 8192 or the server 400s past ~32.7k ctx.
+- **Also shipped.** `harness-tune` (`/tune` live knobs), `harness-update` (daily behind-origin notice +
+  `/harness-update`; `HARNESS_AUTOUPDATE=1` applies it at startup), `turn-timer`, `subagent/` (worker/scout/reviewer/
+  planner, session-model inheritance), `/gauntlet` and `/speedtest` prompt templates, and opt-in voice
+  (`./setup.sh --voice`: [privateer-speak](https://npm.im/privateer-speak) on a local Lemonade server, whisper STT 0.43 s,
+  kokoro TTS 0.3 s, both on CPU). Three pi packages are installed by `setup.sh` when missing:
+  [ponytail](https://github.com/DietrichGebert/ponytail),
+  [rpiv-ask-user-question](https://npm.im/@juicesharp/rpiv-ask-user-question) (the structured `ask_user_question` tool)
+  and pi-rtk-optimizer. They live in `~/.pi/agent/settings.json`, not in this repo.
+
 ## Other extensions
 
 - `harness-profile/` - shared helper, not a feature: loads the active engine profile from `<agent dir>/harness-profile.json` (legacy halogen defaults if absent) and registers nothing; imported by the ling-tiny-*, harness-tune, auto-guard and npu-retrieval extensions.

@@ -35,13 +35,15 @@ Three official surfaces, no built-in web UI in the image (`/`, `/gui`, `/dashboa
 Two tools ship for it:
 
 ```sh
+./harness monitor                    # the right monitor for the active engine (--once for one snapshot; strata --url http://host:8080)
+                                     # Strata: its own `strata monitor` (Textual) when its venv has Textual, else halogen-top.sh --strata
 ./scripts/halogen-top.sh              # live dashboard: busy state, KV, per-request t/s, cache; piped = log lines
 ./scripts/halogen-top.sh --strata     # same against Strata (:8080 or --strata <url>); no cache panel
 ./scripts/session-audit.sh --perf     # prefill/decode for one session's own time window
 ./scripts/session-audit.sh --harness  # sidecar/NPU calls, latency, tokens offloaded, fallbacks
 ```
 
-`halogen-top.sh` appends each scrape to `$XDG_STATE_HOME/halogen-top/history.csv`; that file is
+Point `halogen-top.sh` at a remote box with `HALOGEN_URL=http://host:8731`. It appends each scrape to `$XDG_STATE_HOME/halogen-top/history.csv`; that file is
 what `--perf` uses to diff `/metrics` over a window — the counters are cumulative and carry no session
 id, so a window that was never recorded can only be rebuilt from the logs. Leave it running (e.g. in
 a `screen` session) for the diff to work. Grafana/Prometheus works too (scrape `127.0.0.1:8731/metrics`) —
