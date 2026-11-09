@@ -10,56 +10,65 @@
 *{box-sizing:border-box;margin:0}
 html,body{width:100%;height:100%;background:var(--bg);color:var(--ink);
   font-family:"Fira Sans",sans-serif;-webkit-font-smoothing:antialiased}
-body{display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,1fr);gap:4vw;
-  padding:6.4vh 5vw;overflow:hidden;position:relative}
+body{display:grid;grid-template-rows:auto 1fr;padding:5.2vh 4.4vw 6vh;overflow:hidden;position:relative}
 body::before{content:"";position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(60% 90% at 88% 50%,rgba(255,122,26,.13),transparent 70%)}
-.copy{display:flex;flex-direction:column;justify-content:space-between;position:relative}
-.mark{font:500 22px var(--mono);color:var(--mute);letter-spacing:.01em}
-.mark b{color:var(--acc);font-weight:600}
-h1{font:800 clamp(56px,7.2vw,92px)/.98 "Fira Sans Condensed",sans-serif;letter-spacing:-.015em;
-  text-wrap:balance;margin-top:3vh}
-h1 em{font-style:normal;color:var(--acc)}
-.sub{font:400 clamp(22px,2.15vw,29px)/1.4 "Fira Sans",sans-serif;color:var(--mute);margin-top:3.2vh;max-width:30ch}
+  background:radial-gradient(55% 85% at 84% 58%,rgba(255,122,26,.14),transparent 70%)}
+.top{display:flex;justify-content:space-between;align-items:baseline;position:relative;
+  font:500 clamp(18px,1.7vw,22px) var(--mono);color:var(--mute);
+  padding-bottom:2.4vh;border-bottom:1px solid var(--line)}
+.top b{color:var(--ink);font-weight:600}
+.top i{color:var(--acc);font-style:normal}
+.main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.92fr);gap:4vw;align-items:center;position:relative;min-height:0}
+.copy{display:flex;flex-direction:column;gap:3.4vh}
+h1{font:800 clamp(60px,7.4vw,100px)/.96 "Fira Sans Condensed",sans-serif;letter-spacing:-.015em;text-wrap:balance}
+h1 em{font-style:normal;color:var(--acc);display:block}
+.sub{font:400 clamp(21px,2vw,28px)/1.4 "Fira Sans",sans-serif;color:var(--mute);max-width:34ch}
 .sub strong{color:var(--ink);font-weight:500}
 .cmd{display:inline-flex;gap:14px;align-items:center;align-self:flex-start;
-  font:500 24px var(--mono);
-  background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 22px;
+  font:500 clamp(20px,1.9vw,25px) var(--mono);
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 22px;
   box-shadow:0 14px 30px -12px rgba(0,0,0,.7)}
 .cmd i{color:var(--acc);font-style:normal}
-.die{position:relative;align-self:center;border:1.5px solid var(--line);border-radius:22px;
-  padding:34px 30px 30px;background:linear-gradient(180deg,#1b1613,#14100e);
-  box-shadow:0 30px 60px -24px rgba(0,0,0,.85)}
-.die-h{display:flex;justify-content:space-between;font:500 17px var(--mono);
-  color:var(--mute);margin-bottom:22px}
-.blk{border-radius:14px;padding:22px 26px}
-.blk .t{font:600 16px var(--mono);letter-spacing:.04em;text-transform:uppercase}
-.blk .n{font:700 clamp(30px,3.3vw,44px)/1.1 "Fira Sans Condensed",sans-serif;margin-top:8px}
-.blk .d{font:400 20px/1.35 "Fira Sans",sans-serif;margin-top:6px}
-.gpu{background:var(--acc);color:#1a0d03;padding:28px 26px}
-.gpu .t,.gpu .d{color:#3b1d0a}
-.gpu .n{font-size:clamp(38px,4.4vw,58px)}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
-.npu,.side{background:#221b16;border:1px solid var(--line)}
-.npu .t{color:var(--cool)} .side .t{color:var(--mute)}
-.npu .d,.side .d{color:var(--mute)}
-.npu .n,.side .n{font-size:clamp(24px,2.5vw,33px)}
+.term{border:1.5px solid var(--line);border-radius:18px;background:linear-gradient(180deg,#1b1613,#14100e);
+  box-shadow:0 30px 60px -24px rgba(0,0,0,.85);overflow:hidden}
+.term-h{display:flex;justify-content:space-between;padding:16px 26px;border-bottom:1px solid var(--line);
+  font:500 clamp(15px,1.4vw,18px) var(--mono);color:var(--mute)}
+.term-h b{color:var(--ink);font-weight:500}
+.list{list-style:none;padding:14px 14px 16px;display:grid;gap:6px}
+.eng{display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:16px;
+  padding:clamp(9px,1.5vh,13px) 16px;border-radius:10px;
+  font:500 clamp(20px,2vw,27px)/1.1 var(--mono)}
+.eng span{font:400 clamp(15px,1.4vw,19px) "Fira Sans",sans-serif;color:var(--mute)}
+.dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--mute)}
+.on{background:var(--acc);color:#1a0d03}
+.on span{color:#3b1d0a}
+.on .dot{border-color:#1a0d03;background:#1a0d03;box-shadow:inset 0 0 0 3px var(--acc)}
+.foot{display:flex;justify-content:space-between;padding:14px 26px 18px;border-top:1px solid var(--line);
+  font:500 clamp(14px,1.3vw,17px) var(--mono);color:var(--cool)}
 </style>
 <body>
-<section class="copy">
-  <div>
-    <div class="mark"><b>pi</b> · local ai harness</div>
-    <h1>A 125B coding agent on <em>your&nbsp;own&nbsp;desk.</em></h1>
-    <p class="sub"><strong>262k context</strong>, no API key, nothing leaves the box.</p>
-  </div>
-  <div class="cmd"><i>$</i> ./setup.sh</div>
-</section>
-<section class="die" aria-label="Where each job runs">
-  <div class="die-h"><span>Ryzen AI Max+ 395</span><span>128 GB unified</span></div>
-  <div class="blk gpu"><div class="t">iGPU · Radeon 8060S</div><div class="n">Qwen3.8 Flash-Next 125B</div><div class="d">the model you talk to</div></div>
-  <div class="row">
-    <div class="blk npu"><div class="t">NPU</div><div class="n">Screens &amp; routes</div><div class="d">every prompt, fast</div></div>
-    <div class="blk side"><div class="t">Sidecar</div><div class="n">Commits &amp; summaries</div><div class="d">cache stays warm</div></div>
-  </div>
-</section>
+<header class="top">
+  <span><b>local-ai-harness</b> · built on <i>pi</i></span>
+  <span>no API key · nothing leaves the box</span>
+</header>
+<div class="main">
+  <section class="copy">
+    <h1>One harness.<em>Every local engine.</em></h1>
+    <p class="sub">Switch between <strong>Strata, llama.cpp, vLLM, Ollama</strong> and LM Studio. Crash recovery and token-saving tools come along.</p>
+    <div class="cmd"><i>$</i> ./harness use strata</div>
+  </section>
+  <section class="term" aria-label="Engines the harness switches between">
+    <div class="term-h"><b>$ ./harness use</b><span>pick an engine</span></div>
+    <ul class="list">
+      <li class="eng on"><i class="dot"></i>Strata<span>NVIDIA &amp; AMD GPUs</span></li>
+      <li class="eng"><i class="dot"></i>halogen<span>Strix Halo + NPU</span></li>
+      <li class="eng"><i class="dot"></i>gufo<span>open source</span></li>
+      <li class="eng"><i class="dot"></i>llama.cpp<span>full control</span></li>
+      <li class="eng"><i class="dot"></i>vLLM<span>OpenAI-compatible</span></li>
+      <li class="eng"><i class="dot"></i>Ollama<span>OpenAI-compatible</span></li>
+      <li class="eng"><i class="dot"></i>LM Studio<span>OpenAI-compatible</span></li>
+    </ul>
+    <div class="foot"><span>pi now points at Strata</span><span>tuned on Strix Halo</span></div>
+  </section>
+</div>
 </body></html>
