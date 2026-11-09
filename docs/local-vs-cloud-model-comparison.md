@@ -124,8 +124,7 @@ flashx rate both pi-harness answers; it picked Qwen's.
 - Models: halogen-qwen3.8-flash-next (halogen 0.17.1, NPU sidecars resident) and
   glm-5.3-flash / glm-5.3-flashx / glm-5.3 via the z.ai coding endpoint.
 
-Related: [halogen-flash-server](https://github.com/peonist-ai/halogen-flash-server) and the
-[neon-ladder benchmark](https://github.com/aic0d3r/neon-ladder).
+Related: [halogen-flash-server](https://github.com/peonist-ai/halogen-flash-server).
 
 ## Parameter size sources (grounding for the size claims)
 

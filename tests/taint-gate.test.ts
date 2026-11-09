@@ -20,8 +20,13 @@ test("flags the attacks a fetched page asks for", () => {
 	expect(risky("bash", { command: "rm -rf /" }, CWD)).toBeTruthy();
 	expect(risky("bash", { command: "git push origin main" }, CWD)).toBeTruthy();
 	expect(risky("read", { path: "/home/me/.aws/credentials" }, CWD)).toBeTruthy();
-	expect(risky("edit", { path: "/home/me/.bashrc" }, CWD)).toBeTruthy();
-	expect(risky("write", { path: "../other/x.ts" }, CWD)).toBeTruthy();
+	expect(risky("edit", { path: "/home/me/.aws/credentials" }, CWD)).toBeTruthy();
+	expect(risky("write", { path: "../other/.env" }, CWD)).toBeTruthy();
+});
+
+test("edits outside the project are allowed, only credentials are gated", () => {
+	expect(risky("edit", { path: "/home/me/.bashrc" }, CWD)).toBeNull();
+	expect(risky("write", { path: "../other/x.ts" }, CWD)).toBeNull();
 });
 
 test("delegating to a subagent is gated: a child pi starts untainted", () => {
