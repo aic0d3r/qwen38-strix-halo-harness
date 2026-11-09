@@ -9,8 +9,11 @@ Windows (beta). Tuned and measured on AMD Strix Halo.
 - **Resumes after a crash:** relaunch, say "continue".
 
 ```sh
-./setup.sh
+git clone https://github.com/aic0d3r/local-ai-harness && cd local-ai-harness
+./setup.sh   # detects your hardware and engines, asks a few questions, installs only after you confirm
 ```
+
+On Windows, see [Windows (beta)](#windows-beta).
 
 <div align="center">
 
@@ -36,7 +39,9 @@ You need pi (setup installs it with npm if missing) and `uvx` from [uv](https://
 search.
 
 ```sh
-# Linux, any engine: start your engine, then run the guided wizard
+git clone https://github.com/aic0d3r/local-ai-harness && cd local-ai-harness
+
+# Linux, any engine: start your engine first (Ollama, llama.cpp, Strata, ...), then run the guided wizard
 ./setup.sh
 
 # Strix Halo with the halogen checkpoint: needs docker and the ~124 GB model files
