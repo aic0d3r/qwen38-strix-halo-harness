@@ -59,15 +59,21 @@ exactly the files you need.
 ### Windows (beta)
 
 `setup.ps1` is verified on a clean Windows 11 VM against a stub engine, not yet on Windows hardware with a real Strata.
-Install [Strata](https://github.com/Niko1221/Strata) and start it, install pi (`irm https://pi.dev/install.ps1 | iex`),
-then:
+In PowerShell:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\setup.ps1
+# 1. Install Strata with its own installer and start it: https://github.com/Niko1221/Strata
+# 2. Install pi
+irm https://pi.dev/install.ps1 | iex
+# 3. Get the harness and set pi up against the running Strata
+git clone https://github.com/aic0d3r/local-ai-harness
+cd local-ai-harness
+powershell -ExecutionPolicy Bypass -File .\setup.ps1   # offers Git, Python, uv and Serena through winget; asks before each
 ```
 
-It never installs or starts an engine, and the `./harness` wizard, launchers and sidecar are Linux only. Steps and
-limits: [docs/WINDOWS.md](docs/WINDOWS.md).
+No Git yet? Download the repo as a ZIP from GitHub, extract it, and run the last command in that folder.
+`setup.ps1` never installs or starts an engine, and the `./harness` wizard, launchers and sidecar are Linux only. Steps
+and limits: [docs/WINDOWS.md](docs/WINDOWS.md).
 
 ## Which engine
 

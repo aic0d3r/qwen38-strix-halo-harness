@@ -25,8 +25,11 @@ pre{overflow-x:auto;padding:.75rem 1rem;background:#f1f1f1;border-radius:6px}
 <ol>
 <li>Install Strata with its own installer and start it. Check it answers: <code>curl.exe -s http://127.0.0.1:8080/v1/models</code>.</li>
 <li>Install pi: <code>irm https://pi.dev/install.ps1 | iex</code>.</li>
-<li>In a PowerShell in the repo:
-<pre>powershell -ExecutionPolicy Bypass -File .\setup.ps1</pre></li>
+<li>Get the harness and run the installer. In PowerShell:
+<pre>git clone https://github.com/aic0d3r/local-ai-harness
+cd local-ai-harness
+powershell -ExecutionPolicy Bypass -File .\setup.ps1</pre>
+No Git yet? Download the repo as a ZIP from GitHub, extract it, and run the second command in that folder.</li>
 <li>Start pi in your project and pick the Strata model.</li>
 </ol>
 <h2>What is tested</h2>

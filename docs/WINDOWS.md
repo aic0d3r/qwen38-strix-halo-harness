@@ -11,7 +11,9 @@ the engine is [Strata](https://github.com/Niko1221/Strata) (or gufo): you instal
 1. Install Strata with its own installer (Terminal or desktop app) and start it. Check it answers:
    `curl.exe -s http://127.0.0.1:8080/v1/models`.
 2. Install pi: `irm https://pi.dev/install.ps1 | iex`. pi needs Node.js 22.19+, which its installer asks for.
-3. In a PowerShell in this repo:
+3. Get the harness. With Git: `git clone https://github.com/aic0d3r/local-ai-harness; cd local-ai-harness`. Without Git,
+   download the repo as a ZIP from GitHub, extract it and open PowerShell in that folder.
+4. Run the installer:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\setup.ps1
@@ -19,7 +21,7 @@ the engine is [Strata](https://github.com/Niko1221/Strata) (or gufo): you instal
 
    Other engine or address: `.\setup.ps1 -Engine gufo -Url http://192.168.1.20:8080`. `-Yes` answers every
    prerequisite prompt with yes.
-4. Start pi in your project and pick the Strata model.
+5. Start pi in your project and pick the Strata model.
 
 ## What `setup.ps1` does
 
