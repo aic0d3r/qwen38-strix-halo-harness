@@ -18,6 +18,7 @@ body::before{content:"";position:absolute;inset:0;pointer-events:none;
   padding-bottom:2.4vh;border-bottom:1px solid var(--line)}
 .top b{color:var(--ink);font-weight:600}
 .top i{color:var(--acc);font-style:normal}
+.top em{font-style:normal;color:var(--acc);border:1px solid var(--acc);border-radius:6px;padding:4px 12px;margin-left:8px;font-size:.82em}
 .main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.92fr);gap:4vw;align-items:center;position:relative;min-height:0}
 .copy{display:flex;flex-direction:column;gap:3.4vh}
 h1{font:800 clamp(60px,7.4vw,100px)/.96 "Fira Sans Condensed",sans-serif;letter-spacing:-.015em;text-wrap:balance}
@@ -36,7 +37,7 @@ h1 em{font-style:normal;color:var(--acc);display:block}
 .term-h b{color:var(--ink);font-weight:500}
 .list{list-style:none;padding:14px 14px 16px;display:grid;gap:6px}
 .eng{display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:16px;
-  padding:clamp(9px,1.5vh,13px) 16px;border-radius:10px;
+  padding:clamp(11px,1.8vh,14px) 18px;border-radius:10px;
   font:500 clamp(20px,2vw,27px)/1.1 var(--mono)}
 .eng span{font:400 clamp(15px,1.4vw,19px) "Fira Sans",sans-serif;color:var(--mute)}
 .dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--mute)}
@@ -49,7 +50,7 @@ h1 em{font-style:normal;color:var(--acc);display:block}
 <body>
 <header class="top">
   <span><b>local-ai-harness</b> · built on <i>pi</i></span>
-  <span>no API key · nothing leaves the box</span>
+  <span>Linux · <b>Windows</b> <em>beta</em></span>
 </header>
 <div class="main">
   <section class="copy">

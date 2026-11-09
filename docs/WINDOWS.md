@@ -1,4 +1,6 @@
-# Run a local AI coding agent on Windows with Strata
+# Run a local AI coding agent on Windows with Strata (beta)
+
+Windows support is in beta. See [What is tested](#what-is-tested).
 
 This harness sets up the [pi](https://github.com/earendil-works/pi) coding agent against a local engine. On Windows
 the engine is [Strata](https://github.com/Niko1221/Strata) (or gufo): you install and run it with its own tools, and

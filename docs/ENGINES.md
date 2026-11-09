@@ -154,8 +154,9 @@ The stock/abliterated answer applies to `flash-next` only: no abliterated build 
 
 **Recommendation off Strix Halo.** gufo targets Strix Halo (gfx1151) only, so every other AMD or NVIDIA box is
 recommended Strata, on the biggest ISTA pack whose RAM need fits (Strata's rule: experts + ~10 GB), Qwen3.6 Q4 from
-32 GB, nothing below that. An abliterated answer keeps `flash-next`. Windows and Mac are not set up by this harness
-(its launchers are bash): run Strata natively there and point pi at it with `./setup.sh --strata <url>`.
+32 GB, nothing below that. An abliterated answer keeps `flash-next`. The engine launchers are bash, so they run on Linux only.
+Windows has a beta pi-side installer (`setup.ps1`, see the Windows paragraph above). On a Mac, run Strata natively and point pi
+at it with `./setup.sh --strata <url>`; nothing else here is set up for macOS.
 
 > [!WARNING]
 > **None of the non-default rows has run here.** The sizes are Strata's MODELS.md / DETAILS.md and the Hugging Face

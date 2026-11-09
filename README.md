@@ -42,7 +42,7 @@ with rollback on failure.
 
 </div>
 
-![AI coding agent harness for any hardware, local or cloud, tuned for AMD Strix Halo: Qwen3.8 Flash-Next 125B runs on the Ryzen AI Max+ 395 iGPU, the NPU screens and routes prompts, a sidecar writes commits and summaries](docs/brand/hero.png)
+![Local AI harness: one command, ./harness use, switches the coding agent between Strata, halogen, gufo, llama.cpp, vLLM, Ollama and LM Studio. Linux, Windows (beta)](docs/brand/hero.png)
 
 - **Guided setup:** `./setup.sh` detects your engine (halogen, gufo, llama.cpp, Strata, vLLM,
   Ollama, LM Studio) and wires pi to it. The NPU tools are Strix Halo only.
@@ -70,9 +70,10 @@ with rollback on failure.
 
 Measured on an ASUS ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S, 128 GB) at 70 W sustained.
 
-## Windows
+## Windows (beta)
 
-Install [Strata](https://github.com/Niko1221/Strata) with its own installer and start it, install pi
+Windows support is in beta: `setup.ps1` is verified on a clean Windows 11 VM against a stub engine, not yet on Windows
+hardware with a real Strata. Install [Strata](https://github.com/Niko1221/Strata) with its own installer and start it, install pi
 (`irm https://pi.dev/install.ps1 | iex`), then in this repo run:
 
 ```powershell
@@ -254,7 +255,7 @@ Which engine for which hardware:
 | **Strix Halo** (Ryzen AI Max, 128 GB unified) | **halogen** | fastest measured, plus the NPU tools (guard, triage, dedup) |
 | Strix Halo, want open source | gufo or Strata | both open, both lose the NPU tools; Strata decodes faster, gufo prefills faster (table below) |
 | **NVIDIA RTX 20-50 / AMD RX 7000-9000, 12 GB+ VRAM** | **[Strata](docs/ENGINES.md#strata-the-pick-for-nvidia-and-amd-desktop-gpus)** | built for it; not measured here, see Strata's own benchmarks. `./harness recommend` picks the model by RAM: an ISTA pack of Flash-Next, or [Qwen3.6-35B-A3B](docs/ENGINES.md#other-models-on-strata-and-gufo) from 32 GB |
-| Windows | install Strata with its own installer, then `powershell -ExecutionPolicy Bypass -File .\setup.ps1` (sets up pi against the running Strata; needs Git for Windows and Python 3, and offers those plus uv/Serena through winget or uv's own installer) | tested on a clean Windows 11 VM against a stub engine (install, guards, MCP), not yet against a real Strata on Windows hardware; the engine launchers, `./harness` wizard and sidecar are bash/Linux, so start and upgrade the engine with Strata's own tools |
+| Windows (beta) | install Strata with its own installer, then `powershell -ExecutionPolicy Bypass -File .\setup.ps1` (sets up pi against the running Strata; needs Git for Windows and Python 3, and offers those plus uv/Serena through winget or uv's own installer) | tested on a clean Windows 11 VM against a stub engine (install, guards, MCP), not yet against a real Strata on Windows hardware; the engine launchers, `./harness` wizard and sidecar are bash/Linux, so start and upgrade the engine with Strata's own tools |
 | Apple Silicon, anything else | run Strata natively and point pi at it (`./setup.sh --strata <url>`), or llama.cpp / MLX / Ollama / LM Studio | not measured here; this harness's launchers are bash/Linux |
 
 On Strix Halo, matched measurements on this box (halogen and gufo A/B in one session, fabric clock
