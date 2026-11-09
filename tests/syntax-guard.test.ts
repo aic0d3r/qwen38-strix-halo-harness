@@ -15,6 +15,12 @@ test("picks a checker by extension and skips vendored paths", () => {
 	expect(checkCommand("/work/proj/build/a.py", "/work/proj")).toBeUndefined();
 });
 
+test("vendored dirs are skipped with Windows backslash paths too", () => {
+	expect(checkCommand("C:\\p\\node_modules\\x\\a.js")).toBeUndefined();
+	expect(checkCommand("C:\\work\\proj\\build\\a.py", "C:\\work\\proj")).toBeUndefined();
+	expect(checkCommand("C:\\p\\redist\\a.js")?.[0]).toBe("bun");
+});
+
 test("json errors are reported, valid json is clean", () => {
 	expect(jsonError('{"a":1}')).toBe("");
 	expect(jsonError('{"a":')).not.toBe("");

@@ -18,6 +18,7 @@
  * Off switch: TAINT_GATE_DISABLED=1.
  */
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { isOutsideContent, ev } from "./harness-profile/index.ts";
@@ -38,8 +39,8 @@ const ENV_DUMP = /(^|[;&|]\s*)(printenv|env)\s*($|[|;&>])/;
 const RM_RECURSIVE = /\brm\s+(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\b[^;&|\n]*/;
 const WIPE = /\b(mkfs(\.\w+)?|dd\s+[^|;&\n]*of=\/dev\/)\b/;
 
-const TMPDIR = process.env.TMPDIR || "/tmp";
-const inside = (p: string, cwd: string) => { const r = path.resolve(cwd, p.replace(/^~(?=\/|$)/, process.env.HOME || "~")); return r === cwd || r.startsWith(cwd + path.sep) || r.startsWith(TMPDIR + path.sep); };
+const TMPDIR = process.env.TMPDIR || os.tmpdir();
+const inside = (p: string, cwd: string) => { const r = path.resolve(cwd, p.replace(/^~(?=[\\/]|$)/, os.homedir())); return r === cwd || r.startsWith(cwd + path.sep) || r.startsWith(TMPDIR + path.sep); };
 
 /** Why this call is risky right after outside content, or null. Exported for tests. */
 export function riskyAfterOutside(toolName: string, input: any, cwd: string): string | null {

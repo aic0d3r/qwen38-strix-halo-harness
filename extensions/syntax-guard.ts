@@ -13,12 +13,12 @@ const PY = "import ast,sys; ast.parse(open(sys.argv[1]).read(), sys.argv[1])";
 // shortcut: bun's transpiler is the TS/JS parser (node --check fails on ESM .ts); no bun = no TS check.
 const BUN = ["bun", "build", "--no-bundle"];
 const CHECKS: Record<string, string[]> = {
-	py: ["python3", "-c", PY],
+	py: [process.platform === "win32" ? "python" : "python3", "-c", PY], // python3 is only the Store stub on Windows
 	sh: ["bash", "-n"],
 	bash: ["bash", "-n"],
 	ts: BUN, tsx: BUN, mts: BUN, js: BUN, jsx: BUN, mjs: BUN, cjs: BUN,
 };
-const SKIP_PATH = /(^|\/)(node_modules|dist|build|vendor)\//; // whole directory names, matched below the session cwd
+const SKIP_PATH = /(^|[\\/])(node_modules|dist|build|vendor)[\\/]/; // whole directory names, matched below the session cwd
 
 // full command to syntax-check this file, or undefined when its type has no checker
 export function checkCommand(file: string, cwd = ""): string[] | undefined {

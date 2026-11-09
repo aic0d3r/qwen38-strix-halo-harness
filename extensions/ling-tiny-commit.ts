@@ -15,7 +15,7 @@ import { isMain, profile, sidecarOn, ev } from "./harness-profile/index.ts";
 const TINY_MODEL = "ling3.0-tiny";
 // one JSON line per sidecar/NPU call; summarized by scripts/session-audit.sh --harness
 // crash-recovery checkpoint (progress-tracker) must never ride along in a commit
-const PROGRESS = (process.env.PI_PROGRESS_FILE || "PROGRESS.md").split("/").pop()!;
+const PROGRESS = (process.env.PI_PROGRESS_FILE || "PROGRESS.md").split(/[\\/]/).pop()!;
 
 // shortcut: quoted text is ignored, so `bash -c "git commit"` slips through; upgrade to a shell parser if agents start doing that
 const QUOTED = /<<-?\s*['"]?(\w+)['"]?[^\n]*\n[\s\S]*?\n\s*\1\b|'[^']*'|"(?:\\.|[^"\\])*"/g;

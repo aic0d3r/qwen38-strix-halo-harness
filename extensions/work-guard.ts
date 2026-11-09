@@ -4,6 +4,7 @@
 //  3. committing UI changes with no screenshot viewed since the last UI edit shows the user a reminder (no block)
 // Off switch: WORK_GUARD_DISABLED=1.
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { ev } from "./harness-profile/index.ts";
@@ -17,11 +18,12 @@ const BASH_EDIT = [
 	/\bpython3?\b[\s\S]*(\.write\(|write_text\(|open\([^)]*['"][wa]\+?['"])/,
 	new RegExp(`(>>?|\\btee\\s+(-a\\s+)?)\\s*["']?(?!/tmp/|/dev/)[^\\s"'|;&]*\\.${SRC}\\b`),
 ];
-const UI_PATH = /\.(css|scss|sass|less|html|vue|svelte|astro|tsx|jsx)$|(^|\/)(gui|ui|views?|components?|pages?|widgets?|screens?)\//i;
-const SKILL = /ui-ux-work\/SKILL\.md$/;
+// [\\/]: tool paths use backslashes on native Windows
+export const UI_PATH = /\.(css|scss|sass|less|html|vue|svelte|astro|tsx|jsx)$|(^|[\\/])(gui|ui|views?|components?|pages?|widgets?|screens?)[\\/]/i;
+export const SKILL = /ui-ux-work[\\/]SKILL\.md$/;
 const IMAGE = /\.(png|jpe?g|webp|gif)$/i;
 
-const TMPDIR = process.env.TMPDIR || "/tmp";
+const TMPDIR = process.env.TMPDIR || os.tmpdir();
 // heredoc bodies are data, not commands the agent is about to run
 const stripHeredocs = (cmd: string) => cmd.replace(/<<-?['"]?(\w+)['"]?[\s\S]*?\n\1\b/g, "<<heredoc");
 

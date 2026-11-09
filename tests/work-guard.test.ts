@@ -26,3 +26,11 @@ test("lets scratch work, reads and build/test commands through", () => {
 	expect(blocksBashEdit("go test ./...", PROJ)).toBe(false);
 	expect(blocksBashEdit("sed -n 1,5p a.go", PROJ)).toBe(false);
 });
+
+test("UI paths and the skill file match with Windows backslashes too", async () => {
+	const { UI_PATH, SKILL } = await import("../extensions/work-guard.ts");
+	for (const p of ["src/app.css", "src\\app.css", "C:\\p\\components\\x.ts", "/p/ui/x.ts"]) expect(UI_PATH.test(p)).toBe(true);
+	for (const p of ["src/main.ts", "C:\\p\\src\\main.ts", "/p/guide/x.ts"]) expect(UI_PATH.test(p)).toBe(false);
+	expect(SKILL.test("/h/.pi/agent/skills/ui-ux-work/SKILL.md")).toBe(true);
+	expect(SKILL.test("C:\\Users\\me\\.pi\\agent\\skills\\ui-ux-work\\SKILL.md")).toBe(true);
+});

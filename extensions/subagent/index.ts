@@ -40,8 +40,8 @@ const PER_TASK_OUTPUT_CAP = 50 * 1024;
  * pass through, a bare name is looked up under <agentDir>/skills.
  */
 function resolveSkill(entry: string): string {
-	if (entry.startsWith("/")) return entry;
-	if (entry.startsWith("~/")) return path.join(process.env.HOME ?? "", entry.slice(2));
+	if (path.isAbsolute(entry)) return entry;
+	if (/^~[\\/]/.test(entry)) return path.join(os.homedir(), entry.slice(2));
 	return path.join(getAgentDir(), "skills", entry);
 }
 

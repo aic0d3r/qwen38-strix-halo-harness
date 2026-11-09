@@ -7,6 +7,7 @@
 
 import { resolve } from "node:path";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { ev } from "./harness-profile/index.ts";
@@ -16,9 +17,9 @@ import { ev } from "./harness-profile/index.ts";
 // design skills), so the detector binary is wherever the user put it: override with
 // IMPECCABLE_BIN, else the default user-skill location. Missing binary = silent no-op.
 const DETECTOR =
-	process.env.IMPECCABLE_BIN || `${process.env.HOME}/.pi/agent/skills/impeccable/scripts/impeccable`;
+	process.env.IMPECCABLE_BIN || path.join(os.homedir(), ".pi", "agent", "skills", "impeccable", "scripts", "impeccable");
 const UI_FILE = /\.(css|scss|sass|less|html|vue|svelte|astro|tsx|jsx)$/i;
-const SKIP_PATH = /(^|\/)(node_modules|dist|build|vendor)\//;
+const SKIP_PATH = /(^|[\\/])(node_modules|dist|build|vendor)[\\/]/;
 
 type Finding = {
 	antipattern: string;
