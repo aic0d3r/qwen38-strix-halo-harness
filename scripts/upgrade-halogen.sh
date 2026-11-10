@@ -7,7 +7,7 @@
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 START="$REPO/server/start-halogen.sh"
-LOG=/tmp/halogen-upgrade.log
+mkdir -p "$HOME/.cache"; LOG="$HOME/.cache/halogen-upgrade.log"  # per-user dir: a fixed /tmp name can be a planted symlink
 TAG="${1:-latest}"
 HEALTH=http://127.0.0.1:8731/health
 

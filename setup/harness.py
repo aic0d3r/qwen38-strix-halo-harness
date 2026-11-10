@@ -244,7 +244,7 @@ def served_models(port, engine=None):
     hide = PROFILES["engines"].get(engine or "", {}).get("hide")
     try:
         ids = [m["id"] for m in json.load(http(f"http://127.0.0.1:{port}/v1/models"))["data"]]
-    except Exception:
+    except (OSError, ValueError, LookupError):
         return []
     return [i for i in ids if not (hide and re.search(hide, i))]
 
@@ -254,12 +254,12 @@ def identify(name, port):
     if name == "llamacpp":  # llama-server tags its models owned_by=llamacpp; Strata also serves /props, so that is no tell
         try:
             return any(m.get("owned_by") == "llamacpp" for m in json.load(http(f"http://127.0.0.1:{port}/v1/models"))["data"])
-        except Exception:
+        except (OSError, ValueError, LookupError):
             return False
     if name == "gufo":  # gufo tags its models owned_by=gufo
         try:
             return any(m.get("owned_by") == "gufo" for m in json.load(http(f"http://127.0.0.1:{port}/v1/models"))["data"])
-        except Exception:
+        except (OSError, ValueError, LookupError):
             return False
     if name == "strata":
         return not identify("llamacpp", port) and not identify("gufo", port)

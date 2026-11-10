@@ -11,7 +11,7 @@ For a pull request:
 - Run the tests before you push:
 
   ```bash
-  for t in tests/test_*.py; do python3 "$t" || break; done   # each prints "ok"
+  for t in tests/test_*.py; do python3 "$t" || break; done   # each prints "ok"; plain scripts, run them like this, not with pytest
   bun test tests/                                            # extension tests
   ```
 
