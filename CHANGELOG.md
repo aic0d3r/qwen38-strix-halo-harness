@@ -35,6 +35,7 @@ Windows (beta) and a new name. The README and banner now lead with hardware-awar
 - `start-halogen.sh` loads any other `HALOGEN_CHECKPOINT` (another `.hgn`, or a GGUF with halogen's MTP head, forced to 1 slot for halogen #172) and still reads tokenizer, vision, n-gram table and npu/ from the stock folder; `start-gufo-flashnext.sh` takes `GUFO_MODEL`.
 
 ### Changed
+- `taint-gate` prompts less: a plain `git push`, `curl` to localhost and reading `.env` no longer ask after outside content (force/delete pushes, remote uploads, `.env` writes, ssh/scp, `curl | sh` still do), and the prompt has a "don't ask again this session" choice per kind of risk.
 - Pin: halogen 0.18.14 -> 0.19.1 (validated by `scripts/upgrade-halogen.sh`).
 
 ### Removed

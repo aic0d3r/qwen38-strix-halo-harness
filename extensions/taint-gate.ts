@@ -71,10 +71,11 @@ export function riskyAfterOutside(toolName: string, input: any, cwd: string): st
 export default function taintGate(pi: ExtensionAPI) {
 	let tainted: string | null = null; // the tool that brought outside content in
 	let asked = 0, allowed = 0, blocked = 0;
+	const okForSession = new Set<string>(); // risk kinds the user said yes to for the rest of the session
 
 	// the user's own message ends the taint: a human just spoke, whatever the pages said is stale
 	pi.on("before_agent_start", async () => { tainted = null; });
-	for (const e of ["session_start", "session_compact", "session_tree", "session_switch", "session_fork"]) pi.on(e as any, async () => { tainted = null; });
+	for (const e of ["session_start", "session_compact", "session_tree", "session_switch", "session_fork"]) pi.on(e as any, async () => { tainted = null; okForSession.clear(); });
 
 	pi.on("tool_result", async (event: any) => {
 		if (process.env.TAINT_GATE_DISABLED || event?.isError) return;
@@ -84,13 +85,16 @@ export default function taintGate(pi: ExtensionAPI) {
 	pi.on("tool_call", async (event: any, ctx: any) => {
 		if (process.env.TAINT_GATE_DISABLED || !tainted) return;
 		const why = riskyAfterOutside(String(event?.toolName ?? ""), event?.input, ctx?.cwd ?? process.cwd());
-		if (!why) return;
+		if (!why || okForSession.has(why)) return;
 
 		asked++;
 		const what = (event.toolName === "bash" ? String(event.input?.command ?? "") : event.toolName === "subagent" ? JSON.stringify(event.input ?? {}) : String(event.input?.path ?? "")).slice(0, 300);
-		if (ctx?.hasUI && ctx.ui?.confirm) {
-			const ok = await ctx.ui.confirm(`Outside content is in context (${tainted})`, `The agent wants to run something that ${why}:\n\n${what}\n\nAllow it?`);
-			if (ok) { allowed++; ev({ c: "taint-gate", k: "allowed", why, tool: event.toolName }); return; }
+		if (ctx?.hasUI && (ctx.ui?.select || ctx.ui?.confirm)) {
+			const title = `Outside content is in context (${tainted})`, body = `The agent wants to run something that ${why}:\n\n${what}`;
+			const ALWAYS = `Yes, and don't ask again this session for: ${why}`;
+			const pick = ctx.ui.select ? await ctx.ui.select(`${title}\n\n${body}`, ["Yes", ALWAYS, "No"]) : (await ctx.ui.confirm(title, `${body}\n\nAllow it?`)) ? "Yes" : "No";
+			if (pick === ALWAYS) okForSession.add(why);
+			if (pick === "Yes" || pick === ALWAYS) { allowed++; ev({ c: "taint-gate", k: "allowed", why, tool: event.toolName }); return; }
 		}
 		blocked++;
 		ev({ c: "taint-gate", k: "blocked", why, tool: event.toolName, ui: !!ctx?.hasUI });

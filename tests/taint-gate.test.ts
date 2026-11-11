@@ -92,3 +92,17 @@ test("local reads and errors never taint", async () => {
 	await h.tool_result({ toolName: "mcp__ddg__search", input: {}, content: [], isError: true });
 	expect(await h.tool_call(bad, { cwd: CWD })).toBeUndefined();
 });
+
+test("'don't ask again' lasts the session, per kind of risk", async () => {
+	const h = wire();
+	let asks = 0;
+	const ui = { select: async (_t: string, o: string[]) => { asks++; return o[1]; } };
+	await h.tool_result({ toolName: "webfetch", input: {}, content: [] });
+	expect(await h.tool_call(bad, { cwd: CWD, hasUI: true, ui })).toBeUndefined();
+	await h.before_agent_start({ prompt: "again" });
+	await h.tool_result({ toolName: "webfetch", input: {}, content: [] });
+	expect(await h.tool_call(bad, { cwd: CWD, hasUI: true, ui })).toBeUndefined();
+	expect(asks).toBe(1);
+	await h.tool_call({ toolName: "bash", input: { command: "git push -f origin main" } }, { cwd: CWD, hasUI: true, ui });
+	expect(asks).toBe(2);
+});
