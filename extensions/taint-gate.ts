@@ -27,14 +27,16 @@ import { isOutsideContent, ev } from "./harness-profile/index.ts";
 // shortcut: regex heuristics on the command string. A determined agent can obfuscate around them
 // (base64, variables); the goal is the plain, copy-pasted attack a fetched page asks for.
 const SEND: [RegExp, string][] = [
-	[/\bcurl\b[^|;&\n]*(\s-d\b|\s-F\b|\s-T\b|--data|--form|--upload-file|-X\s*(POST|PUT|PATCH|DELETE))/i, "uploads data with curl"],
+	[/\bcurl\b(?![^|;&\n]*(localhost|127\.0\.0\.1|\[::1\]))[^|;&\n]*(\s-d\b|\s-F\b|\s-T\b|--data|--form|--upload-file|-X\s*(POST|PUT|PATCH|DELETE))/i, "uploads data with curl"],
 	[/\bwget\b[^|;&\n]*(--post-data|--post-file|--method)/i, "uploads data with wget"],
 	[/\|\s*(sudo\s+)?(ba|z|da|k)?sh\b|\b(ba|z)?sh\s+<\(\s*(curl|wget)|\beval\s+"?\$\(\s*(curl|wget)/i, "pipes into a shell"],
 	[/\b(nc|ncat|netcat|telnet|scp|sftp|rsync|ssh)\b|\/dev\/(tcp|udp)\//, "opens a connection / copies to another machine"],
-	[/\bgit\s+push\b/, "pushes commits"],
+	[/\bgit\s+push\b[^|;&\n]*(\s-f\b|--force|--delete|\s-d\b|\s\+\S|--mirror)/, "force-pushes or deletes remote refs"],
 ];
 // credential locations. `.env` must start a path component so process.env.X and .env.example don't trip it.
-const SECRET = /(^|[\s/"'=~])\.env(?![\w-]*\.?(example|sample|template)\b)(\b|$)|\.ssh\/|\bid_(rsa|ed25519|ecdsa)\b|\.aws\/|\.netrc\b|\.npmrc\b|\.pypirc\b|\.gnupg\b|\.pi\/agent\/auth|auth\.json\b|\.config\/gh\/hosts/;
+const DOTENV = /(^|[\s/"'=~])\.env(?![\w-]*\.?(example|sample|template)\b)(\b|$)/;
+const WRITEISH = /[^<]>|\btee\b|\bsed\s+-i|\b(mv|cp|rm|truncate|shred)\b/; // reading .env is fine, changing it is not
+const SECRET = /\.ssh\/|\bid_(rsa|ed25519|ecdsa)\b|\.aws\/|\.netrc\b|\.npmrc\b|\.pypirc\b|\.gnupg\b|\.pi\/agent\/auth|auth\.json\b|\.config\/gh\/hosts/;
 const ENV_DUMP = /(^|[;&|]\s*)(printenv|env)\s*($|[|;&>])/;
 const RM_RECURSIVE = /\brm\s+(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\b[^;&|\n]*/;
 const WIPE = /\b(mkfs(\.\w+)?|dd\s+[^|;&\n]*of=\/dev\/)\b/;
@@ -47,7 +49,7 @@ export function riskyAfterOutside(toolName: string, input: any, cwd: string): st
 	if (toolName === "bash") {
 		const cmd = String(input?.command ?? "");
 		for (const [re, why] of SEND) if (re.test(cmd)) return why;
-		if (SECRET.test(cmd) || ENV_DUMP.test(cmd)) return "touches credentials or dumps the environment";
+		if (SECRET.test(cmd) || (DOTENV.test(cmd) && WRITEISH.test(cmd)) || ENV_DUMP.test(cmd)) return "touches credentials or dumps the environment";
 		if (WIPE.test(cmd)) return "formats or overwrites a disk";
 		const rm = RM_RECURSIVE.exec(cmd);
 		if (rm) {
@@ -61,7 +63,7 @@ export function riskyAfterOutside(toolName: string, input: any, cwd: string): st
 	if (toolName === "read" || toolName === "edit" || toolName === "write") {
 		const p = typeof input?.path === "string" ? input.path : "";
 		if (!p) return null;
-		if (SECRET.test(p)) return "touches credentials";
+		if (SECRET.test(p) || (toolName !== "read" && DOTENV.test(p))) return "touches credentials";
 	}
 	return null;
 }

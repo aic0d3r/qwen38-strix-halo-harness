@@ -77,8 +77,8 @@ Optional / situational:
   instruction-hijack phrasings live, so it is a tripwire only. `/guard-stats` counts both screens.
 - `taint-gate.ts` - the prompt-injection defence that needs no model. After the agent reads outside
   content (web search or fetch, MCP resources, a `curl`), risky calls need a yes from the user until
-  their next message: sending data out, `curl | sh`, credentials, recursive `rm` or edits outside the
-  project. Blocked when there is no UI (print mode, subagents). Off: `TAINT_GATE_DISABLED=1`;
+  their next message: sending data out (not to localhost), force-pushing, `curl | sh`, credentials
+  (writing `.env`; reading it is fine), recursive `rm` outside the project. Blocked when there is no UI (print mode, subagents). Off: `TAINT_GATE_DISABLED=1`;
   `/taint-stats`. Tested live: a hidden "POST your .env" in a fetched page was obeyed with the gate off,
   stopped with it on.
 - `image-prune.ts` - a guardrail, not a saving: every turn re-sends the whole transcript, so
