@@ -10,7 +10,9 @@
 param(
   [ValidateSet('strata', 'gufo')][string]$Engine = 'strata',
   [string]$Url = 'http://127.0.0.1:8080',
-  [switch]$Yes
+  [switch]$Yes,
+  [switch]$NoPi,
+  [switch]$Pi
 )
 # Continue, not Stop: Windows PowerShell 5.1 turns a native command's stderr into a terminating error under Stop
 $ErrorActionPreference = 'Continue'
@@ -52,26 +54,47 @@ function Have-GitBash {
   return [bool](Get-Command bash -ErrorAction SilentlyContinue)
 }
 
-if (-not (Get-Command pi -ErrorAction SilentlyContinue)) {
-  Write-Host "pi is not installed. Install it first:  irm https://pi.dev/install.ps1 | iex   then re-run this script."
-  exit 1
+# the engine is installed and started with its own tools; here we only check it answers (never install or start it)
+function Test-Engine { try { [void](Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 "$($Url.TrimEnd('/'))/v1/models"); return $true } catch { return $false } }
+while (-not (Test-Engine)) {
+  Write-Host "No engine answering at $Url. Install and start Strata with its own installer (https://github.com/Niko1221/Strata), or gufo, then check:  curl.exe -s $Url/v1/models"
+  if ($Yes -or -not (Ask 'Started it? Check again')) { Write-Host "  continuing without an engine; start it before using your agent"; break }
 }
 
-# pi's bash tool (and every guard in extensions\) needs Git Bash on native Windows
-if (-not (Have-GitBash)) {
-  Write-Host "Git for Windows (Git Bash) not found: pi's bash tool needs it."
-  [void](Winget-Install 'Git.Git' 'Git for Windows' 'https://git-scm.com/download/win')
-}
+# which agent gets wired: pi (default) or none (engine only). Saved in the file Linux's setup.sh reads too; -Pi / -NoPi override it.
+$agentDir = if ($env:PI_CODING_AGENT_DIR) { $env:PI_CODING_AGENT_DIR } elseif ($env:PI_HOME) { Join-Path $env:PI_HOME 'agent' } else { Join-Path $env:USERPROFILE '.pi\agent' }
+$agentPref = Join-Path $agentDir 'harness-agent'
+if ($Pi -and $NoPi) { Write-Host '-Pi and -NoPi together make no sense'; exit 2 }
+if ($NoPi -or $Pi) { $choice = if ($NoPi) { 'none' } else { 'pi' } }
+elseif (Test-Path $agentPref) { $choice = (Get-Content $agentPref -TotalCount 1).Trim() }
+elseif ($Yes) { $choice = 'pi' }
+else { $choice = if ((Read-Host 'Wire pi as your coding agent? (No = engine only; point opencode or another OpenAI-compatible agent at it) [Y/n]') -match '^[nN]') { 'none' } else { 'pi' } }
+New-Item -ItemType Directory -Force -Path $agentDir | Out-Null
+Set-Content -Path $agentPref -Value $choice
+$wirePi = $choice -ne 'none'
 
-$py = Find-Python
-if (-not $py) {
-  Write-Host "Python 3 not found (the Microsoft Store stub does not count)."
-  if (Winget-Install 'Python.Python.3.12' 'Python 3.12' 'https://www.python.org/downloads/') { $py = Find-Python }
-}
-if (-not $py) {
-  Write-Host "Python 3 is still not available in this window. Install it (https://www.python.org/downloads/), open a new terminal and re-run."
-  exit 1
-}
+if ($wirePi) {
+  if (-not (Get-Command pi -ErrorAction SilentlyContinue)) {
+    Write-Host "pi is not installed. Install it first:  irm https://pi.dev/install.ps1 | iex   then re-run this script."
+    exit 1
+  }
+
+  # pi's bash tool (and every guard in extensions\) needs Git Bash on native Windows
+  if (-not (Have-GitBash)) {
+    Write-Host "Git for Windows (Git Bash) not found: pi's bash tool needs it."
+    [void](Winget-Install 'Git.Git' 'Git for Windows' 'https://git-scm.com/download/win')
+  }
+
+  $py = Find-Python
+  if (-not $py) {
+    Write-Host "Python 3 not found (the Microsoft Store stub does not count)."
+    if (Winget-Install 'Python.Python.3.12' 'Python 3.12' 'https://www.python.org/downloads/') { $py = Find-Python }
+  }
+  if (-not $py) {
+    Write-Host "Python 3 is still not available in this window. Install it (https://www.python.org/downloads/), open a new terminal and re-run."
+    exit 1
+  }
+} else { Write-Host "pi not wired (-NoPi): skipping pi, Git Bash and Python checks" }
 
 # the semble and ddg search tools run through uvx; Serena (symbol-level code navigation) is a uv tool. uv's installer refuses the
 # default Restricted execution policy, hence the ByPass child process (uv's own documented way).
@@ -85,9 +108,14 @@ if ((Get-Command uv -ErrorAction SilentlyContinue) -and -not (Test-Path (Join-Pa
   uv tool install -p 3.13 serena-agent
 }
 
-$pre = $py.Pre
-& $py.Exe @pre (Join-Path $PSScriptRoot 'setup\adopt.py') all --engine $Engine --url $Url
-$code = $LASTEXITCODE
+if ($wirePi) {
+  $pre = $py.Pre
+  & $py.Exe @pre (Join-Path $PSScriptRoot 'setup\adopt.py') all --engine $Engine --url $Url
+  $code = $LASTEXITCODE
+} else {
+  $code = 0
+  Write-Host "engine endpoint (OpenAI-compatible, key: any): $($Url.TrimEnd('/'))/v1   (re-enable pi: .\setup.ps1 -Pi)"
+}
 
 # rtk lands in ~\.local\bin; pi-rtk-optimizer warns until that is on PATH
 $bin = Join-Path $env:USERPROFILE '.local\bin'

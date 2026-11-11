@@ -21,6 +21,10 @@ the engine is [Strata](https://github.com/Niko1221/Strata) (or gufo): you instal
 
    Other engine or address: `.\setup.ps1 -Engine gufo -Url http://192.168.1.20:8080`. `-Yes` answers every
    prerequisite prompt with yes.
+
+   The script first checks that the engine answers at `-Url` (it never installs or starts one), then asks whether to wire
+   pi. `-NoPi` skips pi, Git Bash and Python and just prints the OpenAI-compatible endpoint, for opencode or another
+   agent; the choice is saved and `-Pi` turns pi wiring back on.
 5. Start pi in your project and pick the Strata model.
 
 ## What `setup.ps1` does

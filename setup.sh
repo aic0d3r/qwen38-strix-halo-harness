@@ -22,6 +22,9 @@
 #                               and start Strata itself first, per its README.
 #   ./setup.sh --gufo [url]     same pi-only install for gufo (default http://127.0.0.1:8080, what
 #                               server/start-gufo-flashnext.sh serves). Stop halogen first.
+#   ./setup.sh --no-pi          engine/server + sidecar only: do not wire pi (no extensions, models.json,
+#                               MCP, skills), for people using another agent (opencode, ...). Prints
+#                               the OpenAI-compatible endpoints. Saved; ./setup.sh --pi turns pi wiring back on.
 #   ./setup.sh --voice          also set up the voice stack (Lemonade STT/TTS)
 #   ./setup.sh --no-sidecar     do not run the ling-tiny sidecar (saves ~8 GiB GPU memory; the
 #                               main model writes commits/summaries). --sidecar turns it back on.
@@ -30,7 +33,7 @@
 set -u
 # bare invocation in a terminal = the guided wizard (flags below stay for scripts/CI)
 if [ $# -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then exec python3 -u "$(dirname "$(readlink -f "$0")")/setup/harness.py" setup; fi
-HALOGEN_CKPT=""; SIDECAR_SET=""; DOCTOR=0; REFUSALS=0; REFRESH_MCP=0; VOICE=0; NO_HALOGEN=0; STRATA=0; GUFO=0; ENG=strata; ENG_URL=http://127.0.0.1:8080
+HALOGEN_CKPT=""; SIDECAR_SET=""; AGENT_SET=""; DOCTOR=0; REFUSALS=0; REFRESH_MCP=0; VOICE=0; NO_HALOGEN=0; STRATA=0; GUFO=0; ENG=strata; ENG_URL=http://127.0.0.1:8080
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-halogen)  NO_HALOGEN=1; shift ;;
@@ -41,6 +44,7 @@ while [ $# -gt 0 ]; do
     --refusals) REFUSALS=1; DOCTOR=1; shift ;;
     --refresh-mcp) REFRESH_MCP=1; shift ;;
     --voice)   VOICE=1; shift ;;
+    --pi|--no-pi) AGENT_SET=$([ "$1" = --pi ] && echo pi || echo none); shift ;;
     --sidecar|--no-sidecar) SIDECAR_SET=$([ "$1" = --sidecar ] && echo 1 || echo 0); shift ;;
     --halogen-upgrade) case "${2:-}" in ""|-*) HALOGEN_UPGRADE=latest; shift ;; *) HALOGEN_UPGRADE="$2"; shift 2 ;; esac ;;
     --uninstall) UNINSTALL=1; shift ;;
@@ -56,6 +60,10 @@ TINY_PORT=8090; HAL_PORT=8731
 # ling-tiny sidecar is a saved choice (1/0), asked by the wizard; absent = on (old installs keep working)
 SC_PREF="$PI_HOME/agent/harness-sidecar"
 [ -n "$SIDECAR_SET" ] && { mkdir -p "$(dirname "$SC_PREF")"; echo "$SIDECAR_SET" > "$SC_PREF"; }
+# which agent gets wired: pi (default, also when absent) or none (engine only); the wizard asks, --pi/--no-pi set it
+AGENT_PREF="$PI_HOME/agent/harness-agent"
+[ -n "$AGENT_SET" ] && { mkdir -p "$(dirname "$AGENT_PREF")"; echo "$AGENT_SET" > "$AGENT_PREF"; }
+NO_PI=0; [ "$(cat "$AGENT_PREF" 2>/dev/null)" = none ] && NO_PI=1
 SIDECAR_ON=1; [ "$(cat "$SC_PREF" 2>/dev/null)" = 0 ] && SIDECAR_ON=0
 # sidecar batch size shared with /tune and start-ling-tiny.sh; without this the
 # unit and first-boot spawn ran llama.cpp's 512 default, 8x below the measured 4096
@@ -127,6 +135,7 @@ if [ -n "${HALOGEN_UPGRADE:-}" ]; then
 fi
 if [ "$DOCTOR" = 1 ]; then
   echo "== harness doctor =="
+  if [ "$NO_PI" = 1 ]; then ok "pi not wired (--no-pi; ./setup.sh --pi turns it on)"; else
   command -v pi >/dev/null          && ok "pi installed"           || fail "pi not found - install the pi coding agent first"
   [ -f "$EXT_DIR/progress-tracker.ts" ] \
                                     && ok "core extensions in place" || fail "extensions missing - run ./setup.sh"
@@ -137,6 +146,7 @@ if [ "$DOCTOR" = 1 ]; then
   if [ -f "$PI_HOME/agent/mcp.json" ]; then
     MCP_DRIFT=$(python3 "$REPO/setup/mcp.py" check "$PI_HOME/agent/mcp.json" 2>/dev/null)
     [ -n "$MCP_DRIFT" ] && warn "$MCP_DRIFT"
+  fi
   fi
   if [ "$SIDECAR_ON" = 0 ]; then ok "sidecar off (opted out; ./setup.sh --sidecar turns it on)"
   elif tiny_up;                     then ok "sidecar up (:8090)"
@@ -239,9 +249,13 @@ if [ "$NO_HALOGEN" = 0 ] && [ ! -s "$UPD_PREF" ] && [ -t 0 ]; then
   mkdir -p "$(dirname "$UPD_PREF")"; case "$A" in [yY]*) echo 1 ;; *) echo 0 ;; esac > "$UPD_PREF"
 fi
 
+command -v python3 >/dev/null || { fail "python3 required - install python3 and re-run"; exit 1; }
+if [ "$NO_PI" = 1 ]; then
+  echo "== 1. pi wiring =="
+  ok "skipped (--no-pi): no extensions, models.json, skills, MCP or AGENTS.md; engine and sidecar only"
+else
 echo "== 1. pi + extensions =="
 if command -v pi >/dev/null; then ok "pi found"; else fail "pi coding agent not found on PATH - install it first, then re-run"; fi
-command -v python3 >/dev/null || { fail "python3 required - install python3 and re-run"; exit 1; }
 python3 "$REPO/setup/adopt.py" extensions $([ "$NO_HALOGEN" = 1 ] && echo --no-halogen)  # copy logic lives in adopt.py (shared with the Windows installer)
 
 echo "== 2. pi providers (models.json) =="
@@ -371,6 +385,7 @@ fi
 echo "== 2c. global AGENTS.md =="
 # user-owned: write only when absent, never append to or overwrite an existing one
 python3 "$REPO/setup/adopt.py" agents
+fi
 
 echo "== 3. ling-tiny sidecar (:8090) =="
 GGUF=""
@@ -572,6 +587,11 @@ host_checks
 
 echo
 echo "done. doctor check any time:  ./setup.sh --doctor"
+if [ "$NO_PI" = 1 ]; then
+  echo "agent-agnostic endpoints (OpenAI-compatible, key: any): sidecar http://127.0.0.1:$TINY_PORT/v1"
+  [ "$NO_HALOGEN" = 1 ] && echo "  main engine: $ENG_URL/v1" || echo "  main engine: http://127.0.0.1:$HAL_PORT/v1 (halogen)"
+  exit 0
+fi
 if [ "$STRATA" = 1 ] || [ "$GUFO" = 1 ]; then
   echo "use it:  pi --provider $ENG --model <model id above>   (no NPU tools on $ENG, see docs/ENGINES.md)"; exit 0
 fi

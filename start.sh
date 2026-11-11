@@ -9,6 +9,8 @@ D="${1:-$PWD}"
 [ -d "$D" ] || { echo "not a directory: $D" >&2; exit 1; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
 python3 -u "$HERE/setup/harness.py" up || exit 1
+# pi not wired (./setup.sh --no-pi): the engine is up, `up` printed its endpoint; the user's own agent takes it from here
+[ "$(cat "${PI_CODING_AGENT_DIR:-${PI_HOME:-$HOME/.pi}/agent}/harness-agent" 2>/dev/null)" = none ] && exit 0
 read -r PROV MID < <(python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); print(p["provider"], p["model"])' \
   "${PI_CODING_AGENT_DIR:-${PI_HOME:-$HOME/.pi}/agent}/harness-profile.json" 2>/dev/null)
 cd "$D"

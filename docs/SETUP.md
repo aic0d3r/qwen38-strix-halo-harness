@@ -55,6 +55,9 @@ install instead.
 - `--no-halogen` installs pi without container management: a laptop pi against your own providers, or against a remote
   Strix Halo appliance via `baseUrl` + `PI_NPU_BASE`.
 - `--strata [url]` and `--gufo [url]` do a pi-only install with a provider for that engine.
+- `--no-pi` (also asked by the wizard) skips all pi wiring: engine and ling-tiny sidecar only, then prints the
+  OpenAI-compatible endpoints for opencode or any other agent. Independent of `--no-halogen`. The pi extensions (NPU
+  tools, guards, turn-timer, MCP exposure, skills) are pi-only and are not installed. `./setup.sh --pi` undoes it.
 - Also: `--voice`, `--halogen-upgrade [tag]`, `--uninstall`, `--help`.
 
 Prerequisites for halogen: docker (setup will not sudo-install it) and, for the NPU driver, an IOMMU-enabled gfx1151 box.

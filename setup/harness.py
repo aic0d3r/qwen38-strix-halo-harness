@@ -943,6 +943,25 @@ def ask_sidecar(reconfigure):
     open(os.path.join(AGENT, "harness-sidecar"), "w").write("1\n" if on else "0\n")
 
 
+def no_pi():
+    """True when the user opted out of pi wiring (file setup.sh reads: 'none'; absent = pi)."""
+    try:
+        return open(os.path.join(AGENT, "harness-agent")).read().strip() == "none"
+    except OSError:
+        return False
+
+
+def ask_agent(reconfigure):
+    """Ask once whether to wire pi; No = engine + sidecar only, for opencode or any OpenAI-compatible agent."""
+    f = os.path.join(AGENT, "harness-agent")
+    if (os.path.exists(f) and not reconfigure) or not sys.stdin.isatty():
+        return
+    on = ask_yn("Wire pi as your coding agent? (No = engine + sidecar only; point opencode or another "
+                "OpenAI-compatible agent at the endpoint)", True)
+    os.makedirs(AGENT, exist_ok=True)
+    open(f, "w").write("pi\n" if on else "none\n")
+
+
 def ask_once(key, question, reconfigure):
     """y/N asked on a terminal, then remembered; --reconfigure asks again."""
     st = jget(EXTRAS, {})
@@ -1110,10 +1129,12 @@ def cmd_up(_):
     if eng not in running:
         plan = plan_start(eng, running, ask_start=False)
         if plan is None or not start_engine(eng, running, plan):
-            print(f"! {not_answering(eng)}; pi opens anyway", file=sys.stderr)
+            print(f"! {not_answering(eng)}; {'continuing' if no_pi() else 'pi opens anyway'}", file=sys.stderr)
     if not install_extensions(eng, verbose=False, show_ok=False):
         print(f"! setup.sh reported problems (details: {SETUP_LOG})", file=sys.stderr)
     sync_ctx(eng)
+    if no_pi():
+        print(f"{eng}: http://127.0.0.1:{PROFILES['engines'][eng]['port']}/v1  (pi not wired; ./harness config to change)")
     if update_pref() == "1":
         msg = engine_update(eng)
         if msg:
@@ -1167,6 +1188,13 @@ def finish(eng, mod, no_tune, launch=False):
         if "error" in tuned:
             print("  probe failed - keeping shipped defaults")
             tuned = {}
+    if no_pi():
+        e = PROFILES["engines"][eng]
+        print(f"\n== ready (pi not wired) ==\n  engine   {eng}: http://127.0.0.1:{e['port']}/v1  (OpenAI-compatible, key: any)\n  sidecar  http://127.0.0.1:8090/v1")
+        print("  re-enable pi: ./setup.sh --pi   (then ./setup.sh)")
+        jput(os.path.join(AGENT, "harness-profile.json"), {"engine": eng, "provider": e["provider"], "model": mod,
+                                                           "npu": bool(e["npu"]), "npuUrl": "http://127.0.0.1:8731", "sidecarUrl": "http://127.0.0.1:8090"})  # so start.sh knows the engine
+        return
     prov, mid, ctx = apply(eng, mod, tuned)
     speed = f"{tuned['prefill_tps']} t/s prefill, {tuned['decode_tps']} t/s decode" if tuned.get("decode_tps") else "not probed (./harness tune)"
     if no_tune and tuned.get("decode_tps"):
@@ -1188,11 +1216,12 @@ def cmd_setup(a):
     print(f"hardware: {h['ram_gb']} GB RAM, gpu={h['gpu']}, npu={h['npu']}; engines up: {[x['engine'] for x in d['engines']] or 'none'}")
     cap = capacity()
     print("\n".join(describe(recommend(h, cap), cap)[1:]))
-    if not d["pi"]:
-        print("! pi not found on PATH - install it first")
     # 1. every question first ...
     if not a.yes:
+        ask_agent(a.reconfigure)
         harness_update_offer()
+    if not d["pi"] and not no_pi():
+        print("! pi not found on PATH - install it first")
     up = []  # the update check runs as soon as the engine is chosen, before "Start <engine>?"
     eng, plan = pick_engine(d, a.yes, on_pick=None if a.yes else lambda e: up.append(update_offer(e)) or up[0])
     upgrade = bool(up and up[0])
@@ -1200,7 +1229,7 @@ def cmd_setup(a):
         ask_sidecar(a.reconfigure)
     voice = not a.yes and ask_once("voice", "Set up voice (local STT/TTS via Lemonade)?", a.reconfigure)
     if not a.yes and sys.stdin.isatty():
-        steps = [f"install/update pi extensions, providers, skills{'' if verbose else f' (details: {SETUP_LOG})'}",
+        steps = [("skip pi wiring (engine + sidecar only)" if no_pi() else f"install/update pi extensions, providers, skills{'' if verbose else f' (details: {SETUP_LOG})'}"),
                  choices_line()] + (
             [f"stop {plan['stop']} and the ling-tiny sidecar"] if plan and plan["stop"] else []) + (
             ["download halogen (~124 GB, resumable)"] if plan and plan["download"] else []) + (
@@ -1218,7 +1247,7 @@ def cmd_setup(a):
     # 2. ... then run without stopping: install, free memory/download, upgrade, and start the engine last
     if not install_extensions(eng, ["--voice"] if voice else [], verbose, launch=False):
         print(f"! setup.sh reported problems (see above{'' if verbose else ' and ' + SETUP_LOG})")
-    added = serena_languages()
+    added = [] if no_pi() else serena_languages()
     if added:
         print(f"serena: enabled language servers {added} in .serena/project.yml (restart serena to load them)")
     stopped = plan and plan.get("stop")
@@ -1280,6 +1309,7 @@ def cmd_config(a):
             f"engine        {p.get('engine', '-')}/{p.get('model', '-')}": "engine",
             f"model         {model_pref()}  (gufo and Strata; halogen always runs Flash-Next)": "model",
             f"weights       {weights_pref()}  (default for halogen and gufo)": "weights",
+            f"agent         {'none (engine only)' if no_pi() else 'pi'}  (pi wiring: extensions, models.json, MCP)": "agent",
             f"sidecar       {'on' if sc else 'off'}  (ling-tiny, ~8 GiB GPU memory)": "sidecar",
             f"voice         {'on' if voice else 'off'}  (Lemonade STT/TTS)": "voice",
             f"update check  {'on' if upd == '1' else 'off'}  (newer engine release, never installs without asking)": "update",
@@ -1308,6 +1338,14 @@ def cmd_config(a):
                     continue
                 running.pop(eng, None)
                 start_engine(eng, running)
+        elif k == "agent":
+            was_off = no_pi()  # read before open("w") truncates the file
+            open(os.path.join(AGENT, "harness-agent"), "w").write("pi\n" if was_off else "none\n")
+            if was_off:
+                install_extensions(p.get("engine", "halogen"), verbose=False, launch=False)  # never start an engine from a toggle
+                print("  pi wired; ./harness setup finishes the provider setup")
+            else:
+                print("  pi wiring off (nothing uninstalled; ./start.sh now only brings the engine up)")
         elif k == "sidecar":
             open(os.path.join(AGENT, "harness-sidecar"), "w").write("0\n" if sc else "1\n")
             r = subprocess.run(["systemctl", "--user", "stop" if sc else "start", "ling-tiny.service"], capture_output=True)

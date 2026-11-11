@@ -31,7 +31,7 @@ echo "[1/8] backup -> $BACKUP"
 TAR_ARGS=(-C "$PI_HOME" agent/extensions agent/prompts agent/skills agent/themes agent/settings.json agent/models.json agent/mcp.json)
 [ -f "$HOME/.config/systemd/user/ling-tiny.service" ] && TAR_ARGS+=(-C "$HOME/.config/systemd/user" ling-tiny.service)
 # every state file the harness writes into the agent dir (wizard answers, tuning, markers, logs); one list for backup and removal
-STATE=(harness-profile.json harness-tuned.json harness-extras.json harness-sidecar harness-update-check harness-update-stamp
+STATE=(harness-profile.json harness-tuned.json harness-extras.json harness-sidecar harness-agent harness-update-check harness-update-stamp
        harness-hints-shown harness-repo harness-ubatch harness-events.jsonl setup.log
        harness-weights hud.log progress-stamps.json)
 for f in "${STATE[@]}"; do [ -f "$AG/$f" ] && TAR_ARGS+=(-C "$PI_HOME" "agent/$f"); done
