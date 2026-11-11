@@ -3,6 +3,21 @@
 <!-- One block per section per release, in the order Added, Changed, Fixed. Add new entries to the
      existing block instead of opening a second one, so a release never has two "### Fixed" lists. -->
 
+## 2.1.0 - 2026-11-11
+
+Engine-only installs: the engines and the sidecar now set up and run without pi, for opencode or any other OpenAI-compatible agent, on Linux and Windows. The README starts at a copy-paste install block and moved the reference material into docs/.
+
+### Added
+- Engine-only mode, no agent wired: `./setup.sh --no-pi` skips all pi wiring (extensions, models.json, MCP, skills, AGENTS.md) and sets up engine and ling-tiny sidecar only, then prints the OpenAI-compatible endpoints (sidecar `:8090/v1`, main engine per engine choice; key: any). The wizard asks once ("Wire pi as your coding agent?"), the answer is saved (`agent/harness-agent`, the file Windows reads too), `./setup.sh --pi` turns wiring back on, `./harness config` -> agent toggles it (back on it runs the extension install; `./harness setup` finishes the provider setup), `start.sh` and `./harness up` exit after the engine is up and print its endpoint, `--doctor` skips the pi checks when unwired, and uninstall removes the new state file. Windows: `setup.ps1` first checks that the engine answers at `-Url` (it never installs or starts one), then asks whether to wire pi; `-NoPi` skips the pi, Git Bash and Python checks and just prints the endpoint, `-Pi` turns pi wiring back on. Independent of `--no-halogen`. The pi extensions (NPU tools, guards, turn-timer, MCP exposure, skills) stay pi-only and are not installed. docs/SETUP.md and docs/WINDOWS.md updated.
+- Install-first README: 152 lines with a copy-paste clone + `./setup.sh` block and a one-line explanation of what setup does; the wizard walkthrough, the Strix Halo reference setup, the engine tables and the tools list moved to `docs/SETUP.md` and `docs/STRIX-HALO.md`. Windows gets its own copy-paste install block with a no-Git ZIP fallback (README, docs/WINDOWS.md, Pages). The banner leads with hardware-aware setup (new hero and social-preview images); Pages carries a Google Search Console verification tag.
+
+### Changed
+- `taint-gate` prompts less: a plain `git push`, `curl` to localhost and reading `.env` no longer ask after outside content (force/delete pushes, remote uploads, `.env` writes, ssh/scp, `curl | sh` still do), and the prompt has a "don't ask again this session" choice per kind of risk (cleared on start, compact, switch and fork; falls back to a plain confirm where the UI has no select).
+- Audit fixes: `upgrade-halogen.sh` writes its log to `$HOME/.cache/halogen-upgrade.log` instead of a fixed `/tmp` name (a planted symlink there would be followed), engine probes in `harness.py` catch only `(OSError, ValueError, LookupError)` instead of every exception, and CONTRIBUTING.md names the test commands.
+
+### Fixed
+- A `git` that never exits could hang pi's shutdown (progress-tracker waits for it): its three `git` execs (`diff --stat`, `status --short`, `log`) now carry a 10 s timeout. Seen on Windows, where a bare `git` resolves against the working directory first — a downloaded `git.exe` installer in the project folder is what `pi.exec("git")` launched, and `pi -p` then never exited. Pitfall documented in `tests/windows-vm/README.md` (download installers to `$env:TEMP`).
+
 ## 2.0.0 - 2026-11-09
 
 Windows (beta) and a new name. The README and banner now lead with hardware-aware setup: detect the GPU, VRAM and RAM, recommend an engine and model, and size limits to the context window. `setup.ps1` is verified on a clean Windows 11 VM against a stub engine, not yet on Windows hardware with a real Strata; the `./harness` wizard, engine launchers and sidecar stay Linux only.
@@ -35,7 +50,6 @@ Windows (beta) and a new name. The README and banner now lead with hardware-awar
 - `start-halogen.sh` loads any other `HALOGEN_CHECKPOINT` (another `.hgn`, or a GGUF with halogen's MTP head, forced to 1 slot for halogen #172) and still reads tokenizer, vision, n-gram table and npu/ from the stock folder; `start-gufo-flashnext.sh` takes `GUFO_MODEL`.
 
 ### Changed
-- `taint-gate` prompts less: a plain `git push`, `curl` to localhost and reading `.env` no longer ask after outside content (force/delete pushes, remote uploads, `.env` writes, ssh/scp, `curl | sh` still do), and the prompt has a "don't ask again this session" choice per kind of risk.
 - Pin: halogen 0.18.14 -> 0.19.1 (validated by `scripts/upgrade-halogen.sh`).
 
 ### Removed
