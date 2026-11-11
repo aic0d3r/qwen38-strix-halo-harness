@@ -129,14 +129,15 @@ let responseCount = 0;
 
 	async function writeProgress(ctx: any) {
 		const cwd = process.cwd();
-		const { code, stdout } = await pi.exec("git", ["diff", "--stat"], { cwd });
+		// timeout: a git that never exits must not hang pi's shutdown, which waits for this handler (on Windows `git` can resolve to a git.exe in the cwd)
+		const { code, stdout } = await pi.exec("git", ["diff", "--stat"], { cwd, timeout: 10_000 });
 		// diff --stat only shows tracked files: a session that only creates new
 		// files checkpointed as "(no changes)", which crash recovery must not miss
-		const { code: sc, stdout: ss } = await pi.exec("git", ["status", "--short"], { cwd });
+		const { code: sc, stdout: ss } = await pi.exec("git", ["status", "--short"], { cwd, timeout: 10_000 });
 		const pb = path.basename(PROGRESS_FILE);
 		const statusLines = sc === 0 ? ss.split("\n").filter((l: string) => l.trim() && !l.includes(pb) && !l.includes(".progress-log")).join("\n") : "";
 		const diffStat = [code === 0 ? stdout.trim() : "", statusLines].filter(Boolean).join("\n") || "(no changes)";
-		const { code: lc, stdout: ls } = await pi.exec("git", ["log", "--oneline", "-3"], { cwd });
+		const { code: lc, stdout: ls } = await pi.exec("git", ["log", "--oneline", "-3"], { cwd, timeout: 10_000 });
 		const recentCommits = lc === 0 ? ls.trim() : "";
 		const taskLine = (taskDescription || "(unspecified)").replace(/\n+/g, " ").slice(0, 2000);
 		const lastNote = lastAssistantText(ctx);
