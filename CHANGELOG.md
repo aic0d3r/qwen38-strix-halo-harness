@@ -14,9 +14,7 @@ Engine-only installs: the engines and the sidecar now set up and run without pi,
 ### Changed
 - `taint-gate` prompts less: a plain `git push`, `curl` to localhost and reading `.env` no longer ask after outside content (force/delete pushes, remote uploads, `.env` writes, ssh/scp, `curl | sh` still do), and the prompt has a "don't ask again this session" choice per kind of risk (cleared on start, compact, switch and fork; falls back to a plain confirm where the UI has no select).
 - Audit fixes: `upgrade-halogen.sh` writes its log to `$HOME/.cache/halogen-upgrade.log` instead of a fixed `/tmp` name (a planted symlink there would be followed), engine probes in `harness.py` catch only `(OSError, ValueError, LookupError)` instead of every exception, and CONTRIBUTING.md names the test commands.
-
-### Fixed
-- A `git` that never exits could hang pi's shutdown (progress-tracker waits for it): its three `git` execs (`diff --stat`, `status --short`, `log`) now carry a 10 s timeout. Seen on Windows, where a bare `git` resolves against the working directory first — a downloaded `git.exe` installer in the project folder is what `pi.exec("git")` launched, and `pi -p` then never exited. Pitfall documented in `tests/windows-vm/README.md` (download installers to `$env:TEMP`).
+- windows-vm docs record a pitfall that cost a debug session: do not download installers into the folder pi runs in — Windows resolves a bare `git` against the current directory first, so a `git.exe` Git installer sitting there is what `pi.exec("git")` launches, and pi waits on its UI; download to `$env:TEMP`.
 
 ## 2.0.0 - 2026-11-09
 
